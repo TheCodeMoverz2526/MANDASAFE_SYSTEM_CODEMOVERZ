@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotspots — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>Hotspots &amp; Forecast</h1>
+      <p>High-risk areas found by kernel density estimation, with next-month forecasts.</p></div>
+    <div class="spacer"></div>
+    <div class="head-tools"><span class="pill"><span class="live"></span> <span id="range">Loading…</span></span></div>
+  </div>
+
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-head"><h2>Density Heatmap</h2></div>
+      <div class="card-body" style="padding:16px"><div id="map" class="map" style="height:470px"></div></div>
+      <div class="heat-scale"><span>Low density</span><span class="heat-bar"></span><span>High density</span></div>
+      <div class="src">Peaks come from a Gaussian KDE over every mapped incident, weighted by severity.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Top Hotspot Areas</h2></div>
+      <div id="list"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="card-head"><h2>Predicted Incidents Next Month</h2>
+      <span class="link" id="model"></span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Barangay</th><th>Road</th><th>Recorded</th><th>Predicted next month</th><th>Trend</th><th>Risk score</th><th>Level</th></tr></thead>
+        <tbody id="pred"><tr><td colspan="7" class="empty">Loading forecasts…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="src">Forecasts come from the administrators' recorded incidents and baseline data — a linear trend per area, adjusted by a Random Forest severity model once enough varied history exists.</div>
+  </div>
+</main>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script src="js/map.js"></script>
+<script>
+if (requireAuth()) {
+  buildShell('hotspots');
+
+  (async () => {
+    let spots = [], predictions = [], summary = null;
+    try {
+      [spots, predictions, summary] = await Promise.all([API.hotspots(), API.predictions(), API.summary()]);
+    } catch (error) {
+      setState(document.getElementById('list'), error.message, true);
+      document.getElementById('range').textContent = 'Server offline';
+      return;
+    }
+
+    document.getElementById('range').textContent =
+      `${num(summary.totalIncidents)} incidents • ${fmtDate(summary.range.from)} – ${fmtDate(summary.range.to)}`;
+
+    document.getElementById('list').innerHTML = spots.map((s, n) => `
+      <div class="hot-item">
+        <span class="rank r${n + 1}">${n + 1}</span>
+        <div><div class="n">${esc(s.barangay)}</div>
+          <div class="m"><span class="tag ${s.intensity >= 0.7 ? 't-high' : s.intensity >= 0.4 ? 't-med' : 't-low'}">
+            ${Math.round(s.intensity * 100)}% intensity</span></div></div>
+        <span class="cnt">${num(s.incidentCount)} nearby</span>
+      </div>`).join('') || '<div class="empty">No hotspots yet — no mapped incidents in the database.</div>';
+
+    const trendIcon = { up: '▲', down: '▼', stable: '■' };
+    const trendColor = { up: '#dc2626', down: '#16a34a', stable: '#64748b' };
+    document.getElementById('pred').innerHTML = predictions.slice(0, 15).map(p => `
+      <tr><td style="font-weight:600">${esc(p.barangay)}</td><td>${esc(p.road)}</td>
+      <td>${num(p.totalIncidents)}</td><td style="font-weight:700">${num(p.predictedNextMonth)}</td>
+      <td style="color:${trendColor[p.trend]};font-weight:700">${trendIcon[p.trend] || '■'} ${esc(p.trend)}</td>
+      <td>${p.riskScore.toFixed(1)} / 10</td>
+      <td><span class="tag ${{ high: 't-high', medium: 't-med', low: 't-resolved' }[p.riskLevel]}">${esc(p.riskLevel)}</span></td></tr>`).join('')
+      || '<tr><td colspan="7" class="empty">No forecasts yet.</td></tr>';
+
+    document.getElementById('model').textContent =
+      predictions[0] ? `Model: ${predictions[0].mlModel === 'random-forest' ? 'linear trend + Random Forest' : 'linear trend (heuristic)'}` : '';
+
+    try {
+      const { map } = await createMandaMap('map');
+      plotHotspots(map, spots);
+    } catch (error) {
+      document.getElementById('map').innerHTML = `<div class="empty is-error" style="padding:180px 20px">${esc(error.message)}</div>`;
+    }
+  })();
+}
+</script>
+</body>
+</html>

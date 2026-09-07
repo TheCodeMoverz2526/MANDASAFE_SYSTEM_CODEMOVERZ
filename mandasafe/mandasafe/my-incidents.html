@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Incidents — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>My Incidents</h1><p>View and track the incidents you've reported.</p></div>
+    <div class="spacer"></div>
+    <a class="btn btn-primary" href="report.html">Report Incident</a>
+  </div>
+
+  <div class="card">
+    <div class="tabs" id="tabs"></div>
+    <div class="table-wrap" style="margin-top:14px">
+      <table>
+        <thead><tr><th>ID</th><th>Type</th><th>Location</th><th>Date Reported</th><th>Severity</th><th>Status</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="table-foot">
+      <span id="showing"></span>
+      <span class="spacer"></span>
+      <div class="pager"><button>‹</button><button class="on">1</button><button>›</button></div>
+    </div>
+  </div>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+requireAuth();
+buildShell('my');
+
+const all = () => incidents().filter(i=>i.mine);
+let filter = 'All';
+
+function render(){
+  const data = filter==='All' ? all() : all().filter(i=>i.status===filter);
+  const counts = {
+    'All': all().length,
+    'Under Review': all().filter(i=>i.status==='Under Review').length,
+    'On Process':   all().filter(i=>i.status==='On Process').length,
+    'Resolved':     all().filter(i=>i.status==='Resolved').length
+  };
+  document.getElementById('tabs').innerHTML = Object.keys(counts).map(k=>
+    '<button class="tab'+(k===filter?' active':'')+'" data-f="'+k+'">'+k+' ('+counts[k]+')</button>').join('');
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{filter=b.dataset.f;render();});
+
+  document.getElementById('rows').innerHTML = data.map(i=>
+    '<tr><td style="font-weight:600">'+i.id+'</td>'+
+    '<td><span class="td-type">'+typeIcon(i.type)+i.type+'</span></td>'+
+    '<td>'+i.loc+'</td><td>'+fmtDate(i.date)+'</td>'+
+    '<td><span class="tag '+SEVERITY_TAG[i.sev]+'">'+i.sev+'</span></td>'+
+    '<td><span class="tag '+STATUS_TAG[i.status]+'">'+i.status+'</span></td></tr>').join('')
+    || '<tr><td colspan="6" class="empty">No incidents in this category.</td></tr>';
+
+  document.getElementById('showing').textContent =
+    'Showing 1 to '+data.length+' of '+data.length+' entries';
+}
+render();
+</script>
+</body>
+</html>

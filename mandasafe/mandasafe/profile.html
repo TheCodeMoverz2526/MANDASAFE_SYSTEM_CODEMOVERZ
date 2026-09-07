@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>Profile</h1><p>Manage your account information.</p></div>
+  </div>
+
+  <div class="grid g-2">
+    <!-- USER INFO -->
+    <div class="card">
+      <div class="card-head"><h2>User Information</h2>
+        <span class="link" id="editToggle" style="cursor:pointer">Edit</span></div>
+      <div class="card-body">
+        <div class="pf-avatar" id="ini"></div>
+        <form id="pf">
+          <div class="pf-row"><span class="k">Full Name</span>
+            <input class="input v" id="f-name" disabled></div>
+          <div class="pf-row"><span class="k">Email Address</span>
+            <input class="input v" id="f-email" disabled></div>
+          <div class="pf-row"><span class="k">Mobile Number</span>
+            <input class="input v" id="f-mobile" disabled></div>
+          <div class="pf-row"><span class="k">Barangay</span>
+            <select class="input v" id="f-brgy" disabled></select></div>
+          <div class="form-actions" style="justify-content:flex-start;margin-top:18px">
+            <button class="btn btn-primary" type="submit" id="saveBtn" style="display:none">Save Changes</button>
+            <a class="btn btn-ghost" href="dashboard.html" id="backBtn">Back to Dashboard</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- PASSWORD -->
+    <div class="card">
+      <div class="card-head"><h2>Change Password</h2></div>
+      <div class="card-body">
+        <form id="pw">
+          <div class="field"><label>Current Password</label>
+            <div class="input-group"><span class="gi" data-i="lock"></span>
+            <input class="input" type="password" id="p1" placeholder="••••••••"></div></div>
+          <div class="field"><label>New Password</label>
+            <div class="input-group"><span class="gi" data-i="key"></span>
+            <input class="input" type="password" id="p2" placeholder="••••••••"></div></div>
+          <div class="field"><label>Confirm New Password</label>
+            <div class="input-group"><span class="gi" data-i="key"></span>
+            <input class="input" type="password" id="p3" placeholder="••••••••"></div></div>
+          <button class="btn btn-primary btn-block" type="submit">Update Password</button>
+        </form>
+
+        <div class="notice" style="margin-top:20px">
+          <span class="ni" data-i="info"></span>
+          <div><h4>Password requirements</h4>
+          <p>At least 8 characters, with a mix of letters and numbers.</p></div>
+        </div>
+
+        <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="logout()">
+          <span data-i="logout" style="width:17px;height:17px"></span> Sign Out
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid g-3" style="margin-top:18px">
+    <div class="card stat"><span class="ic ic-blue" data-i="clipboard"></span>
+      <div><h3 id="c1">0</h3><div class="lbl">Reports Submitted</div></div></div>
+    <div class="card stat"><span class="ic ic-green" data-i="check"></span>
+      <div><h3 id="c2">0</h3><div class="lbl">Resolved Reports</div></div></div>
+    <div class="card stat"><span class="ic ic-orange" data-i="clock"></span>
+      <div><h3 id="c3">0</h3><div class="lbl">Pending Reports</div></div></div>
+  </div>
+</main>
+
+<script src="data/mandaluyong.js"></script>
+<script src="js/app.js"></script>
+<script>
+requireAuth();
+buildShell('profile');
+document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+
+const u = currentUser();
+document.getElementById('ini').textContent = u.name.split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase();
+document.getElementById('f-name').value   = u.name;
+document.getElementById('f-email').value  = u.email;
+document.getElementById('f-mobile').value = u.mobile;
+document.getElementById('f-brgy').innerHTML = MANDA_BARANGAYS.map(b=>
+  '<option'+(b===u.brgy?' selected':'')+'>'+b+'</option>').join('');
+
+let editing = false;
+document.getElementById('editToggle').onclick = ()=>{
+  editing = !editing;
+  document.querySelectorAll('.v').forEach(i=>i.disabled = !editing);
+  document.getElementById('saveBtn').style.display = editing ? 'inline-flex' : 'none';
+  document.getElementById('backBtn').style.display = editing ? 'none' : 'inline-flex';
+  document.getElementById('editToggle').textContent = editing ? 'Cancel' : 'Edit';
+};
+
+document.getElementById('pf').onsubmit = e=>{
+  e.preventDefault();
+  const nu = {
+    name:document.getElementById('f-name').value.trim(),
+    email:document.getElementById('f-email').value.trim(),
+    mobile:document.getElementById('f-mobile').value.trim(),
+    brgy:document.getElementById('f-brgy').value,
+    role:u.role
+  };
+  if(nu.name.length<3){ alert('Please enter your full name.'); return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nu.email)){ alert('Please enter a valid email address.'); return; }
+  DB.set('user', nu);
+  toast('Profile updated successfully');
+  setTimeout(()=>location.reload(), 900);
+};
+
+document.getElementById('pw').onsubmit = e=>{
+  e.preventDefault();
+  const a=p1.value, b=p2.value, c=p3.value;
+  if(!a){ alert('Please enter your current password.'); return; }
+  if(b.length<8){ alert('New password must be at least 8 characters.'); return; }
+  if(b!==c){ alert('New passwords do not match.'); return; }
+  e.target.reset();
+  toast('Password updated successfully');
+};
+
+const mine = incidents().filter(i=>i.mine);
+document.getElementById('c1').textContent = mine.length;
+document.getElementById('c2').textContent = mine.filter(i=>i.status==='Resolved').length;
+document.getElementById('c3').textContent = mine.filter(i=>i.status!=='Resolved').length;
+</script>
+</body>
+</html>

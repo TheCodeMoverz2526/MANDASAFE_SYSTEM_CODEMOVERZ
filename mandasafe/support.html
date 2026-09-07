@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact Support — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head"><div><h1>Contact Support</h1>
+    <p>Report an incident to the office, or ask about a record you see here.</p></div></div>
+
+  <div class="grid g-2">
+    <div class="card">
+      <div class="card-head"><h2>Emergency &amp; Reporting Hotlines</h2></div>
+      <div class="card-body">
+        <div class="hotline"><b>911</b><span>National Emergency Hotline — accidents in progress</span></div>
+        <div class="hotline"><b>136</b><span>MMDA Hotline — road obstruction and traffic</span></div>
+        <div class="hotline"><b>532-5001</b><span>Mandaluyong City DRRMO</span></div>
+        <div class="hotline"><b>533-1111</b><span>Mandaluyong City TPMO</span></div>
+        <div class="notice notice-amber" style="margin-top:16px"><span class="ni" data-i="alert"></span>
+          <div><h4>MandaSafe is not an emergency channel</h4>
+          <p>This system publishes records the office has already logged. For an incident happening
+             now, call the hotlines above.</p></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Office</h2></div>
+      <div class="card-body">
+        <div class="notice"><span class="ni" data-i="pin"></span>
+          <div><h4>Address</h4><p>Traffic Planning and Management Office, Mandaluyong City Hall,<br>
+            Maysilo Circle, Plainview, Mandaluyong City</p></div></div>
+        <div class="notice" style="margin-top:12px"><span class="ni" data-i="clock"></span>
+          <div><h4>Office Hours</h4><p>Monday to Friday, 8:00 AM – 5:00 PM</p></div></div>
+        <div class="notice" style="margin-top:12px"><span class="ni" data-i="file"></span>
+          <div><h4>Correcting a record</h4>
+          <p>If an incident shown here is wrong or missing, note its ID and barangay and bring it
+             to the TPMO — only the office can change the records.</p></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script>if (requireAuth()) buildShell('support');</script>
+</body>
+</html>

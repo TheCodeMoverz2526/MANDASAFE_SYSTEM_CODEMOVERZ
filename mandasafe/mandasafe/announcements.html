@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Announcements — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>Announcements</h1><p>Official updates and announcements.</p></div>
+  </div>
+
+  <div class="card">
+    <div id="list"></div>
+    <div class="table-foot"><span id="showing"></span></div>
+  </div>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+requireAuth();
+buildShell('announce');
+
+document.getElementById('list').innerHTML = ANNOUNCEMENTS.map(a=>
+  '<div class="ann">'+
+    '<div class="datebox"><div class="mo">'+a.mo+'</div><div class="dy">'+a.dy+'</div></div>'+
+    '<div><h3>'+a.title+'</h3><p>'+a.body+'</p></div>'+
+    '<div class="meta">'+(a.tag?'<span class="tag t-new">'+a.tag+'</span>':'')+
+      '<div class="time">'+a.time+'</div></div>'+
+  '</div>').join('');
+document.getElementById('showing').textContent =
+  'Showing 1 to '+ANNOUNCEMENTS.length+' of '+ANNOUNCEMENTS.length+' entries';
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety Index — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>Safety Index</h1>
+      <p>A single score for Mandaluyong's road safety, computed from the recorded data.</p></div>
+    <div class="spacer"></div>
+    <span class="pill"><span class="live"></span> <span id="range">Loading…</span></span>
+  </div>
+
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-head"><h2>Overall Safety Index</h2></div>
+      <div class="card-body gauge-wrap">
+        <div class="gauge">
+          <svg viewBox="0 0 200 118" style="width:100%">
+            <path d="M14 108a86 86 0 01172 0" fill="none" stroke="#eef2f7" stroke-width="17" stroke-linecap="round"/>
+            <path id="arc" d="M14 108a86 86 0 01172 0" fill="none" stroke="#16a34a" stroke-width="17" stroke-linecap="round"
+                  stroke-dasharray="270" stroke-dashoffset="270"/>
+          </svg>
+          <div style="margin-top:-64px">
+            <div class="score" id="score">—</div>
+            <div class="score-lbl" id="scoreLabel">Calculating…</div>
+          </div>
+          <div class="gauge-ends" style="margin-top:22px"><span>0</span><span>100</span></div>
+        </div>
+        <div class="score-delta" id="delta"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Index by Category</h2></div>
+      <div class="card-body" id="cats"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="card-body"><div class="notice"><span class="ni" data-i="shield"></span>
+      <div><h4>What does this mean?</h4><p id="explain">Calculating…</p></div></div></div>
+  </div>
+
+  <div class="grid g-2" style="margin-top:18px">
+    <div class="card"><div class="card-head"><h2>Incident Types</h2></div>
+      <div class="card-body" id="types"></div></div>
+    <div class="card"><div class="card-head"><h2>Severity Mix</h2></div>
+      <div class="card-body" id="sev"></div></div>
+  </div>
+</main>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script>
+if (requireAuth()) {
+  buildShell('safety');
+
+  (async () => {
+    let s;
+    try { s = await API.summary(); }
+    catch (error) {
+      document.getElementById('range').textContent = 'Server offline';
+      setState(document.getElementById('cats'), error.message, true);
+      return;
+    }
+
+    document.getElementById('range').textContent = `${fmtDate(s.range.from)} – ${fmtDate(s.range.to)}`;
+
+    // Categories are derived from the data, not typed in by hand.
+    const months = s.byMonth;
+    const recent = months.slice(-3).reduce((a, m) => a + m.count, 0) / Math.max(1, months.slice(-3).length);
+    const earlier = months.slice(-9, -3).reduce((a, m) => a + m.count, 0) / Math.max(1, months.slice(-9, -3).length);
+    const trendScore = clamp(earlier ? 100 - ((recent - earlier) / earlier) * 100 : 70);
+
+    const fatal = (s.bySeverity.find(x => x.sev === 'Fatal')?.count || 0);
+    const injury = (s.bySeverity.find(x => x.sev === 'Injury')?.count || 0);
+    const severityScore = clamp(100 - ((fatal * 4 + injury * 2) / Math.max(1, s.totalIncidents)) * 100);
+
+    const resolutionScore = clamp(s.totalIncidents ? (s.resolvedIncidents / s.totalIncidents) * 100 : 0);
+
+    const top = s.byBarangay[0]?.count || 0;
+    const concentrationScore = clamp(100 - (top / Math.max(1, s.totalIncidents)) * 200);
+
+    const riskScore = clamp(100 - (s.avgRiskScore || 0) * 10);
+
+    const CATS = [
+      { n: 'Incident Severity',    v: severityScore,      why: 'Share of fatal and injury outcomes' },
+      { n: 'Incident Frequency',   v: trendScore,         why: 'Last 3 months vs the 6 before them' },
+      { n: 'Geographic Spread',    v: concentrationScore, why: 'How concentrated incidents are in one barangay' },
+      { n: 'Predicted Risk',       v: riskScore,          why: 'Average forecast risk across areas' },
+      { n: 'Case Resolution',      v: resolutionScore,    why: 'Reports marked resolved by the TPMO' }
+    ];
+
+    const overall = Math.round(CATS.reduce((a, c) => a + c.v, 0) / CATS.length);
+    const label = overall >= 75 ? 'Good' : overall >= 50 ? 'Fair' : 'Needs attention';
+    const color = overall >= 75 ? '#16a34a' : overall >= 50 ? '#f59e0b' : '#dc2626';
+
+    document.getElementById('score').textContent = overall;
+    document.getElementById('score').style.color = color;
+    document.getElementById('scoreLabel').textContent = label;
+    document.getElementById('scoreLabel').style.color = color;
+    document.getElementById('delta').textContent =
+      `Based on ${num(s.totalIncidents)} recorded incidents across ${s.barangayCount} barangays`;
+
+    const arc = document.getElementById('arc');
+    arc.setAttribute('stroke', color);
+    setTimeout(() => { arc.style.transition = 'stroke-dashoffset 1s ease'; arc.style.strokeDashoffset = 270 - 270 * (overall / 100); }, 120);
+
+    document.getElementById('cats').innerHTML = CATS.map(c => {
+      const v = Math.round(c.v);
+      const fill = v >= 75 ? 'fill-g' : v >= 50 ? 'fill-a' : 'fill-r';
+      const word = v >= 75 ? 'Good' : v >= 50 ? 'Fair' : 'Low';
+      return `<div class="bar-row" title="${esc(c.why)}">
+        <span class="cat">${esc(c.n)}</span>
+        <span class="bar"><i class="${fill}" style="width:0%" data-w="${v}"></i></span>
+        <span class="val">${v}</span>
+        <span class="${v >= 75 ? 't-good' : 't-fair'}">${word}</span></div>`;
+    }).join('');
+    setTimeout(() => document.querySelectorAll('.bar i').forEach(b => {
+      b.style.transition = 'width .9s ease'; b.style.width = b.dataset.w + '%';
+    }), 150);
+
+    const worst = [...CATS].sort((a, b) => a.v - b.v)[0];
+    document.getElementById('explain').innerHTML =
+      `Mandaluyong's road safety currently scores <b>${overall}/100 (${label.toLowerCase()})</b>. ` +
+      `The weakest category is <b>${esc(worst.n)}</b> (${Math.round(worst.v)}/100) — ${esc(worst.why.toLowerCase())}. ` +
+      `${esc(s.byBarangay[0]?.barangay || '')} accounts for the largest share of incidents.`;
+
+    barChart(document.getElementById('types'), s.byType.map(t => ({ label: t.type, value: t.count })));
+    barChart(document.getElementById('sev'), s.bySeverity.map(x => ({
+      label: x.sev, value: x.count, color: sevMeta(x.sev).color
+    })));
+  })();
+
+  function clamp(v) { return Math.max(0, Math.min(100, v)); }
+}
+</script>
+</body>
+</html>

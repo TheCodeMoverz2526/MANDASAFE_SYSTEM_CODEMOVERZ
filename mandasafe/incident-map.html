@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Incident Map — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+
+  <div class="page-head">
+    <div><h1>Incident Map</h1>
+      <p>Road incidents recorded across the 27 barangays of Mandaluyong City.</p></div>
+    <div class="spacer"></div>
+    <div class="head-tools"><span class="pill"><span class="live"></span> <span id="shown">Loading…</span></span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" style="gap:10px;flex-wrap:wrap">
+      <div class="input-group" style="flex:1;min-width:220px">
+        <span class="gi" data-i="search"></span>
+        <input class="input" id="q" placeholder="Search barangay, road, type or incident ID…">
+      </div>
+      <select class="input" id="fBrgy" style="width:190px"><option value="">All barangays</option></select>
+      <select class="input" id="fSev"  style="width:150px"><option value="">All severities</option></select>
+      <select class="input" id="fType" style="width:210px"><option value="">All incident types</option></select>
+      <select class="input" id="fYear" style="width:130px"><option value="">All years</option></select>
+      <button class="btn btn-ghost" id="reset">Reset</button>
+    </div>
+
+    <div class="card-body" style="padding:16px"><div id="map" class="map map-lg"></div></div>
+
+    <div class="map-legend">
+      <span class="lg"><i style="background:#dc2626"></i>Fatal</span>
+      <span class="lg"><i style="background:#f97316"></i>Injury</span>
+      <span class="lg"><i style="background:#f59e0b"></i>Minor</span>
+      <span class="lg"><i style="background:#3b82f6"></i>Damage</span>
+      <span class="link" id="pinNote"></span>
+    </div>
+    <div class="src">Barangay shading shows how many of the filtered incidents fall in each barangay; pins show the most recent ones.</div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="card-head"><h2>Filtered Incidents</h2><span class="link" id="tableNote"></span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Date</th><th>Time</th><th>Barangay</th><th>Road</th><th>Type</th><th>Severity</th><th>Status</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading incidents…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="table-foot"><span id="showing"></span></div>
+  </div>
+</main>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script src="js/map.js"></script>
+<script>
+if (requireAuth()) {
+  buildShell('map');
+
+  const TABLE_LIMIT = 100;
+  let all = [], mapRef = null, pinLayer = null, boundaries = null;
+
+  const $ = id => document.getElementById(id);
+
+  function option(select, value) { select.insertAdjacentHTML('beforeend', `<option>${esc(value)}</option>`); }
+
+  function filtered() {
+    const q = $('q').value.trim().toLowerCase();
+    const brgy = $('fBrgy').value, sev = $('fSev').value, type = $('fType').value, year = $('fYear').value;
+    return all.filter(i =>
+      (!brgy || i.barangay === brgy) &&
+      (!sev || i.sev === sev) &&
+      (!type || i.type === type) &&
+      (!year || String(i.date || '').startsWith(year)) &&
+      (!q || `${i.id} ${i.barangay} ${i.road} ${i.type} ${i.sev}`.toLowerCase().includes(q)));
+  }
+
+  function apply() {
+    const data = filtered();
+    $('shown').textContent = `${num(data.length)} of ${num(all.length)} incidents`;
+
+    // Re-shade the barangays for the current filter.
+    const counts = {};
+    data.forEach(i => { counts[i.barangay] = (counts[i.barangay] || 0) + 1; });
+    const max = Math.max(1, ...Object.values(counts));
+    if (boundaries) {
+      boundaries.setStyle(feature => {
+        const name = (feature.properties || {}).brgy_name;
+        const value = counts[name] || 0;
+        return { color: '#1d4ed8', weight: 1.4, opacity: .85, fillColor: shade(value / max), fillOpacity: value ? 0.62 : 0.12 };
+      });
+      boundaries.eachLayer(layer => {
+        const name = (layer.feature.properties || {}).brgy_name;
+        layer.setTooltipContent(`<b>${name}</b><br>${num(counts[name] || 0)} incident${(counts[name] || 0) === 1 ? '' : 's'}`);
+      });
+    }
+
+    if (mapRef) {
+      if (pinLayer) mapRef.removeLayer(pinLayer);
+      const newest = [...data].sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
+      pinLayer = plotIncidents(mapRef, newest, 400);
+      $('pinNote').textContent = data.length > 400 ? 'Showing the 400 most recent pins' : `${num(data.length)} pins`;
+    }
+
+    const rows = data.slice(0, TABLE_LIMIT);
+    $('rows').innerHTML = rows.map(i => `
+      <tr><td style="font-weight:600">${esc(i.id)}</td><td>${fmtDate(i.date)}</td><td>${fmtTime(i.time)}</td>
+      <td>${esc(i.barangay)}</td><td>${esc(i.road)}</td><td>${esc(i.type)}</td>
+      <td><span class="tag ${sevMeta(i.sev).tag}">${esc(i.sev)}</span></td>
+      <td><span class="tag ${statusTag(i.status)}">${esc(i.status)}</span></td></tr>`).join('')
+      || '<tr><td colspan="8" class="empty">No incidents match your filters.</td></tr>';
+    $('showing').textContent = `Showing ${rows.length ? 1 : 0}–${rows.length} of ${num(data.length)} matching incidents`;
+    $('tableNote').textContent = data.length > TABLE_LIMIT ? `First ${TABLE_LIMIT} shown — narrow the filters to see more` : '';
+  }
+
+  (async () => {
+    try {
+      all = await API.incidents();
+    } catch (error) {
+      $('rows').innerHTML = `<tr><td colspan="8" class="empty is-error">${esc(error.message)}</td></tr>`;
+      $('shown').textContent = 'Server offline';
+      return;
+    }
+
+    [...new Set(all.map(i => i.barangay))].sort().forEach(v => option($('fBrgy'), v));
+    [...new Set(all.map(i => i.sev))].sort().forEach(v => option($('fSev'), v));
+    [...new Set(all.map(i => i.type))].sort().forEach(v => option($('fType'), v));
+    [...new Set(all.map(i => String(i.date || '').slice(0, 4)).filter(Boolean))].sort().reverse().forEach(v => option($('fYear'), v));
+
+    try {
+      const created = await createMandaMap('map');
+      mapRef = created.map; boundaries = created.boundaries;
+    } catch (error) {
+      document.getElementById('map').innerHTML = `<div class="empty is-error" style="padding:200px 20px">${esc(error.message)}</div>`;
+    }
+    apply();
+  })();
+
+  ['q', 'fBrgy', 'fSev', 'fType', 'fYear'].forEach(id => $(id).addEventListener('input', apply));
+  $('reset').onclick = () => { ['q', 'fBrgy', 'fSev', 'fType', 'fYear'].forEach(id => $(id).value = ''); apply(); };
+}
+</script>
+</body>
+</html>

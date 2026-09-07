@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>Dashboard</h1>
+      <p>Road incident overview for Mandaluyong City, recorded by the Traffic Planning and Management Office.</p></div>
+    <div class="spacer"></div>
+    <div class="head-tools">
+      <span class="pill"><span class="live"></span> <span id="coverage">Loading…</span></span>
+      <span class="pill"><span id="clock"></span></span>
+    </div>
+  </div>
+
+  <div class="grid g-4" style="margin-bottom:18px">
+    <div class="card stat"><span class="ic ic-blue" data-i="car"></span>
+      <div><h3 id="s-total">—</h3><div class="lbl">Recorded Incidents</div><div class="delta" id="s-range"></div></div></div>
+    <div class="card stat"><span class="ic ic-orange" data-i="alert"></span>
+      <div><h3 id="s-active">—</h3><div class="lbl">Active Cases</div><div class="delta"><a href="incident-map.html" style="color:#1d4ed8">View on map</a></div></div></div>
+    <div class="card stat"><span class="ic ic-red" data-i="fire"></span>
+      <div><h3 id="s-high">—</h3><div class="lbl">High-Risk Locations</div><div class="delta"><a href="hotspots.html" style="color:#1d4ed8">See hotspots</a></div></div></div>
+    <div class="card stat"><span class="ic ic-purple" data-i="pin"></span>
+      <div><h3 id="s-brgy">—</h3><div class="lbl">Barangays Covered</div><div class="delta">of 27 in the city</div></div></div>
+  </div>
+
+  <div class="grid g-main" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-head"><h2>Incident Map by Barangay</h2><a class="link" href="incident-map.html">Full map →</a></div>
+      <div class="card-body" style="padding:16px"><div id="map" class="map"></div></div>
+      <div class="choro"><span>Fewer incidents</span>
+        <span class="ramp"><i style="background:#dbeafe"></i><i style="background:#bfdbfe"></i><i style="background:#fde68a"></i><i style="background:#fdba74"></i><i style="background:#f87171"></i><i style="background:#dc2626"></i></span>
+        <span>More incidents</span></div>
+      <div class="src">Boundaries: 27 barangay polygons of Mandaluyong City. Hover a barangay for its total.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Latest Reports</h2></div>
+      <div class="inc-list" id="recent"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-head"><h2>Incidents per Month</h2></div>
+      <div class="card-body">
+        <div class="spark" id="trend"></div>
+        <div class="spark-axis" id="trendAxis"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Most Affected Barangays</h2><a class="link" href="hotspots.html">Hotspots →</a></div>
+      <div id="topBrgy"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+</main>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script src="js/map.js"></script>
+<script>
+if (requireAuth()) {
+  buildShell('dashboard');
+  liveClock(document.getElementById('clock'));
+
+  (async () => {
+    let summary;
+    try { summary = await API.summary(); }
+    catch (error) {
+      document.getElementById('coverage').textContent = 'Server offline';
+      setState(document.getElementById('recent'), error.message, true);
+      return;
+    }
+
+    countUp(document.getElementById('s-total'), summary.totalIncidents);
+    countUp(document.getElementById('s-active'), summary.activeIncidents);
+    countUp(document.getElementById('s-high'), summary.highRiskLocations);
+    countUp(document.getElementById('s-brgy'), summary.barangayCount);
+    document.getElementById('s-range').textContent = `${fmtDate(summary.range.from)} – ${fmtDate(summary.range.to)}`;
+    document.getElementById('coverage').textContent = `${num(summary.totalIncidents)} records on file`;
+
+    document.getElementById('recent').innerHTML = summary.recent.slice(0, 6).map(i => {
+      const meta = sevMeta(i.sev);
+      return `<div class="inc">
+        <span class="ic" style="background:${meta.color}">${icon(meta.icon)}</span>
+        <div><div class="t">${esc(i.type)}</div>
+        <div class="l">${esc(i.barangay)}</div>
+        <div class="d">${fmtDate(i.date)} ${fmtTime(i.time)} • ${esc(i.id)}</div></div>
+        <span class="tag ${meta.tag}">${esc(i.sev)}</span></div>`;
+    }).join('');
+
+    const months = summary.byMonth.slice(-18);
+    const maxMonth = Math.max(1, ...months.map(m => m.count));
+    document.getElementById('trend').innerHTML = months.map(m =>
+      `<i style="height:${(m.count / maxMonth) * 100}%" title="${fmtMonth(m.month)}: ${num(m.count)}"></i>`).join('');
+    document.getElementById('trendAxis').innerHTML =
+      `<span>${fmtMonth(months[0]?.month)}</span><span>peak ${num(maxMonth)}</span><span>${fmtMonth(months[months.length-1]?.month)}</span>`;
+
+    const top = summary.byBarangay.slice(0, 8);
+    const maxB = Math.max(1, ...top.map(b => b.count));
+    document.getElementById('topBrgy').innerHTML = top.map((b, n) => `
+      <div class="brgy-row"><span class="rank">${n + 1}</span>
+        <span class="n" style="min-width:120px">${esc(b.barangay)}</span>
+        <span class="bar"><i style="width:${(b.count / maxB) * 100}%"></i></span>
+        <span class="c">${num(b.count)}</span></div>`).join('');
+
+    const counts = {};
+    summary.byBarangay.forEach(b => { counts[b.barangay] = b.count; });
+    try {
+      const { map } = await createMandaMap('map', { counts, scroll: false });
+      plotIncidents(map, summary.recent, 20);
+    } catch (error) {
+      document.getElementById('map').innerHTML = `<div class="empty is-error" style="padding:120px 20px">${esc(error.message)}</div>`;
+    }
+  })();
+}
+</script>
+</body>
+</html>

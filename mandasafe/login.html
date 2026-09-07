@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in | MandaSafe</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <main id="authScreen">
+        <div class="auth-blob" style="width:500px;height:500px;top:-150px;left:-100px;"></div>
+        <div class="auth-blob"
+            style="width:400px;height:400px;bottom:-100px;right:-80px;background:radial-gradient(circle,rgba(59,130,246,.12),transparent 70%);">
+        </div>
+        <div class="auth-split">
+            <section class="auth-left">
+                <div class="auth-brand">
+                    <div class="auth-brand-icon"><i class="fas fa-map-marked-alt"></i></div>
+                    <div class="auth-brand-name">Mandaluyong RIMAS</div>
+                </div>
+                <div class="auth-left-content">
+                    <h2>Road Incident Mapping &amp; Analytics System</h2>
+                    <p>A centralized platform for monitoring, hotspot identification, and safety planning for
+                        Mandaluyong TPMO.</p>
+                    <div class="auth-features">
+                        <div class="auth-feature">
+                            <div class="auth-feature-icon"><i class="fas fa-clipboard-list"></i></div>
+                            <div class="auth-feature-text"><strong>Incident Management</strong>Record and manage road
+                                accident reports in real-time.</div>
+                        </div>
+                        <div class="auth-feature">
+                            <div class="auth-feature-icon"><i class="fas fa-map-marked-alt"></i></div>
+                            <div class="auth-feature-text"><strong>GIS Mapping</strong>Visualize incidents on
+                                interactive geographic maps.</div>
+                        </div>
+                        <div class="auth-feature">
+                            <div class="auth-feature-icon"><i class="fas fa-shield-alt"></i></div>
+                            <div class="auth-feature-text"><strong>Protected Access</strong>Every account action is
+                                confirmed with a verification code.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="auth-left-footer">© 2025 Mandaluyong City TPMO · All rights reserved</div>
+            </section>
+            <section class="auth-right">
+                <div class="auth-logo-wrap">M</div>
+
+                <div class="auth-panel active" id="signInPanel">
+                    <h1 class="auth-welcome-title">Sign in to MandaSafe</h1>
+                    <p class="auth-welcome-sub">One sign-in for everyone. Enter your registered email address or
+                        mobile number &mdash; residents go to the public dashboard, TPMO administrators go to the
+                        admin console.</p>
+                    <form onsubmit="event.preventDefault(); beginLogin();">
+                        <div class="form-group"><label class="form-label" for="loginIdentifier">Email address or phone
+                                number</label><input type="text" class="form-input" id="loginIdentifier"
+                                placeholder="Enter email or phone" autocomplete="username" required></div>
+                        <div class="form-group"><label class="form-label" for="loginPassword">Password</label>
+                            <div class="password-wrap"><input type="password" class="form-input" id="loginPassword"
+                                    placeholder="Enter your password" autocomplete="current-password" required><button
+                                    type="button" class="password-toggle"
+                                    onclick="togglePassword('loginPassword', this)" aria-label="Show password"><i
+                                        class="fas fa-eye"></i></button></div>
+                        </div>
+                        <div class="auth-error" id="loginError" role="alert"></div>
+                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-lock"></i> Continue
+                            to verification</button>
+                    </form>
+                    <div class="auth-links"><button type="button" onclick="showPanel('createPanel')">Create an
+                            account</button><span>·</span><button type="button"
+                            onclick="showPanel('forgotPanel')">Forgot password?</button></div>
+                </div>
+
+                <div class="auth-panel" id="createPanel">
+                    <button type="button" class="auth-back" onclick="showPanel('signInPanel')"><i
+                            class="fas fa-arrow-left"></i> Back to sign in</button>
+                    <h1 class="auth-welcome-title">Create your account</h1>
+                    <p class="auth-welcome-sub">Create an account, then confirm your email or mobile number.</p>
+                    <form onsubmit="event.preventDefault(); beginRegistration();">
+                        <div class="form-group"><label class="form-label" for="createName">Full name</label><input
+                                type="text" class="form-input" id="createName" placeholder="Juan Dela Cruz"
+                                autocomplete="name" required></div>
+                        <div class="form-group"><label class="form-label" for="createEmail">Email address</label><input
+                                type="email" class="form-input" id="createEmail" placeholder="name@example.com"
+                                autocomplete="email" required></div>
+                        <div class="form-group"><label class="form-label" for="createPhone">Contact number</label>
+                            <div class="phone-wrap"><select id="countryCode" aria-label="Country code">
+                                    <option value="+63">🇵🇭 +63</option>
+                                    <option value="+1">🇺🇸 +1</option>
+                                    <option value="+44">🇬🇧 +44</option>
+                                </select><input type="tel" class="form-input" id="createPhone"
+                                    placeholder="912 345 6789" autocomplete="tel-national" required></div>
+                        </div>
+                        <div class="form-group"><label class="form-label" for="createPassword">Password</label>
+                            <div class="password-wrap"><input type="password" class="form-input" id="createPassword"
+                                    placeholder="At least 8 characters" minlength="8" autocomplete="new-password"
+                                    required><button type="button" class="password-toggle"
+                                    onclick="togglePassword('createPassword', this)" aria-label="Show password"><i
+                                        class="fas fa-eye"></i></button></div>
+                            <div class="password-strength" id="passwordStrength" aria-live="polite" hidden>
+                                <div class="strength-bars"><span></span><span></span><span></span></div><span
+                                    class="strength-label">Password strength</span>
+                            </div>
+                        </div>
+                        <div class="form-group"><label class="form-label" for="confirmPassword">Confirm password</label>
+                            <div class="password-wrap"><input type="password" class="form-input" id="confirmPassword"
+                                    placeholder="Re-enter your password" minlength="8" autocomplete="new-password"
+                                    required><button type="button" class="password-toggle"
+                                    onclick="togglePassword('confirmPassword', this)" aria-label="Show password"><i
+                                        class="fas fa-eye"></i></button></div>
+                        </div>
+                        <label class="privacy-check"><input type="checkbox" id="privacyAgreement" required> <span>I
+                                agree to the <a href="#privacyPolicy" onclick="openPrivacyPolicy(event)">Privacy
+                                    Policy</a> and processing of my personal data under the Data Privacy
+                                Act.</span></label>
+                        <div class="auth-error" id="createError" role="alert"></div>
+                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-user-plus"></i>
+                            Create account</button>
+                    </form>
+                </div>
+
+                <div class="auth-panel" id="forgotPanel">
+                    <button type="button" class="auth-back" onclick="showPanel('signInPanel')"><i
+                            class="fas fa-arrow-left"></i> Back to sign in</button>
+                    <h1 class="auth-welcome-title">Forgot password?</h1>
+                    <p class="auth-welcome-sub">Enter the email address or mobile number registered to your account.</p>
+                    <form onsubmit="event.preventDefault(); beginPasswordReset();">
+                        <div class="form-group"><label class="form-label" for="resetIdentifier">Email address or phone
+                                number</label><input type="text" class="form-input" id="resetIdentifier"
+                                placeholder="name@example.com or +63 912 345 6789" autocomplete="username" required>
+                        </div>
+                        <div class="auth-error" id="forgotError" role="alert"></div>
+                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-paper-plane"></i>
+                            Send verification code</button>
+                    </form>
+                </div>
+
+                <div class="auth-panel" id="channelPanel">
+                    <button type="button" class="auth-back" onclick="cancelVerification()"><i
+                            class="fas fa-arrow-left"></i> Cancel</button>
+                    <h1 class="auth-welcome-title">Choose verification method</h1>
+                    <p class="auth-welcome-sub" id="channelDescription">Select where we should send your six-digit
+                        verification code.</p>
+                    <div class="channel-options">
+                        <button type="button" class="channel-option" id="emailChannel" onclick="sendOtp('email')"><i
+                                class="fas fa-envelope"></i><span><strong>Email code</strong><small
+                                    id="emailDestination">—</small></span><i class="fas fa-chevron-right"></i></button>
+                        <button type="button" class="channel-option" id="smsChannel" onclick="sendOtp('sms')"><i
+                                class="fas fa-comment-sms"></i><span><strong>SMS code</strong><small
+                                    id="smsDestination">—</small></span><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                    <div class="auth-error" id="channelError" role="alert"></div>
+                </div>
+
+                <div class="auth-panel" id="otpPanel">
+                    <button type="button" class="auth-back" onclick="showPanel('channelPanel')"><i
+                            class="fas fa-arrow-left"></i> Change method</button>
+                    <h1 class="auth-welcome-title" id="otpTitle">Enter verification code</h1>
+                    <p class="auth-welcome-sub" id="otpDescription">We sent a six-digit code.</p>
+                    <form onsubmit="event.preventDefault(); verifyOtp();">
+                        <div class="otp-inputs" aria-label="Six digit verification code"><input inputmode="numeric"
+                                maxlength="1" aria-label="Digit 1" autofocus><input inputmode="numeric" maxlength="1"
+                                aria-label="Digit 2"><input inputmode="numeric" maxlength="1"
+                                aria-label="Digit 3"><input inputmode="numeric" maxlength="1"
+                                aria-label="Digit 4"><input inputmode="numeric" maxlength="1"
+                                aria-label="Digit 5"><input inputmode="numeric" maxlength="1" aria-label="Digit 6">
+                        </div>
+                        <div class="auth-error" id="otpError" role="alert"></div>
+                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-check"></i> Verify
+                            code</button>
+                    </form>
+                    <div class="resend-row"><span id="resendTimer">Resend code in 00:30</span><button type="button"
+                            id="resendButton" onclick="resendOtp()" disabled>Resend code</button></div>
+                    <div class="demo-otp" id="demoOtp" hidden></div>
+                </div>
+
+                <div class="auth-panel" id="newPasswordPanel">
+                    <h1 class="auth-welcome-title">Set a new password</h1>
+                    <p class="auth-welcome-sub">Choose a new password for your RIMAS account.</p>
+                    <form onsubmit="event.preventDefault(); finishPasswordReset();">
+                        <div class="form-group"><label class="form-label" for="newPassword">New password</label>
+                            <div class="password-wrap"><input type="password" class="form-input" id="newPassword"
+                                    placeholder="At least 8 characters" minlength="8" autocomplete="new-password"
+                                    required><button type="button" class="password-toggle"
+                                    onclick="togglePassword('newPassword', this)" aria-label="Show password"><i
+                                        class="fas fa-eye"></i></button></div>
+                        </div>
+                        <div class="form-group"><label class="form-label" for="newPasswordConfirm">Confirm new
+                                password</label>
+                            <div class="password-wrap"><input type="password" class="form-input" id="newPasswordConfirm"
+                                    placeholder="Re-enter your new password" minlength="8" autocomplete="new-password"
+                                    required><button type="button" class="password-toggle"
+                                    onclick="togglePassword('newPasswordConfirm', this)" aria-label="Show password"><i
+                                        class="fas fa-eye"></i></button></div>
+                        </div>
+                        <div class="auth-error" id="newPasswordError" role="alert"></div>
+                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-key"></i> Reset
+                            password</button>
+                    </form>
+                </div>
+
+                <div class="auth-secure-note"><i class="fas fa-shield-alt"></i> Protected with email or SMS verification
+                </div>
+                <div class="auth-footer-org">Mandaluyong City Traffic Planning &amp; Management Office</div>
+            </section>
+        </div>
+    </main>
+    <div class="privacy-modal" id="privacyPolicy" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
+        <div class="privacy-modal-card"><button class="modal-close" onclick="closePrivacyPolicy()"><i
+                    class="fas fa-times"></i></button>
+            <h2 id="privacyTitle">Privacy Policy</h2>
+            <p>RIMAS collects your name, contact details, and account credentials only to provide secure system access
+                and account recovery. Your information must be protected and processed in accordance with the Data
+                Privacy Act of 2012.</p><button class="btn btn-primary" onclick="closePrivacyPolicy()">I
+                understand</button>
+        </div>
+    </div>
+    <script src="login.js"></script>
+</body>
+
+</html>

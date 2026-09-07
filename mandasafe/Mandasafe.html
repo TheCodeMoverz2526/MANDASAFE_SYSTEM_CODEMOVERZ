@@ -1,0 +1,1712 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mandaluyong RIMAS – Road Incident Mapping & Analytics System</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <!-- PROFILE DROPDOWN -->
+    <div class="profile-dropdown" id="profileDropdown">
+        <div class="profile-header">
+            <div class="profile-name" id="profileName">—</div>
+            <div class="profile-email" id="profileEmail">—</div>
+            <div style="margin-top:6px;" id="profileRoleBadge"></div>
+        </div>
+        <div style="padding:6px 0;">
+            <div class="profile-menu-item" onclick="showPage('settings');toggleProfileDropdown()"><i
+                    class="fas fa-user-circle"></i> My Profile</div>
+            <div class="profile-menu-item" onclick="showPage('settings');toggleProfileDropdown()"><i
+                    class="fas fa-cog"></i> Account Settings</div>
+            <div class="profile-menu-item" id="adminPanelLink" style="display:none;"
+                onclick="showPage('users');toggleProfileDropdown()"><i class="fas fa-shield-alt"></i> Admin Panel</div>
+            <div class="profile-divider"></div>
+            <div class="profile-menu-item" onclick="doLogout()" style="display:flex;align-items:center;gap:10px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink:0;">
+                    <path
+                        d="M9.24 8.19v2.46h5.88c-.18 1.38-.64 2.39-1.34 3.1-.86.86-2.2 1.8-4.54 1.8-3.62 0-6.45-2.92-6.45-6.54s2.83-6.54 6.45-6.54c1.95 0 3.38.77 4.43 1.76L15.4 2.5C13.94 1.08 11.98 0 9.24 0 4.28 0 .11 4.04.11 9s4.17 9 9.13 9c2.68 0 4.7-.88 6.28-2.52 1.62-1.62 2.13-3.91 2.13-5.75 0-.57-.04-1.1-.13-1.54H9.24z"
+                        fill="#4285F4" />
+                </svg>
+                Sign out of Google
+            </div>
+        </div>
+    </div>
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <div class="topbar-logo" onclick="showPage('home')">
+            <div class="logo-badge">M</div>
+            <div class="topbar-title">Mandaluyong Road Incident Mapping and Analytics System</div>
+        </div>
+        <nav class="topbar-nav">
+            <a onclick="showPage('home')" id="nav-home" class="active">Home</a>
+            <a onclick="showPage('incidents')" id="nav-incidents">Incident Records</a>
+            <a onclick="showPage('map')" id="nav-map">GIS Map</a>
+            <a onclick="showPage('hotspot')" id="nav-hotspot">Hotspot Analysis</a>
+            <a onclick="showPage('safety')" id="nav-safety">Safety Index</a>
+        </nav>
+        <div class="topbar-actions" style="position:relative;">
+            <button class="icon-btn" onclick="toggleProfileDropdown()"><i class="fas fa-user-circle"></i><span
+                    class="badge">2</span></button>
+            <button class="icon-btn" onclick="showPage('notifications')"><i class="fas fa-bell"></i><span class="badge"
+                    id="bellBadge">3</span></button>
+            <div class="avatar" id="avatarBtn" onclick="toggleProfileDropdown()" title="Account">RC</div>
+        </div>
+    </div>
+
+    <div class="app-body">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-label">Navigation</div>
+            <a class="sidebar-item active" onclick="showPage('home')" id="sb-home"><i class="fas fa-home"></i> Home</a>
+            <a class="sidebar-item" onclick="showPage('incidents')" id="sb-incidents"><i
+                    class="fas fa-clipboard-list"></i> Incident Records</a>
+            <a class="sidebar-item" onclick="showPage('map')" id="sb-map"><i class="fas fa-map-marked-alt"></i> GIS
+                Map</a>
+            <a class="sidebar-item" onclick="showPage('hotspot')" id="sb-hotspot"><i class="fas fa-fire"></i> Hotspot
+                Analysis</a>
+            <a class="sidebar-item" onclick="showPage('safety')" id="sb-safety"><i class="fas fa-shield-alt"></i> Safety
+                Index</a>
+            <a class="sidebar-item" onclick="showPage('analytics')" id="sb-analytics"><i class="fas fa-chart-bar"></i>
+                Analytics</a>
+            <a class="sidebar-item" onclick="showPage('reports')" id="sb-reports"><i class="fas fa-file-alt"></i>
+                Reports</a>
+            <div class="sidebar-label">System</div>
+            <a class="sidebar-item admin-only" onclick="showPage('predictdata')" id="sb-predictdata" style="display:none;"><i
+                    class="fas fa-database"></i> Prediction Data</a>
+            <a class="sidebar-item admin-only" onclick="showPage('users')" id="sb-users" style="display:none;"><i
+                    class="fas fa-users-cog"></i> User Management</a>
+            <a class="sidebar-item" onclick="showPage('notifications')" id="sb-notifications"><i
+                    class="fas fa-bell"></i> Notifications <span id="sbNotifCount"
+                    style="margin-left:auto;background:#ef4444;color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;">3</span></a>
+            <a class="sidebar-item" onclick="showPage('settings')" id="sb-settings"><i class="fas fa-cog"></i>
+                Settings</a>
+            <div class="sidebar-bottom">
+                <a class="sidebar-item" onclick="doLogout()" style="color:rgba(239,68,68,.8);"><i
+                        class="fas fa-sign-out-alt"></i> Sign Out</a>
+            </div>
+        </aside>
+
+        <!-- MAIN -->
+        <main class="main">
+
+            <!-- ===== HOME PAGE ===== -->
+            <div class="page active" id="page-home">
+                <div class="hero">
+                    <h1>Mandaluyong Road Incident Mapping and Analytics System</h1>
+                    <p>Monitoring, Hotspot Identification &amp; Safety Planning for Mandaluyong TPMO</p>
+                </div>
+                <div style="padding:24px 24px 16px;background:white;">
+                    <div class="flex items-center justify-between">
+                        <h2 style="font-size:20px;font-weight:700;line-height:1;margin:0;">Overview</h2>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span id="dashWelcome" style="font-size:13px;color:var(--gray-500);"></span>
+                            <button class="btn btn-primary btn-sm admin-only" onclick="showPage('incidents');openModal()"><i
+                                    class="fas fa-plus"></i> New Incident</button>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:0 24px 24px;background:white;">
+                    <div class="grid-4 mb-16">
+                        <div class="stat-card"
+                            style="cursor:pointer;transition:transform .15s;border-left:4px solid var(--blue);"
+                            onmouseenter="this.style.transform='translateY(-2px)'"
+                            onmouseleave="this.style.transform=''" onclick="showPage('incidents')">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                                <div>
+                                    <div class="stat-val" style="color:var(--blue);" id="homeStatTotal">0</div>
+                                    <div class="stat-label">Total Incidents</div>
+                                </div>
+                                <div
+                                    style="width:42px;height:42px;background:#eff6ff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--blue);">
+                                    <i class="fas fa-clipboard-list"></i>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
+                                    class="fas fa-minus"></i> No data yet</div>
+                        </div>
+                        <div class="stat-card"
+                            style="cursor:pointer;transition:transform .15s;border-left:4px solid var(--red);"
+                            onmouseenter="this.style.transform='translateY(-2px)'"
+                            onmouseleave="this.style.transform=''">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                                <div>
+                                    <div class="stat-val" style="color:var(--red);" id="homeStatFatal">0</div>
+                                    <div class="stat-label">Fatal Incidents</div>
+                                </div>
+                                <div
+                                    style="width:42px;height:42px;background:#fef2f2;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--red);">
+                                    <i class="fas fa-skull-crossbones"></i>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
+                                    class="fas fa-minus"></i> No data yet</div>
+                        </div>
+                        <div class="stat-card"
+                            style="cursor:pointer;transition:transform .15s;border-left:4px solid var(--orange);"
+                            onmouseenter="this.style.transform='translateY(-2px)'"
+                            onmouseleave="this.style.transform=''">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                                <div>
+                                    <div class="stat-val" style="color:var(--orange);" id="homeStatInjury">0</div>
+                                    <div class="stat-label">Injury Incidents</div>
+                                </div>
+                                <div
+                                    style="width:42px;height:42px;background:#fff7ed;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--orange);">
+                                    <i class="fas fa-ambulance"></i>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
+                                    class="fas fa-minus"></i> Same as last month</div>
+                        </div>
+                        <div class="stat-card"
+                            style="cursor:pointer;transition:transform .15s;border-left:4px solid var(--green);"
+                            onmouseenter="this.style.transform='translateY(-2px)'"
+                            onmouseleave="this.style.transform=''" onclick="showPage('hotspot')">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                                <div>
+                                    <div class="stat-val" style="color:var(--green);">0</div>
+                                    <div class="stat-label">High-Risk Zones</div>
+                                </div>
+                                <div
+                                    style="width:42px;height:42px;background:#f0fdf4;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--green);">
+                                    <i class="fas fa-map-pin"></i>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
+                                    class="fas fa-minus"></i> No data yet</div>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px;">
+                        <div class="card">
+                            <div class="card-header"><span class="card-title"><i class="fas fa-chart-area"
+                                        style="color:var(--blue);margin-right:6px;"></i>Accident Trend – Last 12
+                                    Months</span><button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                                    onclick="showPage('analytics')">Full Analytics <i
+                                        class="fas fa-arrow-right"></i></button></div>
+                            <div class="card-body">
+                                <div class="chart-wrap" style="height:180px;"><canvas id="dashTrendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header"><span class="card-title"><i class="fas fa-pie-chart"
+                                        style="color:var(--orange);margin-right:6px;"></i>By Severity</span></div>
+                            <div class="card-body" style="display:flex;flex-direction:column;align-items:center;">
+                                <div style="height:130px;width:130px;"><canvas id="dashSevDonut"></canvas></div>
+                                <div style="width:100%;margin-top:10px;font-size:11px;">
+                                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span
+                                            style="display:flex;align-items:center;gap:5px;"><span
+                                                style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block;"></span>Fatal</span><strong>0</strong>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span
+                                            style="display:flex;align-items:center;gap:5px;"><span
+                                                style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;"></span>Injury</span><strong>0</strong>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;"><span
+                                            style="display:flex;align-items:center;gap:5px;"><span
+                                                style="width:8px;height:8px;border-radius:50%;background:#fbbf24;display:inline-block;"></span>Minor</span><strong>0</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
+                        <div class="card" style="grid-column:span 2;">
+                            <div class="card-header"><span class="card-title"><i class="fas fa-clock"
+                                        style="color:var(--gray-400);margin-right:6px;"></i>Recent
+                                    Incidents</span><button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                                    onclick="showPage('incidents')">View All</button></div>
+                            <table class="data-table" id="dashRecentTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Date/Time</th>
+                                        <th>Location</th>
+                                        <th>Severity</th>
+                                        <th>Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashRecentBody"></tbody>
+                            </table>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:16px;">
+                            <div class="card">
+                                <div class="card-header"><span class="card-title"><i class="fas fa-bolt"
+                                            style="color:var(--orange);margin-right:6px;"></i>Quick Actions</span></div>
+                                <div class="card-body"
+                                    style="display:flex;flex-direction:column;gap:8px;padding:12px 16px;">
+                                    <button class="btn btn-primary btn-sm admin-only"
+                                        style="justify-content:flex-start;gap:10px;"
+                                        onclick="showPage('incidents');openModal()"><i class="fas fa-plus-circle"
+                                            style="width:16px;"></i>Add New Incident</button>
+                                    <button class="btn btn-secondary btn-sm"
+                                        style="justify-content:flex-start;gap:10px;" onclick="showPage('map')"><i
+                                            class="fas fa-map" style="width:16px;"></i>View Live Map</button>
+                                    <button class="btn btn-secondary btn-sm"
+                                        style="justify-content:flex-start;gap:10px;" onclick="showPage('reports')"><i
+                                            class="fas fa-file-export" style="width:16px;"></i>Generate Report</button>
+                                    <button class="btn btn-secondary btn-sm"
+                                        style="justify-content:flex-start;gap:10px;" onclick="showPage('hotspot')"><i
+                                            class="fas fa-fire" style="width:16px;"></i>Hotspot Analysis</button>
+                                </div>
+                            </div>
+                            <div class="card" style="flex:1;">
+                                <div class="card-header"><span class="card-title"><i class="fas fa-exclamation-triangle"
+                                            style="color:var(--red);margin-right:6px;"></i>Active Alerts</span></div>
+                                <div style="padding:8px 0;">
+                                    <div
+                                        style="padding:10px 16px;border-bottom:1px solid var(--gray-100);font-size:12px;">
+                                        <div style="color:var(--red);font-weight:700;margin-bottom:2px;"><i
+                                                class="fas fa-circle"
+                                                style="font-size:7px;margin-right:5px;"></i>Critical – Shaw Blvd at EDSA
+                                        </div>
+                                        <div style="color:var(--gray-500);">3 incidents in last 2 hours</div>
+                                    </div>
+                                    <div style="padding:10px 16px;font-size:12px;">
+                                        <div style="color:var(--orange);font-weight:700;margin-bottom:2px;"><i
+                                                class="fas fa-circle" style="font-size:7px;margin-right:5px;"></i>High –
+                                            Boni Ave at EDSA</div>
+                                        <div style="color:var(--gray-500);">Fatal incident reported</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+                        <div
+                            style="background:linear-gradient(135deg,#dc2626,#b91c1c);border-radius:10px;padding:14px;color:white;text-align:center;">
+                            <div style="font-size:22px;font-weight:800;">4.0</div>
+                            <div style="font-size:11px;opacity:.8;margin-top:2px;">Plainview</div>
+                            <div style="font-size:10px;opacity:.6;">HIGH RISK</div>
+                        </div>
+                        <div
+                            style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;padding:14px;color:white;text-align:center;">
+                            <div style="font-size:22px;font-weight:800;">5.5</div>
+                            <div style="font-size:11px;opacity:.8;margin-top:2px;">San Jose</div>
+                            <div style="font-size:10px;opacity:.6;">MODERATE</div>
+                        </div>
+                        <div
+                            style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:10px;padding:14px;color:white;text-align:center;">
+                            <div style="font-size:22px;font-weight:800;">7.0</div>
+                            <div style="font-size:11px;opacity:.8;margin-top:2px;">Highway Hills</div>
+                            <div style="font-size:10px;opacity:.6;">SAFE</div>
+                        </div>
+                        <div
+                            style="background:linear-gradient(135deg,#22c55e,#15803d);border-radius:10px;padding:14px;color:white;text-align:center;">
+                            <div style="font-size:22px;font-weight:800;">8.0</div>
+                            <div style="font-size:11px;opacity:.8;margin-top:2px;">Wack-Wack</div>
+                            <div style="font-size:10px;opacity:.6;">VERY SAFE</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== INCIDENTS PAGE ===== -->
+            <div class="page" id="page-incidents">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Incident Records</span></div>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="triggerImport()"><i class="fas fa-upload"></i>
+                            Import Data</button>
+                        <button class="btn btn-primary btn-sm admin-only" onclick="openModal()"><i
+                                class="fas fa-plus"></i> Add
+                            Incident</button>
+                    </div>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div class="flex items-center justify-between mb-16">
+                        <h2 style="font-size:20px;font-weight:700;">Centralized Accident Repository</h2>
+                    </div>
+                    <div class="filter-bar" style="padding:0 0 14px;border:none;">
+                        <select class="filter-select" id="fltDateRange">
+                            <option value="all">Date Range</option>
+                            <option value="today">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                        </select>
+                        <select class="filter-select" id="fltBarangay">
+                            <option value="all">Barangay</option>
+                            <option>Plainview</option>
+                            <option>Highway Hills</option>
+                            <option>Wack-Wack</option>
+                            <option>San Jose</option>
+                            <option>Addition Hills</option>
+                            <option>Mauway</option>
+                        </select>
+                        <select class="filter-select" id="fltRoad">
+                            <option value="all">Road Name</option>
+                            <option>Shaw Blvd</option>
+                            <option>EDSA</option>
+                            <option>Boni Ave</option>
+                            <option>Ortigas Ave</option>
+                        </select>
+                        <select class="filter-select" id="fltSeverity">
+                            <option value="all">Severity</option>
+                            <option value="Fatal">Fatal</option>
+                            <option value="Injury">Injury</option>
+                            <option value="Minor">Minor</option>
+                            <option value="Damage">Damage Only</option>
+                        </select>
+                        <select class="filter-select" id="fltVehicle">
+                            <option value="all">Vehicle Type</option>
+                            <option>Car</option>
+                            <option>Motorcycle</option>
+                            <option>Truck</option>
+                            <option>Bus</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="applyIncidentFilters()">Apply Filter</button>
+                        <button class="btn btn-secondary btn-sm" onclick="resetIncidentFilters()">Reset</button>
+                    </div>
+                </div>
+                <div style="padding:0 24px 24px;">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">All Incidents</span>
+                            <span style="margin-left:auto;font-size:12px;color:var(--gray-500);"
+                                id="incidentCountLabel">Showing 1–10 of 1,250
+                                entries</span>
+                            <button class="btn btn-secondary btn-sm" style="margin-left:12px;"
+                                onclick="openExportModal()"><i class="fas fa-download"></i> Export Report</button>
+                        </div>
+                        <div style="overflow-x:auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Incident ID</th>
+                                        <th>Date</th>
+                                        <th>Time</th>
+                                        <th>Location</th>
+                                        <th>Barangay</th>
+                                        <th>Road / Intersection</th>
+                                        <th>Severity</th>
+                                        <th>Type</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="incidentTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div
+                            style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--gray-100);">
+                            <span style="font-size:12px;color:var(--gray-500);" id="incidentPagerLabel">Showing 1 to 10
+                                of 1,250 entries</span>
+                            <div class="pagination" id="incidentPagination"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== MAP PAGE ===== -->
+            <div class="page" id="page-map" style="height:calc(100vh - 56px);">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">GIS Map</span></div>
+                </div>
+                <div style="display:grid;grid-template-columns:220px 1fr 0px;height:calc(100vh - 56px - 47px);transition:grid-template-columns .3s;"
+                    id="mapLayout">
+                    <div class="map-sidebar">
+                        <h3><i class="fas fa-filter" style="color:var(--blue);margin-right:6px;"></i>Filter Incidents
+                        </h3>
+                        <div class="form-group">
+                            <div class="form-label">Date Range</div>
+                            <div style="display:flex;flex-direction:column;gap:4px;">
+                                <input type="date" class="form-input" id="mapDateFrom"
+                                    style="width:100%;padding:7px 8px;font-size:11px;">
+                                <div style="text-align:center;color:var(--gray-400);font-size:11px;">to</div>
+                                <input type="date" class="form-input" id="mapDateTo"
+                                    style="width:100%;padding:7px 8px;font-size:11px;">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-label">Incident Type</div><select class="form-select" id="mapFltType"
+                                style="font-size:12px;">
+                                <option value="all">All Types</option>
+                                <option>Vehicular Collision</option>
+                                <option>Pedestrian Involved</option>
+                                <option>Single Vehicle</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-label">Severity</div><select class="form-select" id="mapFltSev"
+                                style="font-size:12px;">
+                                <option value="all">All Severities</option>
+                                <option>Fatal</option>
+                                <option>Injury</option>
+                                <option>Minor</option>
+                                <option>Damage Only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-label">Barangay</div><select class="form-select" id="mapFltBarangay"
+                                style="font-size:12px;">
+                                <option value="all">All Barangays</option>
+                                <option>Plainview</option>
+                                <option>Highway Hills</option>
+                                <option>Wack-Wack</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:6px;"><button class="btn btn-primary btn-sm" style="flex:1;"
+                                onclick="applyMapFilters()">Apply
+                                Filter</button><button class="btn btn-secondary btn-sm"
+                                onclick="resetMapFilters()">Reset</button></div>
+                        <div class="legend" style="margin-top:20px;">
+                            <div class="form-label" style="margin-bottom:10px;">Incident Severity</div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:#dc2626;"></div><span>Fatal</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:#f59e0b;"></div><span>Injury</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:#fbbf24;"></div><span>Minor</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:#3b82f6;"></div><span>Property Damage
+                                    Only</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="map-container">
+                        <div class="map-topbar">
+                            <button class="map-layer-btn active" id="layerBoundary"
+                                onclick="toggleMapLayer('boundary', this)"><i class="fas fa-draw-polygon"></i> Barangay
+                                Boundaries</button>
+                            <button class="map-layer-btn" id="layerIncidents"
+                                onclick="toggleMapLayer('incidents', this)"><i class="fas fa-map-marker-alt"></i> Incident
+                                Markers</button>
+                            <button class="map-layer-btn" id="layerHeatmap" onclick="toggleMapLayer('heatmap', this)"><i
+                                    class="fas fa-fire" style="color:#f59e0b;"></i> Heatmap</button>
+                            <button class="map-layer-btn" id="layerHotspots" onclick="toggleMapLayer('hotspots', this)"><i
+                                    class="fas fa-bullseye" style="color:#dc2626;"></i> Hotspots</button>
+                            <span id="mapResultSummary" style="margin-left:12px;font-size:11px;color:var(--gray-500);">0 incidents shown</span>
+                            <div style="margin-left:auto;display:flex;gap:6px;">
+                                <button class="icon-btn" style="background:var(--gray-100);color:var(--gray-700);"
+                                    onclick="mapZoom(1)"><i class="fas fa-plus"></i></button>
+                                <button class="icon-btn" style="background:var(--gray-100);color:var(--gray-700);"
+                                    onclick="mapZoom(-1)"><i class="fas fa-minus"></i></button>
+                            </div>
+                        </div>
+                        <div class="leaflet-map-wrap">
+                            <div id="mandaluyongLeafletMap" aria-label="Interactive map of Mandaluyong barangay boundaries"></div>
+                            <svg id="mapSvg" aria-hidden="true" viewBox="0 0 700 550"
+                                style="width:100%;height:100%;transform-origin:center;transition:transform .2s;"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+                                        <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#c8d8c8" stroke-width=".5" />
+                                    </pattern>
+                                </defs>
+                                <rect width="700" height="550" fill="#dce8dc" />
+                                <rect width="700" height="550" fill="url(#grid)" />
+                                <g id="layerGroupBoundary">
+                                    <polygon points="350,20 600,20 600,180 400,180 350,100" fill="#c5d8c0"
+                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
+                                    <text x="490" y="90" fill="#5a7a55" font-size="12" font-weight="600"
+                                        text-anchor="middle" font-family="DM Sans">PLAINVIEW</text>
+                                    <polygon points="50,20 350,20 350,100 200,100 50,150" fill="#ccd8c0"
+                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
+                                    <text x="180" y="80" fill="#5a7a55" font-size="12" font-weight="600"
+                                        text-anchor="middle" font-family="DM Sans">HIGHWAY HILLS</text>
+                                    <polygon points="400,180 600,180 620,320 500,320 400,260" fill="#c5d8c0"
+                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
+                                    <text x="510" y="255" fill="#5a7a55" font-size="11" font-weight="600"
+                                        text-anchor="middle" font-family="DM Sans">WACK-WACK</text>
+                                    <polygon points="200,100 400,100 400,260 300,280 200,260 150,200 50,150"
+                                        fill="#d0d8c8" stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
+                                    <text x="260" y="190" fill="#5a7a55" font-size="12" font-weight="600"
+                                        text-anchor="middle" font-family="DM Sans">ADDITION HILLS</text>
+                                    <polygon points="50,150 200,200 200,360 100,360 20,300" fill="#c8d5c8"
+                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
+                                    <text x="100" y="280" fill="#5a7a55" font-size="12" font-weight="600"
+                                        text-anchor="middle" font-family="DM Sans">SAN JOSE</text>
+                                    <polygon points="200,260 400,260 420,380 300,400 200,360" fill="#ccdcc8"
+                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
+                                    <text x="300" y="340" fill="#5a7a55" font-size="12" font-weight="600"
+                                        text-anchor="middle" font-family="DM Sans">BARANGKA ILAYA</text>
+                                    <polygon points="300,400 420,380 460,500 200,500 200,440" fill="#c5d8c0"
+                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
+                                    <text x="330" y="450" fill="#5a7a55" font-size="12" font-weight="600"
+                                        text-anchor="middle" font-family="DM Sans">MAUWAY</text>
+                                </g>
+                                <g id="layerGroupRoad">
+                                    <path d="M 140,300 Q 180,320 160,380 Q 150,420 180,440 Q 200,460 195,500"
+                                        fill="none" stroke="#7ab8d4" stroke-width="18" opacity=".6" />
+                                    <line x1="350" y1="0" x2="380" y2="550" stroke="#e8d84a" stroke-width="12"
+                                        opacity=".9" />
+                                    <line x1="350" y1="0" x2="380" y2="550" stroke="white" stroke-width="2"
+                                        stroke-dasharray="20,15" opacity=".6" />
+                                    <text x="400" y="30" fill="#8a7a00" font-size="10" font-weight="700"
+                                        font-family="DM Sans">EDSA</text>
+                                    <line x1="20" y1="160" x2="620" y2="200" stroke="#e8b44a" stroke-width="10"
+                                        opacity=".9" />
+                                    <text x="500" y="225" fill="#8a5a00" font-size="10" font-weight="700"
+                                        font-family="DM Sans">SHAW BLVD</text>
+                                    <line x1="20" y1="400" x2="620" y2="420" stroke="#e8c44a" stroke-width="9"
+                                        opacity=".8" />
+                                    <text x="500" y="445" fill="#8a5a00" font-size="10" font-weight="700"
+                                        font-family="DM Sans">BONI AVE</text>
+                                    <line x1="20" y1="90" x2="620" y2="110" stroke="#d4d4d4" stroke-width="7"
+                                        opacity=".7" />
+                                    <text x="60" y="85" fill="#666" font-size="9" font-weight="600"
+                                        font-family="DM Sans">ORTIGAS AVE</text>
+                                </g>
+                                <g id="layerGroupHeatmap" style="display:none;">
+                                    <ellipse cx="365" cy="175" rx="70" ry="55" fill="#dc2626" opacity=".28" />
+                                    <ellipse cx="375" cy="415" rx="55" ry="42" fill="#dc2626" opacity=".24" />
+                                    <ellipse cx="285" cy="185" rx="65" ry="50" fill="#f59e0b" opacity=".22" />
+                                    <ellipse cx="230" cy="98" rx="40" ry="32" fill="#f59e0b" opacity=".2" />
+                                    <ellipse cx="490" cy="105" rx="38" ry="30" fill="#fbbf24" opacity=".2" />
+                                </g>
+                                <g id="layerGroupCluster">
+                                    <g class="cluster"
+                                        onclick="selectIncident('A05928','Shaw Blvd near EDSA','Plainview','Vehicular Collision','Injury',13)">
+                                        <circle cx="365" cy="175" r="22" fill="#dc2626" stroke="white" stroke-width="3"
+                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="365" y="180"
+                                            fill="white" font-size="13" font-weight="800" text-anchor="middle"
+                                            font-family="DM Sans">13</text>
+                                    </g>
+                                    <g class="cluster"
+                                        onclick="selectIncident('A05920','Boni Ave at EDSA','Addition Hills','Pedestrian Involved','Fatal',9)">
+                                        <circle cx="375" cy="415" r="18" fill="#dc2626" stroke="white" stroke-width="3"
+                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="375" y="420"
+                                            fill="white" font-size="12" font-weight="800" text-anchor="middle"
+                                            font-family="DM Sans">9</text>
+                                    </g>
+                                    <g class="cluster"
+                                        onclick="selectIncident('A05919','Ortigas Ave','Highway Hills','Vehicular Collision','Injury',4)">
+                                        <circle cx="230" cy="98" r="16" fill="#dc2626" stroke="white" stroke-width="3"
+                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="230" y="103"
+                                            fill="white" font-size="11" font-weight="800" text-anchor="middle"
+                                            font-family="DM Sans">4</text>
+                                    </g>
+                                    <g class="cluster"
+                                        onclick="selectIncident('A05921','Ortigas Ave Plainview','Plainview','Single Vehicle','Minor',4)">
+                                        <circle cx="490" cy="105" r="16" fill="#f59e0b" stroke="white" stroke-width="3"
+                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="490" y="110"
+                                            fill="white" font-size="11" font-weight="800" text-anchor="middle"
+                                            font-family="DM Sans">4</text>
+                                    </g>
+                                    <g class="cluster"
+                                        onclick="selectIncident('A05925','Shaw Blvd near EDSA','Mauway','Vehicular Collision','Injury',13)">
+                                        <circle cx="285" cy="185" r="22" fill="#dc2626" stroke="white" stroke-width="3"
+                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="285" y="190"
+                                            fill="white" font-size="13" font-weight="800" text-anchor="middle"
+                                            font-family="DM Sans">13</text>
+                                    </g>
+                                    <g class="cluster"
+                                        onclick="selectIncident('A05930','Boni Ave Mauway','Mauway','Pedestrian','Damage Only',2)">
+                                        <circle cx="580" cy="415" r="14" fill="#3b82f6" stroke="white" stroke-width="3"
+                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="580" y="420"
+                                            fill="white" font-size="11" font-weight="800" text-anchor="middle"
+                                            font-family="DM Sans">2</text>
+                                    </g>
+                                </g>
+                                <g transform="translate(650,480)">
+                                    <circle cx="0" cy="0" r="22" fill="white" stroke="#ddd" stroke-width="1.5"
+                                        opacity=".9" /><text x="0" y="-8" fill="#333" font-size="10" font-weight="700"
+                                        text-anchor="middle" font-family="DM Sans">N</text>
+                                    <path d="M 0,-15 L 5,0 L 0,5 L -5,0 Z" fill="#dc2626" opacity=".9" />
+                                    <path d="M 0,5 L 5,15 L 0,10 L -5,15 Z" fill="#888" />
+                                </g>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="map-info-panel" id="mapInfoPanel">
+                        <div class="info-panel-header">
+                            <div>
+                                <div style="font-size:11px;color:var(--gray-400);margin-bottom:2px;">Selected Incident
+                                </div>
+                                <div class="info-panel-title" id="infoPanelId">—</div>
+                            </div>
+                            <button class="info-close" onclick="closeInfoPanel()"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;" id="infoDateTime">—</div>
+                        <div class="info-row">
+                            <div
+                                style="width:10px;height:10px;border-radius:50%;background:#dc2626;margin-top:3px;flex-shrink:0;">
+                            </div><span id="infoType" style="font-weight:600;font-size:13px;">—</span>
+                        </div>
+                        <div style="margin-bottom:12px;" id="infoSevBadge"></div>
+                        <div class="info-row"><i class="fas fa-road"></i><span id="infoRoad">—</span></div>
+                        <div class="info-row"><i class="fas fa-map-pin"></i><span id="infoBarangay">—</span></div>
+                        <div class="quick-stats">
+                            <div class="qs-item">
+                                <div class="qs-val" style="color:var(--orange);" id="infoInjuries">—</div>
+                                <div class="qs-label">Injuries</div>
+                            </div>
+                            <div class="qs-item">
+                                <div class="qs-val" style="color:var(--blue);" id="infoCount">—</div>
+                                <div class="qs-label">In Cluster</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" style="width:100%;margin-top:14px;justify-content:center;"
+                            onclick="showPage('incidents')">View Details <i class="fas fa-arrow-right"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== ANALYTICS PAGE ===== -->
+            <div class="page" id="page-analytics">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Analytics</span></div>
+                </div>
+                <div class="analytics-topbar">
+                    <div class="time-tabs"><button class="time-tab">Daily</button><button
+                            class="time-tab">Weekly</button><button class="time-tab active">Monthly</button><button
+                            class="time-tab">Yearly</button></div>
+                    <button class="btn btn-primary btn-sm" style="margin-left:auto;"
+                        onclick="showToast('📊 Analytics filter applied!')">Apply Filter</button>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div class="grid-4 mb-16">
+                        <div class="stat-card" style="background:linear-gradient(135deg,#1a56db,#1e3060);color:white;">
+                            <div class="stat-val" style="color:white;">0</div>
+                            <div class="stat-label" style="color:rgba(255,255,255,.7);">Total Incidents</div>
+                        </div>
+                        <div class="stat-card" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:white;">
+                            <div class="stat-val" style="color:white;">0</div>
+                            <div class="stat-label" style="color:rgba(255,255,255,.7);">Fatal</div>
+                        </div>
+                        <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:white;">
+                            <div class="stat-val" style="color:white;">0</div>
+                            <div class="stat-label" style="color:rgba(255,255,255,.7);">Injury</div>
+                        </div>
+                        <div class="stat-card" style="background:linear-gradient(135deg,#22c55e,#16a34a);color:white;">
+                            <div class="stat-val" style="color:white;">0</div>
+                            <div class="stat-label" style="color:rgba(255,255,255,.7);">High-Risk Roads</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="analytics-grid">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Accidents Over Time</span></div>
+                        <div class="card-body">
+                            <div class="chart-wrap"><canvas id="analyticsTimeChart"></canvas></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="card" style="margin-bottom:16px;">
+                            <div class="card-header"><span class="card-title">Incidents by Barangay</span></div>
+                            <div class="card-body">
+                                <div class="chart-wrap"><canvas id="barangayChart"></canvas></div>
+                            </div>
+                        </div>
+                        <div
+                            style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;">
+                            <div class="insight-item">
+                                <div class="insight-icon" style="background:#fff7ed;color:#ea580c;"><i
+                                        class="fas fa-moon"></i></div>
+                                <div class="insight-text"><strong>Peak Incidents</strong>occur during evening hours
+                                    (6–10 PM)</div>
+                            </div>
+                            <div class="insight-item">
+                                <div class="insight-icon" style="background:#eff6ff;color:#1a56db;"><i
+                                        class="fas fa-map-pin"></i></div>
+                                <div class="insight-text"><strong>Most Frequent</strong>incidents occur in Barangay
+                                    Plainview</div>
+                            </div>
+                            <div class="insight-item" style="border:none;">
+                                <div class="insight-icon" style="background:#fef2f2;color:#dc2626;"><i
+                                        class="fas fa-road"></i></div>
+                                <div class="insight-text"><strong>Shaw Blvd–EDSA</strong>has the highest risk score
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="analytics-grid-full">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Incident Type Distribution</span></div>
+                        <div class="card-body" style="display:flex;gap:20px;align-items:center;">
+                            <div style="width:160px;height:160px;flex-shrink:0;"><canvas id="typeDonut"></canvas></div>
+                            <div style="flex:1;font-size:12px;">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                    <div style="width:12px;height:12px;border-radius:3px;background:#1a56db;"></div>
+                                    <span>Vehicular Collision</span><span
+                                        style="margin-left:auto;font-weight:700;">60%</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                    <div style="width:12px;height:12px;border-radius:3px;background:#f59e0b;"></div>
+                                    <span>Pedestrian Involved</span><span
+                                        style="margin-left:auto;font-weight:700;">20%</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <div style="width:12px;height:12px;border-radius:3px;background:#94a3b8;"></div>
+                                    <span>Other</span><span style="margin-left:auto;font-weight:700;">20%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Time of Day vs. Incident Count</span></div>
+                        <div class="card-body">
+                            <div style="height:200px;"><canvas id="heatmapChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:0 24px 24px;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Top Contributing Risk Factors</span></div>
+                        <div class="card-body">
+                            <div class="risk-factors">
+                                <div class="risk-bar-item">
+                                    <div class="risk-bar-label">Poor Road Condition</div>
+                                    <div class="risk-bar-track">
+                                        <div class="risk-bar-fill" style="width:80%;background:#1a56db;"></div>
+                                    </div>
+                                    <div class="risk-count" style="color:#1a56db;">520</div>
+                                </div>
+                                <div class="risk-bar-item">
+                                    <div class="risk-bar-label">Lack of Signage</div>
+                                    <div class="risk-bar-track">
+                                        <div class="risk-bar-fill" style="width:50%;background:#f59e0b;"></div>
+                                    </div>
+                                    <div class="risk-count" style="color:#f59e0b;">250</div>
+                                </div>
+                                <div class="risk-bar-item">
+                                    <div class="risk-bar-label">Speeding</div>
+                                    <div class="risk-bar-track">
+                                        <div class="risk-bar-fill" style="width:34%;background:#fbbf24;"></div>
+                                    </div>
+                                    <div class="risk-count" style="color:#d97706;">170</div>
+                                </div>
+                                <div class="risk-bar-item">
+                                    <div class="risk-bar-label">Distracted Driving</div>
+                                    <div class="risk-bar-track">
+                                        <div class="risk-bar-fill" style="width:28%;background:#ef4444;"></div>
+                                    </div>
+                                    <div class="risk-count" style="color:#ef4444;">150</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== REPORTS PAGE ===== -->
+            <div class="page" id="page-reports">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Reports</span></div>
+                    <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportReport('csv')"><i
+                                class="fas fa-download"></i> Download CSV</button><button class="btn btn-primary btn-sm"
+                            onclick="printReport()"><i class="fas fa-print"></i> Print</button></div>
+                </div>
+                <div class="reports-layout">
+                    <div class="report-sidebar">
+                        <div style="margin-bottom:16px;">
+                            <div class="report-type-item active">
+                                <div class="report-icon" style="background:#eff6ff;color:#1a56db;"><i
+                                        class="fas fa-chart-line"></i></div><span>Accident Trend Report</span>
+                            </div>
+                            <div class="report-type-item">
+                                <div class="report-icon" style="background:#fef2f2;color:#dc2626;"><i
+                                        class="fas fa-fire"></i></div><span>Hotspot Report</span>
+                            </div>
+                            <div class="report-type-item">
+                                <div class="report-icon" style="background:#f0fdf4;color:#16a34a;"><i
+                                        class="fas fa-shield-alt"></i></div><span>Safety Index Report</span>
+                            </div>
+                            <div class="report-type-item">
+                                <div class="report-icon" style="background:#fff7ed;color:#ea580c;"><i
+                                        class="fas fa-file-alt"></i></div><span>Custom Incident Report</span>
+                            </div>
+                        </div>
+                        <div class="report-params">
+                            <div class="form-label" style="margin-bottom:12px;font-size:13px;font-weight:700;">
+                                Parameters</div>
+                            <div class="form-group">
+                                <div class="form-label">Date Range</div>
+                                <div class="date-range-input" style="flex-direction:column;align-items:stretch;gap:6px;">
+                                    <input type="date" id="reportDateFrom" class="date-input" style="width:100%;">
+                                    <div style="text-align:center;color:var(--gray-400);font-size:12px;">to</div>
+                                    <input type="date" id="reportDateTo" class="date-input" style="width:100%;">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="form-label">Barangay</div><select class="form-select" id="reportBarangaySelect">
+                                    <option value="all">All Barangays</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" style="width:100%;justify-content:center;"
+                                onclick="generateReport()"><i class="fas fa-cogs"></i> Generate Report</button>
+                        </div>
+                    </div>
+                    <div class="report-content">
+                        <div class="card">
+                            <div class="card-header"><span class="card-title">Report Preview</span>
+                                <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                                    <div class="format-btns"><button class="format-btn active"
+                                            onclick="selectFmt(this,'pdf')">PDF</button><button class="format-btn"
+                                            onclick="selectFmt(this,'excel')">Excel</button><button class="format-btn"
+                                            onclick="selectFmt(this,'csv')">CSV</button></div><button
+                                        class="btn btn-primary btn-sm" onclick="exportReport(currentReportFmt)"><i
+                                            class="fas fa-download"></i> Download</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <h2 id="reportTitle" style="font-size:18px;font-weight:700;margin-bottom:4px;">Accident Trend Report</h2>
+                                <p id="reportSubtitle" style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Mandaluyong City</p>
+                                <div class="grid-4" style="margin-bottom:20px;">
+                                    <div
+                                        style="background:var(--blue);color:white;border-radius:8px;padding:14px;text-align:center;">
+                                        <div id="reportStatTotal" style="font-size:24px;font-weight:800;">0</div>
+                                        <div style="font-size:11px;opacity:.8;">Total Incidents</div>
+                                    </div>
+                                    <div
+                                        style="background:var(--red);color:white;border-radius:8px;padding:14px;text-align:center;">
+                                        <div id="reportStatFatal" style="font-size:24px;font-weight:800;">0</div>
+                                        <div style="font-size:11px;opacity:.8;">Fatal</div>
+                                    </div>
+                                    <div
+                                        style="background:var(--orange);color:white;border-radius:8px;padding:14px;text-align:center;">
+                                        <div id="reportStatInjury" style="font-size:24px;font-weight:800;">0</div>
+                                        <div style="font-size:11px;opacity:.8;">Injury</div>
+                                    </div>
+                                    <div
+                                        style="background:var(--green-dark);color:white;border-radius:8px;padding:14px;text-align:center;">
+                                        <div id="reportStatHighRisk" style="font-size:24px;font-weight:800;">0</div>
+                                        <div style="font-size:11px;opacity:.8;">High Risk Roads</div>
+                                    </div>
+                                </div>
+                                <div
+                                    style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;margin-top:16px;">
+                                    <div style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:8px;"><i
+                                            class="fas fa-lightbulb"></i> Recommendations</div>
+                                    <ol style="font-size:12px;color:var(--gray-700);padding-left:18px;line-height:1.8;">
+                                        <li>Increase patrols in high-risk areas.</li>
+                                        <li>Improve road signage and lighting at accident-prone areas.</li>
+                                        <li>Adjust traffic enforcement schedule during peak hours.</li>
+                                    </ol>
+                                </div>
+                                <div style="margin-top:20px;"><canvas id="reportChart" height="120"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== HOTSPOT ANALYSIS ===== -->
+            <div class="page" id="page-hotspot">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Hotspot Analysis</span></div>
+                    <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportHotspot()"><i
+                                class="fas fa-download"></i> Export</button></div>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div id="hsModelBadge" style="font-size:11px;color:var(--gray-400);margin-bottom:12px;"></div>
+                    <div class="grid-4 mb-16">
+                        <div class="stat-card" style="border-left:4px solid #dc2626;">
+                            <div class="stat-val" id="hsStatCritical" style="color:#dc2626;">0</div>
+                            <div class="stat-label">Critical Hotspots</div>
+                        </div>
+                        <div class="stat-card" style="border-left:4px solid #f59e0b;">
+                            <div class="stat-val" id="hsStatMedium" style="color:#f59e0b;">0</div>
+                            <div class="stat-label">Medium Risk Zones</div>
+                        </div>
+                        <div class="stat-card" style="border-left:4px solid #22c55e;">
+                            <div class="stat-val" id="hsStatLow" style="color:#22c55e;">0</div>
+                            <div class="stat-label">Low Risk Zones</div>
+                        </div>
+                        <div class="stat-card" style="border-left:4px solid var(--blue);">
+                            <div class="stat-val" id="hsStatAvg" style="color:var(--blue);">0.0</div>
+                            <div class="stat-label">Avg Risk Score</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hotspot-grid">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">🔴 Top Hotspot Locations</span></div>
+                        <div style="overflow-x:auto;">
+                            <table class="hotspot-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Location</th>
+                                        <th>Incidents</th>
+                                        <th>Risk Score</th>
+                                        <th>Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="hotspotTableBody">
+                                    <tr>
+                                        <td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;"><i class="fas fa-spinner fa-spin"></i> Loading predictions…</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Incidents by Road</span></div>
+                        <div class="card-body">
+                            <div class="chart-wrap"><canvas id="hotspotChart"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Risk Distribution</span></div>
+                        <div class="card-body">
+                            <div class="chart-wrap"><canvas id="riskDonut"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Peak Incident Hours</span></div>
+                        <div class="card-body">
+                            <div class="chart-wrap"><canvas id="peakHoursChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== PREDICTION DATA (ADMIN) ===== -->
+            <div class="page" id="page-predictdata">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Prediction Data</span></div>
+                    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openPredictionInputModal()"><i
+                                class="fas fa-plus"></i> Add Data Entry</button></div>
+                </div>
+                <div style="padding:20px 24px;">
+                    <div class="card mb-16">
+                        <div class="card-body" style="font-size:12.5px;color:var(--gray-500);line-height:1.65;padding:16px;">
+                            <i class="fas fa-circle-info" style="color:var(--blue);"></i>
+                            Enter monthly incident counts per barangay/road below. This is the real dataset — combined
+                            with logged road incidents — that the prediction engine uses to compute risk scores and
+                            forecasts shown on <strong>Hotspot Analysis</strong>, <strong>Safety Index</strong>, and the
+                            public main page. Nothing here is hardcoded: every prediction updates automatically as soon
+                            as you add, edit, or remove a data entry.
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Baseline Prediction Data</span></div>
+                        <div style="overflow-x:auto;">
+                            <table class="hotspot-table">
+                                <thead>
+                                    <tr>
+                                        <th>Barangay</th>
+                                        <th>Road</th>
+                                        <th>Month</th>
+                                        <th>Incident Count</th>
+                                        <th>Notes</th>
+                                        <th>Last Updated</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="predictionInputsTableBody">
+                                    <tr>
+                                        <td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px;"><i
+                                                class="fas fa-spinner fa-spin"></i> Loading…</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== SAFETY INDEX ===== -->
+            <div class="page" id="page-safety">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Safety Index</span></div>
+                    <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportSafety()"><i
+                                class="fas fa-download"></i> Export Report</button></div>
+                </div>
+                <div style="padding:20px 24px;">
+                    <div class="grid-3 mb-16">
+                        <div class="safety-card" style="text-align:center;">
+                            <div
+                                style="font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">
+                                Overall City Safety Score</div>
+                            <div style="position:relative;width:120px;height:120px;margin:0 auto 12px;">
+                                <svg viewBox="0 0 120 120" style="width:100%;height:100%;transform:rotate(-90deg);">
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#e2e8f0" stroke-width="12" />
+                                    <circle id="safetyGaugeArc" cx="60" cy="60" r="50" fill="none" stroke="#f59e0b" stroke-width="12"
+                                        stroke-linecap="round" stroke-dasharray="0 314" style="transition:stroke-dasharray .4s;" />
+                                </svg>
+                                <div
+                                    style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                                    <div id="safetyGaugeScore" style="font-size:30px;font-weight:800;color:#f59e0b;">—</div>
+                                    <div style="font-size:10px;color:var(--gray-400);">/ 10</div>
+                                </div>
+                            </div>
+                            <div id="safetyGaugeBadge" class="risk-pill risk-med" style="font-size:12px;">—</div>
+                        </div>
+                        <div class="safety-card">
+                            <div style="font-size:13px;font-weight:700;margin-bottom:14px;">Barangay Safety Scores</div>
+                            <div id="safetyBarangayList" style="display:flex;flex-direction:column;gap:10px;">
+                                <div style="text-align:center;color:var(--gray-400);font-size:12px;padding:12px;"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+                            </div>
+                        </div>
+                        <div class="safety-card">
+                            <div style="font-size:13px;font-weight:700;margin-bottom:14px;"><i class="fas fa-lightbulb"
+                                    style="color:#f59e0b;"></i> Safety Recommendations</div>
+                            <div id="safetyRecommendations" style="display:flex;flex-direction:column;gap:10px;">
+                                <div style="text-align:center;color:var(--gray-400);font-size:12px;padding:12px;"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Safety Index Trend (Monthly)</span></div>
+                        <div class="card-body">
+                            <div class="chart-wrap"><canvas id="safetyTrendChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== USER MANAGEMENT (Admin) ===== -->
+            <div class="page" id="page-users">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">User Management</span></div>
+                    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openUserModal()"><i
+                                class="fas fa-user-plus"></i> Add User</button></div>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><i class="fas fa-users"
+                                    style="color:var(--blue);margin-right:6px;"></i>All Users</span></div>
+                        <div style="overflow-x:auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Last Login</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="userTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== NOTIFICATIONS ===== -->
+            <div class="page" id="page-notifications">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Notifications</span></div>
+                    <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="markAllRead()"><i
+                                class="fas fa-check-double"></i>
+                            Mark All Read</button></div>
+                </div>
+                <div style="padding:20px 24px;max-width:760px;">
+                    <div id="notifList" style="display:flex;flex-direction:column;gap:8px;"></div>
+                </div>
+            </div>
+
+            <!-- ===== SETTINGS ===== -->
+            <div class="page" id="page-settings">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Settings</span></div>
+                    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="saveSettings()"><i
+                                class="fas fa-save"></i> Save
+                            Changes</button></div>
+                </div>
+                <div
+                    style="padding:20px 24px;display:grid;grid-template-columns:220px 1fr;gap:20px;max-height:calc(100vh - 110px);overflow-y:auto;">
+                    <div class="card" style="height:fit-content;">
+                        <div style="padding:6px 0;">
+                            <div class="settings-nav-item active" onclick="showSettingsTab('profile')"><i
+                                    class="fas fa-user-circle"></i> Profile</div>
+                            <div class="settings-nav-item" onclick="showSettingsTab('account')"><i
+                                    class="fas fa-shield-alt"></i> Account &amp; Security</div>
+                            <div class="settings-nav-item" onclick="showSettingsTab('notif')"><i
+                                    class="fas fa-bell"></i> Notifications</div>
+                            <div class="settings-nav-item admin-only" id="settingsSystemNav"
+                                onclick="showSettingsTab('system')" style="display:none;"><i class="fas fa-cog"></i>
+                                System Settings</div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="settings-tab active" id="stab-profile">
+                            <div class="card">
+                                <div class="card-header"><span class="card-title">Profile Information</span></div>
+                                <div class="card-body">
+                                    <div
+                                        style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--gray-100);">
+                                        <div id="settingsGoogleAvatar"
+                                            style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--navy));display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:white;">
+                                            RC</div>
+                                        <div>
+                                            <div style="font-size:16px;font-weight:700;" id="settingsName">—</div>
+                                            <div style="font-size:12px;color:var(--gray-500);" id="settingsEmail2">—
+                                            </div>
+                                            <div
+                                                style="margin-top:4px;font-size:11px;color:var(--gray-400);display:flex;align-items:center;gap:5px;">
+                                                <svg width="12" height="12" viewBox="0 0 24 24">
+                                                    <path
+                                                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                                        fill="#4285F4" />
+                                                    <path
+                                                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                                        fill="#34A853" />
+                                                    <path
+                                                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                                        fill="#FBBC05" />
+                                                    <path
+                                                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                                        fill="#EA4335" />
+                                                </svg> Signed in via Google
+                                            </div>
+                                            <div style="margin-top:6px;" id="settingsRoleBadge"></div>
+                                        </div>
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                                        <div class="form-group">
+                                            <div class="form-label">First Name</div><input class="form-input"
+                                                id="settingsFirst" placeholder="First Name">
+                                        </div>
+                                        <div class="form-group">
+                                            <div class="form-label">Last Name</div><input class="form-input"
+                                                id="settingsLast" placeholder="Last Name">
+                                        </div>
+                                        <div class="form-group">
+                                            <div class="form-label">Email Address <span
+                                                    style="font-size:10px;color:var(--gray-400);">(managed by
+                                                    Google)</span></div><input class="form-input"
+                                                id="settingsEmailInput" placeholder="Email" readonly
+                                                style="background:var(--gray-50);color:var(--gray-400);">
+                                        </div>
+                                        <div class="form-group">
+                                            <div class="form-label">Phone Number</div><input class="form-input"
+                                                id="settingsPhone" placeholder="+63 9XX XXX XXXX">
+                                        </div>
+                                        <div class="form-group" style="grid-column:span 2;">
+                                            <div class="form-label">Department / Office</div><input class="form-input"
+                                                id="settingsDept" placeholder="Department">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="stab-account">
+                            <div class="card" style="margin-bottom:16px;">
+                                <div class="card-header"><span class="card-title">Google Account Security</span></div>
+                                <div class="card-body">
+                                    <div
+                                        style="background:#eff6ff;border-radius:10px;padding:16px;display:flex;align-items:flex-start;gap:12px;">
+                                        <svg width="24" height="24" viewBox="0 0 24 24"
+                                            style="flex-shrink:0;margin-top:2px;">
+                                            <path
+                                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                                fill="#4285F4" />
+                                            <path
+                                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                                fill="#34A853" />
+                                            <path
+                                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                                fill="#FBBC05" />
+                                            <path
+                                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                                fill="#EA4335" />
+                                        </svg>
+                                        <div>
+                                            <div
+                                                style="font-size:13px;font-weight:700;color:#1a56db;margin-bottom:4px;">
+                                                Password &amp; security managed by Google</div>
+                                            <div style="font-size:12px;color:var(--gray-600);line-height:1.5;">Your
+                                                account security, two-factor authentication, and password are managed
+                                                through your Google Workspace account. To update these settings, visit
+                                                your <a href="#" style="color:var(--blue);"
+                                                    onclick="showToast('Redirecting to myaccount.google.com...')">Google
+                                                    Account settings</a>.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="stab-notif">
+                            <div class="card">
+                                <div class="card-header"><span class="card-title">Notification Preferences</span></div>
+                                <div class="card-body">
+                                    <div style="display:flex;flex-direction:column;gap:14px;">
+                                        <div
+                                            style="display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--gray-100);">
+                                            <div>
+                                                <div style="font-size:13px;font-weight:600;">Fatal Incident Alerts</div>
+                                                <div style="font-size:12px;color:var(--gray-500);">Get notified
+                                                    immediately when a fatal incident is reported.</div>
+                                            </div><label
+                                                style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer;"><input
+                                                    type="checkbox" checked style="opacity:0;width:0;height:0;"
+                                                    onchange="toggleSwitch(this)"><span class="toggle-track"
+                                                    style="position:absolute;inset:0;border-radius:12px;background:var(--blue);transition:.2s;"></span><span
+                                                    style="position:absolute;width:18px;height:18px;border-radius:50%;background:white;top:3px;left:21px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span></label>
+                                        </div>
+                                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                                            <div>
+                                                <div style="font-size:13px;font-weight:600;">Email Notifications</div>
+                                                <div style="font-size:12px;color:var(--gray-500);">Send notifications to
+                                                    your Google account email.</div>
+                                            </div><label
+                                                style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer;"><input
+                                                    type="checkbox" checked style="opacity:0;width:0;height:0;"
+                                                    onchange="toggleSwitch(this)"><span class="toggle-track"
+                                                    style="position:absolute;inset:0;border-radius:12px;background:var(--blue);transition:.2s;"></span><span
+                                                    style="position:absolute;width:18px;height:18px;border-radius:50%;background:white;top:3px;left:21px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span></label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="stab-system">
+                            <div class="card">
+                                <div class="card-header"><span class="card-title"><i class="fas fa-cogs"
+                                            style="color:var(--blue);margin-right:6px;"></i>System Configuration</span>
+                                </div>
+                                <div class="card-body">
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                                        <div class="form-group">
+                                            <div class="form-label">System Name</div><input class="form-input"
+                                                value="Mandaluyong RIMAS">
+                                        </div>
+                                        <div class="form-group">
+                                            <div class="form-label">Organization</div><input class="form-input"
+                                                value="Mandaluyong City TPMO">
+                                        </div>
+                                        <div class="form-group">
+                                            <div class="form-label">Default Timezone</div><select class="form-select">
+                                                <option>Asia/Manila (UTC+8)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- ADD/EDIT INCIDENT MODAL -->
+    <div class="modal-overlay" id="addIncidentModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="incidentModalTitle">Add Road Incident</div><button class="modal-close"
+                    onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <div class="form-label">Incident ID</div><input class="form-input" id="incIdField"
+                        value="Auto Generated" readonly style="background:var(--gray-50);color:var(--gray-400);">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="form-label">Date</div><input type="date" class="form-input" id="incDate"
+                            value="2024-04-15">
+                    </div>
+                    <div class="form-group">
+                        <div class="form-label">Time</div><input type="time" class="form-input" id="incTime"
+                            value="14:45">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Incident Type</div><select class="form-select" id="incType">
+                        <option>Vehicular Collision</option>
+                        <option>Pedestrian Involved</option>
+                        <option>Single Vehicle</option>
+                        <option>Hit and Run</option>
+                    </select>
+                </div>
+                <div class="section-label">Severity</div>
+                <div class="severity-options" id="sevOptionsWrap">
+                    <div class="sev-option selected-injury" onclick="selectSeverity(this,'injury')"><i
+                            class="fas fa-circle" style="color:#ea580c;"></i><span
+                            style="font-weight:600;font-size:13px;">Injury</span><i class="fas fa-check"
+                            style="margin-left:auto;color:#ea580c;"></i></div>
+                    <div class="sev-option" onclick="selectSeverity(this,'minor')"><i class="fas fa-circle"
+                            style="color:#ca8a04;"></i><span style="font-weight:600;font-size:13px;">Minor</span></div>
+                    <div class="sev-option" onclick="selectSeverity(this,'damage')"><i class="fas fa-circle"
+                            style="color:#16a34a;"></i><span style="font-weight:600;font-size:13px;">Damage Only</span>
+                    </div>
+                    <div class="sev-option" onclick="selectSeverity(this,'fatal')"><i class="fas fa-circle"
+                            style="color:#dc2626;"></i><span style="font-weight:600;font-size:13px;">Fatal</span></div>
+                </div>
+                <div class="section-label">Location Details</div>
+                <div class="form-group">
+                    <div class="form-label">Barangay</div><select class="form-select" id="incBarangay">
+                        <option>Plainview</option>
+                        <option>Highway Hills</option>
+                        <option>Wack-Wack Greenhills</option>
+                        <option>Addition Hills</option>
+                        <option>San Jose</option>
+                        <option>Barangka Ilaya</option>
+                        <option>Mauway</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Street / Road</div><select class="form-select" id="incRoad">
+                        <option>Shaw Blvd</option>
+                        <option>EDSA</option>
+                        <option>Boni Ave</option>
+                        <option>Ortigas Ave</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="form-label">Latitude</div><input class="form-input" id="incLat" value="14.5828">
+                    </div>
+                    <div class="form-group">
+                        <div class="form-label">Longitude</div><input class="form-input" id="incLng" value="121.0545">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button
+                    id="incidentSaveBtn" class="btn btn-primary" onclick="saveIncident()"><i class="fas fa-save"></i> Save Incident</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD USER MODAL -->
+    <div class="modal-overlay" id="addUserModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Add New User</div><button class="modal-close" onclick="closeUserModal()"><i
+                        class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="form-label">First Name</div><input class="form-input" id="newUserFirst"
+                            placeholder="First Name">
+                    </div>
+                    <div class="form-group">
+                        <div class="form-label">Last Name</div><input class="form-input" id="newUserLast"
+                            placeholder="Last Name">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Email address</div><input class="form-input" id="newUserEmail"
+                        type="email" placeholder="user@mandaluyong.gov.ph">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="form-label">Contact number</div><input class="form-input" id="newUserPhone"
+                            type="tel" placeholder="+63 912 345 6789">
+                    </div>
+                    <div class="form-group">
+                        <div class="form-label">Temporary password</div><input class="form-input" id="newUserPassword"
+                            type="text" placeholder="At least 8 characters">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Role</div><select class="form-select" id="newUserRole">
+                        <option value="user">User</option>
+                        <option value="admin">Administrator</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Department</div><select class="form-select" id="newUserDept">
+                        <option>Traffic Planning &amp; Management Office</option>
+                        <option>City Engineering Office</option>
+                        <option>City Police Office</option>
+                        <option>Mayor's Office</option>
+                    </select>
+                </div>
+                <div
+                    style="background:#eff6ff;border-radius:8px;padding:10px 14px;font-size:12px;color:var(--blue);display:flex;align-items:flex-start;gap:8px;">
+                    <i class="fas fa-circle-info" style="margin-top:2px;"></i>
+                    The account is saved to the RIMAS database and can sign in immediately.
+                    Share the temporary password with the user and ask them to change it from
+                    "Forgot password?" on the sign-in page.
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary"
+                    onclick="closeUserModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser()"><i
+                        class="fas fa-user-plus"></i> Create User</button></div>
+        </div>
+    </div>
+
+    <!-- PREDICTION DATA MODAL -->
+    <div class="modal-overlay" id="predictionInputModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="predictionInputModalTitle">Add Prediction Data</div><button
+                    class="modal-close" onclick="closePredictionInputModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="predInputId">
+                <div class="form-group">
+                    <div class="form-label">Barangay</div><input class="form-input" id="predInputBarangay"
+                        placeholder="e.g. Plainview">
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Road (leave blank for barangay-wide)</div><input class="form-input"
+                        id="predInputRoad" placeholder="e.g. Shaw Blvd">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="form-label">Month</div><input type="month" class="form-input" id="predInputMonth">
+                    </div>
+                    <div class="form-group">
+                        <div class="form-label">Incident Count</div><input type="number" min="0" class="form-input"
+                            id="predInputCount" placeholder="e.g. 12">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Notes (optional)</div><input class="form-input" id="predInputNotes"
+                        placeholder="Context for this figure">
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closePredictionInputModal()">Cancel</button>
+                <button id="predictionInputSaveBtn" class="btn btn-primary" onclick="savePredictionInput()"><i
+                        class="fas fa-save"></i> Save Entry</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DELETE CONFIRM -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal" style="width:400px;">
+            <div class="modal-body" style="padding:30px;text-align:center;">
+                <div
+                    style="width:60px;height:60px;background:#fef2f2;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:26px;color:#dc2626;">
+                    <i class="fas fa-trash-alt"></i>
+                </div>
+                <div style="font-size:17px;font-weight:800;margin-bottom:8px;">Delete Incident?</div>
+                <div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:20px;">This action cannot
+                    be undone. The incident record will be permanently removed.</div>
+                <div style="display:flex;gap:10px;justify-content:center;"><button class="btn btn-secondary"
+                        onclick="document.getElementById('deleteModal').classList.remove('open')">Cancel</button><button
+                        class="btn btn-danger" onclick="confirmDelete()"><i class="fas fa-trash-alt"></i>
+                        Delete</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INCIDENT DETAIL MODAL -->
+    <div class="modal-overlay" id="incidentDetailModal">
+        <div class="modal" style="width:620px;max-width:96vw;">
+            <div class="modal-header"
+                style="background:linear-gradient(135deg,var(--navy),var(--navy-light));border-radius:14px 14px 0 0;">
+                <div>
+                    <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:3px;">INCIDENT RECORD</div>
+                    <div class="modal-title" style="color:white;" id="detailId">#A05932</div>
+                </div>
+                <div style="margin-left:auto;display:flex;gap:8px;align-items:center;"><span
+                        id="detailSevBadge"></span><button class="modal-close" style="color:rgba(255,255,255,.6);"
+                        onclick="closeDetailModal()"><i class="fas fa-times"></i></button></div>
+            </div>
+            <div class="modal-body" style="padding:22px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                    <div>
+                        <div style="font-size:12px;color:var(--gray-500);">Date &amp; Time</div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:8px;" id="detailDateTime">—</div>
+                        <div style="font-size:12px;color:var(--gray-500);">Incident Type</div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:8px;" id="detailType">—</div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px;color:var(--gray-500);">Barangay</div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:8px;" id="detailBarangay">—</div>
+                        <div style="font-size:12px;color:var(--gray-500);">Road / Street</div>
+                        <div style="font-size:13px;margin-bottom:8px;" id="detailRoad">—</div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;">
+                    <div style="background:#fef2f2;border-radius:8px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:800;color:#dc2626;" id="detailFatalities">0</div>
+                        <div style="font-size:11px;color:#dc2626;">Fatalities</div>
+                    </div>
+                    <div style="background:#fff7ed;border-radius:8px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:800;color:#ea580c;" id="detailInjured">2</div>
+                        <div style="font-size:11px;color:#ea580c;">Injured</div>
+                    </div>
+                    <div style="background:#eff6ff;border-radius:8px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:800;color:#1a56db;">2</div>
+                        <div style="font-size:11px;color:#1a56db;">Vehicles</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary"
+                    onclick="closeDetailModal()">Close</button><button class="btn btn-primary"
+                    onclick="editFromDetail()"><i class="fas fa-edit"></i> Edit
+                    Record</button></div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast toast-success" id="toast"><span class="toast-icon"><i class="fas fa-check-circle"></i></span><span
+            id="toastMsg">Done!</span></div>
+
+    <script src="script.js"></script>
+    <!-- HIDDEN FILE INPUT FOR DATA IMPORT (CSV / Excel) -->
+    <input type="file" id="csvFileInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="handleCSVImport(event)">
+
+    <!-- ===== IMPORT PREVIEW MODAL ===== -->
+    <div class="modal-overlay" id="importModal">
+        <div class="modal" style="width:700px;max-width:96vw;">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title"><i class="fas fa-upload"
+                            style="color:var(--blue);margin-right:8px;"></i>Import Data</div>
+                    <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">Auto-detects columns and saves straight to the database — preview before confirming
+                    </div>
+                </div>
+                <button class="modal-close" onclick="closeImportModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="padding:0;">
+                <div id="importDropZone"
+                    style="margin:18px 22px;border:2px dashed var(--gray-300);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;"
+                    onclick="triggerImport()" ondragover="dragOver(event)" ondragleave="dragLeave(event)"
+                    ondrop="dropCSV(event)">
+                    <i class="fas fa-cloud-upload-alt"
+                        style="font-size:32px;color:var(--gray-300);margin-bottom:10px;display:block;"></i>
+                    <div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Drop a CSV or
+                        Excel file here or click to browse</div>
+                    <div style="font-size:12px;color:var(--gray-400);">Accepted formats: .csv, .xlsx, .xls · Up to 25MB
+                    </div>
+                    <div style="margin-top:12px;font-size:11px;color:var(--gray-400);">Columns are matched automatically
+                        (any header naming works) — recognizes: <code
+                            style="background:var(--gray-100);padding:2px 6px;border-radius:4px;">id, date, time, barangay, road, severity, type, lat, lng</code>
+                    </div>
+                </div>
+
+                <div style="margin:0 22px 14px;display:flex;align-items:center;gap:8px;">
+                    <button class="btn btn-secondary btn-sm" onclick="downloadTemplate()"><i
+                            class="fas fa-download"></i> Download CSV Template</button>
+                    <span style="font-size:12px;color:var(--gray-400);">Use the template for correct formatting</span>
+                </div>
+
+                <div id="importPreviewWrap" style="display:none;padding:0 0 4px;">
+                    <div id="importColumnSummary" style="padding:10px 22px 0;"></div>
+                    <div
+                        style="padding:10px 22px;background:var(--gray-50);border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between;">
+                        <div style="font-size:13px;font-weight:600;" id="importPreviewCount">0 rows ready to import
+                        </div>
+                        <div id="importErrorCount" style="font-size:12px;color:var(--red);"></div>
+                    </div>
+                    <div style="overflow-x:auto;max-height:260px;overflow-y:auto;">
+                        <table class="data-table" id="importPreviewTable">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>ID</th>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Barangay</th>
+                                    <th>Road</th>
+                                    <th>Severity</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody id="importPreviewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+                <button class="btn btn-secondary btn-sm" onclick="downloadTemplate()"><i class="fas fa-download"></i>
+                    Template</button>
+                <button class="btn btn-primary" id="importConfirmBtn" onclick="confirmImport()" style="display:none;"><i
+                        class="fas fa-check"></i> Import <span id="importBtnCount">0</span> Records</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== EXPORT MODAL ===== -->
+    <div class="modal-overlay" id="exportModal">
+        <div class="modal" style="width:460px;">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-file-export"
+                        style="color:var(--blue);margin-right:8px;"></i>Export Incident Data</div>
+                <button class="modal-close" onclick="closeExportModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <div class="form-label">Export Format</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                        <div class="export-fmt-card selected" id="efmt-csv" onclick="setExportFmt('csv')">
+                            <i class="fas fa-file-csv"
+                                style="font-size:22px;color:#0891b2;display:block;margin-bottom:5px;"></i>
+                            <div style="font-size:12px;font-weight:700;">CSV</div>
+                            <div style="font-size:10px;color:var(--gray-400);">Spreadsheet-ready</div>
+                        </div>
+                        <div class="export-fmt-card" id="efmt-excel" onclick="setExportFmt('excel')">
+                            <i class="fas fa-file-excel"
+                                style="font-size:22px;color:#16a34a;display:block;margin-bottom:5px;"></i>
+                            <div style="font-size:12px;font-weight:700;">Excel</div>
+                            <div style="font-size:10px;color:var(--gray-400);">Formatted .xlsx</div>
+                        </div>
+                        <div class="export-fmt-card" id="efmt-pdf" onclick="setExportFmt('pdf')">
+                            <i class="fas fa-file-pdf"
+                                style="font-size:22px;color:#dc2626;display:block;margin-bottom:5px;"></i>
+                            <div style="font-size:12px;font-weight:700;">PDF</div>
+                            <div style="font-size:10px;color:var(--gray-400);">Printable report</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Filter by Severity</div>
+                    <select class="form-select" id="exportSevFilter">
+                        <option value="all">All Severities</option>
+                        <option value="Fatal">Fatal Only</option>
+                        <option value="Injury">Injury Only</option>
+                        <option value="Minor">Minor Only</option>
+                        <option value="Damage">Damage Only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="form-label">Include Columns</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="id"
+                                style="accent-color:var(--blue);"> Incident ID</label>
+                        <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="date"
+                                style="accent-color:var(--blue);"> Date</label>
+                        <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="time"
+                                style="accent-color:var(--blue);"> Time</label>
+                        <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="barangay"
+                                style="accent-color:var(--blue);"> Barangay</label>
+                        <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="road"
+                                style="accent-color:var(--blue);"> Road / Location</label>
+                        <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="sev"
+                                style="accent-color:var(--blue);"> Severity</label>
+                        <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="type"
+                                style="accent-color:var(--blue);"> Incident Type</label>
+                        <label class="checkbox-label"><input type="checkbox" class="export-col" value="loc"
+                                style="accent-color:var(--blue);"> Municipality</label>
+                    </div>
+                </div>
+                <div
+                    style="background:var(--gray-50);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--gray-600);display:flex;align-items:center;gap:8px;">
+                    <i class="fas fa-info-circle" style="color:var(--blue);"></i>
+                    <span id="exportRowCount">Exporting <strong>10</strong> incident records</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeExportModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="doExportNow()"><i class="fas fa-download"></i> Export
+                    Now</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

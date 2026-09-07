@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notifications — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>Notifications</h1><p>Stay updated with the latest alerts.</p></div>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost" id="markAll">Mark all as read</button>
+  </div>
+
+  <div class="card">
+    <div id="list"></div>
+    <div class="table-foot"><span id="showing"></span></div>
+  </div>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+requireAuth();
+buildShell('notif');
+
+const ICON_MAP = {
+  Accident:{i:'car',   c:'bg-accident'},
+  Traffic :{i:'car',   c:'bg-traffic'},
+  Hazard  :{i:'alert', c:'bg-hazard'},
+  Resolved:{i:'checkOnly', c:'bg-roadwork'},
+  Announce:{i:'megaphone', c:'bg-others'}
+};
+let data = NOTIFICATIONS.map(n=>Object.assign({},n));
+
+function render(){
+  document.getElementById('list').innerHTML = data.map(n=>{
+    const m = ICON_MAP[n.type];
+    return '<div class="notif'+(n.unread?' unread':'')+'">'+
+      '<span class="ic '+m.c+'">'+icon(m.i)+'</span>'+
+      '<div style="flex:1"><div class="tx">'+n.text+'</div><div class="tm">'+n.time+'</div></div>'+
+      (n.unread?'<span class="unread-dot"></span>':'')+
+    '</div>';
+  }).join('');
+  document.getElementById('showing').textContent =
+    'Showing 1 to '+data.length+' of '+data.length+' entries';
+}
+document.getElementById('markAll').onclick = ()=>{
+  data.forEach(n=>n.unread=false); render(); toast('All notifications marked as read');
+};
+render();
+</script>
+</body>
+</html>

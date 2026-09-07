@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+
+  <div class="page-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p>Welcome back! Here's what's happening on Mandaluyong roads today.</p>
+    </div>
+    <div class="spacer"></div>
+    <div class="head-tools">
+      <span class="pill"><span class="live"></span> Live Updates On</span>
+      <span class="pill"><span id="clock"></span> <span data-i="calendar" style="width:16px;height:16px;color:#64748b"></span></span>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="grid g-4" style="margin-bottom:18px">
+    <div class="card stat"><span class="ic ic-blue" data-i="car"></span>
+      <div><h3 id="s-total">0</h3><div class="lbl">Total Incidents</div>
+      <div class="delta up">▲ 12% from yesterday</div></div></div>
+    <div class="card stat"><span class="ic ic-orange" data-i="alert"></span>
+      <div><h3 id="s-active">0</h3><div class="lbl">Active Incidents</div>
+      <div class="delta"><a href="incident-map.html" style="color:#1d4ed8">View on map</a></div></div></div>
+    <div class="card stat"><span class="ic ic-green" data-i="check"></span>
+      <div><h3 id="s-resolved">0</h3><div class="lbl">Resolved Today</div>
+      <div class="delta up">▲ 7% from yesterday</div></div></div>
+    <div class="card stat"><span class="ic ic-purple" data-i="clock"></span>
+      <div><h3>18 <small>mins</small></h3><div class="lbl">Avg. Response Time</div>
+      <div class="delta down">▼ 5 mins from yesterday</div></div></div>
+  </div>
+
+  <!-- MAP + RECENT -->
+  <div class="grid g-main" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-head"><h2>Live Incident Map</h2></div>
+      <div class="card-body" style="padding:16px"><div id="map" class="map"></div></div>
+      <div class="map-legend">
+        <span class="lg"><i class="bg-accident" data-i="car"></i>Accident</span>
+        <span class="lg"><i class="bg-traffic" data-i="car"></i>Traffic</span>
+        <span class="lg"><i class="bg-hazard" data-i="alert"></i>Hazard</span>
+        <span class="lg"><i class="bg-roadwork" data-i="worker"></i>Road Work</span>
+        <span class="lg"><i class="bg-others" data-i="dots"></i>Others</span>
+        <a class="link" href="incident-map.html">View Full Map →</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Recent Incidents</h2><a class="link" href="incident-map.html">View All →</a></div>
+      <div class="inc-list" id="recent"></div>
+    </div>
+  </div>
+
+  <!-- ACTIVITY + TIP -->
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-head"><h2>My Recent Activity</h2><a class="link" href="my-incidents.html">View My Incidents →</a></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Type</th><th>Location</th><th>Date Reported</th><th>Status</th></tr></thead>
+          <tbody id="mine"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="border-color:#cfe0ff;background:linear-gradient(160deg,#f5f9ff,#fff)">
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="color:#1d4ed8;width:22px;height:22px" data-i="shield"></span>
+          <h2 style="font-size:17px;font-weight:700">Safety Tip</h2>
+        </div>
+        <p style="font-size:14px;color:#334155;line-height:1.65" id="tip"></p>
+        <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+          <a class="btn btn-primary" href="report.html">Report an Incident</a>
+          <a class="btn btn-ghost" href="safety-index.html">Safety Index</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="data/mandaluyong.js"></script>
+<script src="js/app.js"></script>
+<script src="js/map.js"></script>
+<script>
+requireAuth();
+buildShell('dashboard');
+document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+liveClock(document.getElementById('clock'));
+
+const list = incidents();
+document.getElementById('s-total').textContent    = list.length + 20;
+document.getElementById('s-active').textContent   = list.filter(i=>i.status!=='Resolved').length + 12;
+document.getElementById('s-resolved').textContent = list.filter(i=>i.status==='Resolved').length + 8;
+
+/* recent list */
+document.getElementById('recent').innerHTML = list.slice(0,5).map(i=>
+  '<div class="inc">'+ typeIcon(i.type) +
+    '<div><div class="t">'+i.title+'</div><div class="l">'+i.loc+'</div>'+
+    '<div class="d">'+i.time+' • '+fmtDate(i.date)+'</div></div>'+
+    '<span class="tag '+SEVERITY_TAG[i.sev]+'">'+i.sev+'</span>'+
+  '</div>').join('');
+
+/* my recent activity */
+const mine = list.filter(i=>i.mine).slice(0,4);
+document.getElementById('mine').innerHTML = mine.map(i=>
+  '<tr><td style="font-weight:600">'+i.id+'</td>'+
+  '<td><span class="td-type">'+typeIcon(i.type)+i.type+'</span></td>'+
+  '<td>'+i.loc+'</td><td>'+fmtDate(i.date)+' '+i.time+'</td>'+
+  '<td><span class="tag '+STATUS_TAG[i.status]+'">'+i.status+'</span></td></tr>').join('')
+  || '<tr><td colspan="5" class="empty">No reports yet.</td></tr>';
+
+/* rotating safety tip */
+const TIPS = [
+  'Always follow traffic rules and stay alert. Your safety is our priority!',
+  'Keep a 3-second following distance — especially along EDSA and Shaw Blvd.',
+  'Report hazards early. A small pothole today is an accident tomorrow.',
+  'Wear your seatbelt and helmet, even for short trips within the city.'
+];
+document.getElementById('tip').textContent = TIPS[new Date().getMinutes() % TIPS.length];
+
+/* map */
+const map = createMandaMap('map');
+plotIncidents(map, list);
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotspots — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head">
+    <div><h1>Hotspots</h1><p>Identified high-risk areas based on incident density.</p></div>
+    <div class="spacer"></div>
+    <div class="head-tools">
+      <span class="pill"><span data-i="calendar" style="width:16px;height:16px;color:#64748b"></span> Aug 26 – Sep 02, 2026</span>
+    </div>
+  </div>
+
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-head"><h2>Heatmap</h2></div>
+      <div class="card-body" style="padding:16px"><div id="map" class="map" style="height:470px"></div></div>
+      <div class="heat-scale"><span>Low Risk</span><span class="heat-bar"></span><span>High Risk</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Top Hotspot Areas</h2></div>
+      <div id="list"></div>
+      <div class="table-foot">Hotspots are updated daily based on incident reports.</div>
+    </div>
+  </div>
+
+  <div class="grid g-3" style="margin-top:18px">
+    <div class="card stat"><span class="ic ic-red" data-i="fire"></span>
+      <div><h3>18</h3><div class="lbl">High-Risk Locations</div></div></div>
+    <div class="card stat"><span class="ic ic-amber" data-i="alert"></span>
+      <div><h3>101</h3><div class="lbl">Incidents in Hotspots</div></div></div>
+    <div class="card stat"><span class="ic ic-blue" data-i="pin"></span>
+      <div><h3>7</h3><div class="lbl">Barangays Monitored</div></div></div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="data/mandaluyong.js"></script>
+<script src="js/app.js"></script>
+<script src="js/map.js"></script>
+<script>
+requireAuth();
+buildShell('hotspots');
+document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+
+const map = createMandaMap('map',{zoom:14});
+plotHeat(map, HOTSPOTS);
+
+document.getElementById('list').innerHTML = HOTSPOTS.map(h=>
+  '<div class="hot-item">'+
+    '<span class="rank r'+h.rank+'">'+h.rank+'</span>'+
+    '<div><div class="n">'+h.name+'</div>'+
+    '<div class="m"><span class="tag '+h.cls+'">'+h.risk+'</span></div></div>'+
+    '<span class="cnt">'+h.count+' incidents</span>'+
+  '</div>').join('');
+</script>
+</body>
+</html>

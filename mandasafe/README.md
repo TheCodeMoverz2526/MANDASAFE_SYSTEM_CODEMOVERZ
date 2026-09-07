@@ -1,0 +1,181 @@
+# MandaSafe — combined system
+Mandaluyong City Traffic Planning and Management Office
+
+One folder, one server, one database. The backend is **Laravel 12** (`laravel/`); the pages are
+the same HTML/CSS/JS they always were and sit in this folder. It serves **two faces**:
+
+| | Who | Entry point | What they can do |
+|---|---|---|---|
+| **Resident side** | anyone with an account | `index.html` → `dashboard.html` | View incidents, maps, hotspots, forecasts and the safety index. **Read-only.** |
+| **Admin console (RIMAS)** | administrators only | `Mandasafe.html` | Record and edit incidents and baseline prediction data, manage user accounts, export reports. |
+
+## Start it
+
+Double-click **`start-mandasafe.bat`**. It installs anything missing, prepares the database and
+starts the server. Then open:
+
+- `http://localhost:5500/` — public landing page, no sign-in needed
+- `http://localhost:5500/login.html` — sign in
+
+Signing in routes you automatically: **administrators → the RIMAS console**, **residents → the dashboard**.
+
+By hand, the same thing is:
+
+```
+cd laravel
+composer install
+php artisan migrate
+php artisan db:seed          # guarantees the default administrator exists
+php artisan serve --port=5500
+```
+
+Requirements: **PHP 8.2+** and **Composer** (both come with XAMPP — add `C:\xampp\php` to PATH).
+No web server, MySQL or Node.js is needed to run it.
+
+## Accounts
+
+| Role | Email | Password |
+|---|---|---|
+| Administrator | `admin@rimas.gov.ph` | `Admin@2026` |
+| Resident (demo) | `juan@example.com` | `Resident2026` |
+
+Change both before real use (**Forgot password?** on the sign-in page). New sign-ups are always
+residents; an admin promotes them from **User Management**.
+
+> The old JSON store held Node `scrypt` password hashes, which PHP cannot verify, so the import
+> re-hashed every account with bcrypt. The two accounts above kept their published passwords.
+> `cruzjuan11@gmail.com` had no documented password and was set to **`ChangeMe@2026`** — its
+> owner can change it from **Forgot password?** without an administrator.
+
+## The database
+
+`data/store.json` has become real tables. SQLite is the default, so there is nothing to install
+or start — the file is `laravel/database/database.sqlite`.
+
+| Table | Was |
+|---|---|
+| `incidents` | `store.incidents` |
+| `prediction_inputs` | `store.predictionInputs` |
+| `accounts` | `store.accounts` (bcrypt instead of scrypt) |
+| `rimas_sessions` | `store.sessions` |
+| `rimas_settings` | the `next…Seq` counters, plus the analytics cache version |
+
+Ids stay human-readable (`#A18037`, `RF-1001`, `USR-1001`) because they are printed on reports,
+and a `sort_key` column preserves the newest-first order the JSON array had.
+
+**To re-import** the JSON store (it is untouched, and still there):
+
+```
+php artisan mandasafe:import --fresh
+```
+
+**To use MySQL instead** — create a database, then in `laravel/.env`:
+
+```
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=mandasafe
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+then `php artisan migrate:fresh` and `php artisan mandasafe:import`.
+
+## The map
+
+Every map on both sides draws the **same official boundaries** — the 27 barangay polygons in
+`data/mandaluyong-barangays.geojson`, which the server also uses for barangay centroids. The
+resident maps mask out everything beyond the city, lock panning to the city bounds, shade each
+barangay by its incident count, and label it on hover.
+
+## Pages
+
+**Resident side**
+
+| Page | Shows |
+|---|---|
+| `index.html` | Public landing: live barangay map, city totals, predicted high-risk locations |
+| `dashboard.html` | Totals, barangay choropleth, latest reports, monthly trend, worst barangays |
+| `incident-map.html` | Full map + filters (barangay, severity, type, year, free text) and a results table |
+| `hotspots.html` | KDE density heatmap, ranked hotspot areas, next-month forecast table |
+| `safety-index.html` | 0–100 safety score computed from the data, with its five categories |
+| `announcements.html` | Advisories generated from the current figures |
+| `profile.html` | The signed-in account, straight from the database |
+| `about.html`, `support.html` | Background and hotlines |
+
+**Admin side** — `Mandasafe.html` + `script.js`.
+
+## Data flow
+
+```
+Admin (Mandasafe.html) ──writes──▶ Laravel API ──▶ database ◀── Resident pages + public landing
+                                        │
+              PredictionService (trend + Random Forest) · KdeService (hotspots)
+```
+
+Reading is open, writing is not:
+
+| | Anonymous | Resident | Admin |
+|---|---|---|---|
+| `GET /api/summary`, `/api/incidents`, `/api/predictions`, `/api/hotspots`, `/api/stats` | ✅ | ✅ | ✅ |
+| `POST/PUT/DELETE` incidents, prediction inputs, accounts | 401 | 403 | ✅ |
+
+A resident who types the admin URL is sent back to their dashboard, and the server rejects the
+write anyway — the role is read from the database on every request, not from the browser.
+
+`GET /api/summary` is one small payload (totals, per-barangay counts with centroids, monthly
+trend, type/severity mix, top forecasts, newest reports) so the resident pages don't download
+all ~8,000 incident rows.
+
+### Caching
+
+The forecasts and the KDE hotspot surface are the only heavy work, and they only change when
+the data does, so each is computed once and cached until the next write. After a large import,
+`php artisan mandasafe:warm` computes them up front. `MANDASAFE_ANALYTICS_CACHE=0` turns the
+cache off.
+
+## Folder
+
+```
+laravel/                                                     the backend
+  app/Models/          Incident, PredictionInput, Account, RimasSession, Setting
+  app/Services/        AccountService, PredictionService, RandomForest, KdeService,
+                       GeoService, AnalyticsService, OtpService
+  app/Http/            controllers under Api/, the RimasAdmin middleware,
+                       StaticSiteController (serves the pages in this folder)
+  routes/api.php       every /api endpoint
+  database/            migrations, the SQLite file
+  tests/Feature/       MandaSafeApiTest — the access rules and payload shapes
+login.html  login.js  styles.css                             shared sign-in
+Mandasafe.html  script.js                                    admin console
+index.html  dashboard.html  incident-map.html  hotspots.html resident pages
+safety-index.html  announcements.html  profile.html  about.html  support.html
+css/style.css   js/api.js  js/app.js  js/map.js              resident assets
+assets/         vendor/leaflet/                              images, Leaflet
+data/mandaluyong-barangays.geojson                           official boundaries
+data/store.json  data/store.backup.json                      the original JSON store
+server.js  db.js  auth.js  geo.js  kde.js  prediction.js  randomForest.js
+                                                             the previous Node backend, kept
+                                                             for reference; no longer used
+```
+
+Leaflet is served from `vendor/`, so the maps work without internet — only the OpenStreetMap
+background tiles need a connection.
+
+## Checking it
+
+```
+cd laravel
+php artisan test
+```
+
+## Access from a phone
+
+`php artisan serve` listens on `127.0.0.1` only. For other devices on the same Wi-Fi:
+
+```
+php artisan serve --host=0.0.0.0 --port=5500
+```
+
+then open `http://<your-PC-IP>:5500/`. Windows Firewall will ask to allow PHP the first time.

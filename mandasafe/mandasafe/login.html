@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User Login — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login-page">
+  <div>
+  <div class="login-wrap">
+
+    <!-- LEFT -->
+    <div class="login-left">
+      <a class="brand" href="index.html">
+        <span class="brand-logo" data-i="logo"></span>
+        <span>
+          <span class="brand-name">MandaSafe</span>
+          <span class="brand-sub" style="display:block">Road Incident Mapping &amp; Analytics System</span>
+        </span>
+      </a>
+
+      <h1>Welcome to MandaSafe</h1>
+      <div class="rule"></div>
+      <p class="lead">A centralized platform for road incident monitoring, mapping,
+        and data-driven safety decisions for a safer Mandaluyong.</p>
+
+      <div class="lfeat"><span class="ic" data-i="map"></span>
+        <div><h4>Real-time Incident Mapping</h4>
+        <p>View real-time incidents and road conditions across Mandaluyong.</p></div></div>
+
+      <div class="lfeat"><span class="ic" data-i="chart"></span>
+        <div><h4>Data-driven Analytics</h4>
+        <p>Analyze incident trends and hotspot areas for better planning.</p></div></div>
+
+      <div class="lfeat"><span class="ic" data-i="shield"></span>
+        <div><h4>Safer Roads, Better Mandaluyong</h4>
+        <p>Empowering authorities and communities towards safer roads.</p></div></div>
+
+      <div class="lnote"><span data-i="info"></span>
+        <div><b>For authorized users only.</b>
+        <p>Please sign in to access the MandaSafe system.</p></div></div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="login-card">
+      <div class="lc-ic" data-i="users"></div>
+      <h2>User Login</h2>
+      <p class="sub">Sign in to your account to continue</p>
+
+      <div class="err" id="err"></div>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label for="email">Email Address</label>
+          <div class="input-group">
+            <span class="gi" data-i="mail"></span>
+            <input class="input" type="email" id="email" placeholder="Enter your email address" value="juan.delacruz@gmail.com">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="pass">Password</label>
+          <div class="input-group">
+            <span class="gi" data-i="lock"></span>
+            <input class="input" type="password" id="pass" placeholder="Enter your password" value="mandasafe">
+            <span class="ga" id="toggle" data-i="eye" style="cursor:pointer"></span>
+          </div>
+        </div>
+
+        <div class="between">
+          <label class="check"><input type="checkbox" id="remember" checked> Remember me</label>
+          <a href="#" onclick="alert('A password reset link will be sent to your registered email.');return false">Forgot password?</a>
+        </div>
+
+        <button class="btn btn-primary btn-block btn-lg" type="submit" id="signin">Sign In</button>
+      </form>
+
+      <div class="or">or</div>
+      <button class="google" onclick="doLogin('juan.delacruz@gmail.com')">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 01-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0012 22z"/><path fill="#FBBC05" d="M6.4 13.9a6 6 0 010-3.8V7.5H3.1a10 10 0 000 9z"/><path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 003.1 7.5l3.3 2.6C7.2 7.8 9.4 6.1 12 6.1z"/></svg>
+        Sign in with Google
+      </button>
+
+      <p class="login-foot">Don't have an account? <a href="#" onclick="alert('Please contact the Mandaluyong City TPMO to request an account.');return false">Contact your administrator.</a></p>
+    </div>
+  </div>
+
+  <div class="page-foot">
+    <img src="assets/seal.svg" alt="Seal">
+    <div><b>Mandaluyong City Traffic Planning and Management Office</b>
+      © 2026 City of Mandaluyong. All rights reserved.</div>
+  </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+document.getElementById('signin').insertAdjacentHTML('afterbegin', icon('login'));
+
+const pass = document.getElementById('pass');
+document.getElementById('toggle').onclick = ()=> pass.type = pass.type==='password' ? 'text' : 'password';
+
+function doLogin(email){
+  const u = Object.assign({}, DEFAULT_USER, {email:email});
+  u.name = email.split('@')[0].split('.').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(' ');
+  if(email === DEFAULT_USER.email) u.name = DEFAULT_USER.name;
+  login(u);
+  location.href = 'dashboard.html';
+}
+
+document.getElementById('loginForm').onsubmit = function(e){
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const pw    = pass.value.trim();
+  const err   = document.getElementById('err');
+  if(!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+    err.textContent = 'Please enter a valid email address.'; err.classList.add('show'); return;
+  }
+  if(pw.length < 6){
+    err.textContent = 'Password must be at least 6 characters.'; err.classList.add('show'); return;
+  }
+  err.classList.remove('show');
+  doLogin(email);
+};
+</script>
+</body>
+</html>

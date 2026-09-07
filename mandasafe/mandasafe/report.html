@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report an Incident — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+
+  <div class="page-head">
+    <div><h1>Report an Incident</h1>
+      <p>Help us keep Mandaluyong roads safe. Provide accurate details.</p></div>
+  </div>
+
+  <div class="grid g-main">
+
+    <!-- FORM -->
+    <form class="card" id="reportForm" novalidate>
+      <div class="card-head"><h2>Incident Details</h2></div>
+      <div class="card-body">
+
+        <div class="field">
+          <label for="type">Incident Type</label>
+          <select class="input" id="type">
+            <option>Accident</option><option>Traffic</option><option>Hazard</option>
+            <option>Road Work</option><option>Others</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="loc">Exact Location</label>
+          <div style="display:flex;gap:9px">
+            <input class="input" id="loc" placeholder="e.g. Shaw Blvd., near Pioneer St.">
+            <button type="button" class="btn btn-ghost" id="useLoc" style="white-space:nowrap">Use My Location</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="brgy">Barangay</label>
+          <select class="input" id="brgy"></select>
+        </div>
+
+        <div class="field">
+          <label for="desc">Description</label>
+          <textarea class="input" id="desc" maxlength="500" placeholder="Describe what happened — vehicles involved, lanes blocked, injuries, etc."></textarea>
+          <div class="counter"><span id="cc">0</span>/500</div>
+        </div>
+
+        <div class="row2">
+          <div class="field"><label for="date">Date</label><input class="input" type="date" id="date"></div>
+          <div class="field"><label for="time">Time</label><input class="input" type="time" id="time"></div>
+        </div>
+
+        <div class="field">
+          <label>Severity Level</label>
+          <div class="seg">
+            <input type="radio" name="sev" id="sv1" value="High" checked><label for="sv1" class="sv-high">High</label>
+            <input type="radio" name="sev" id="sv2" value="Medium"><label for="sv2" class="sv-med">Medium</label>
+            <input type="radio" name="sev" id="sv3" value="Low"><label for="sv3" class="sv-low">Low</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Add Photo (Optional)</label>
+          <div class="dropzone">
+            <img class="thumb" id="thumb" src="assets/cityhall.png" alt="preview">
+            <label class="upload" for="photo"><b>+</b>Add Photo<br><span style="font-weight:500">JPG, PNG (Max 5MB)</span></label>
+            <input type="file" id="photo" accept="image/*" hidden>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <a class="btn btn-ghost" href="dashboard.html">Cancel</a>
+          <button class="btn btn-primary" type="submit">Submit Report</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- SIDE -->
+    <div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-head"><h2>Location Preview</h2></div>
+        <div class="card-body" style="padding:14px">
+          <div id="pmap" class="map" style="height:250px"></div>
+          <p class="hint">Drag the marker or click inside Mandaluyong to set the exact spot.</p>
+          <p class="hint" id="coords" style="font-weight:700;color:#334155"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="ic ic-amber" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center" data-i="alert"></span><h2>Safety Reminder</h2></div>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:#334155;margin-bottom:10px">In case of emergency, please call:</p>
+          <div class="hotline"><b>911</b><span>National Emergency Hotline</span></div>
+          <div class="hotline"><b>136</b><span>MMDA Hotline</span></div>
+          <div class="hotline"><b>532-5001</b><span>Mandaluyong City DRRMO</span></div>
+          <div class="notice notice-amber" style="margin-top:14px">
+            <span class="ni" data-i="info"></span>
+            <div><h4>False reports are penalized</h4>
+            <p>Submitting deliberately false information may result in account suspension.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="data/mandaluyong.js"></script>
+<script src="js/app.js"></script>
+<script src="js/map.js"></script>
+<script>
+requireAuth();
+buildShell('report');
+document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+
+/* barangay list */
+document.getElementById('brgy').innerHTML = MANDA_BARANGAYS.map(b=>'<option>'+b+'</option>').join('');
+
+/* defaults */
+const now = new Date();
+document.getElementById('date').value = now.toISOString().slice(0,10);
+document.getElementById('time').value = now.toTimeString().slice(0,5);
+
+/* char counter */
+const desc = document.getElementById('desc');
+desc.oninput = ()=> document.getElementById('cc').textContent = desc.value.length;
+
+/* photo preview */
+document.getElementById('photo').onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  if(f.size > 5*1024*1024){ alert('Image must be 5MB or smaller.'); return; }
+  document.getElementById('thumb').src = URL.createObjectURL(f);
+};
+
+/* picker map */
+const pmap = createMandaMap('pmap',{zoomControl:false});
+let marker = L.marker(MANDA_CENTER,{draggable:true,icon:markerIcon('Accident',1)}).addTo(pmap);
+function setCoords(ll){
+  document.getElementById('coords').textContent = 'Lat '+ll.lat.toFixed(5)+' , Lng '+ll.lng.toFixed(5);
+}
+setCoords(marker.getLatLng());
+marker.on('dragend', ()=>setCoords(marker.getLatLng()));
+pmap.on('click', e=>{ marker.setLatLng(e.latlng); setCoords(e.latlng); });
+document.getElementById('type').onchange = e=> marker.setIcon(markerIcon(e.target.value,1));
+
+document.getElementById('useLoc').onclick = ()=>{
+  if(!navigator.geolocation){ alert('Geolocation is not supported by this browser.'); return; }
+  navigator.geolocation.getCurrentPosition(p=>{
+    const ll = L.latLng(p.coords.latitude, p.coords.longitude);
+    if(!L.latLngBounds(MANDA_BOUNDS).contains(ll)){
+      alert('Your current location is outside Mandaluyong City. Please pin the location manually.');
+      return;
+    }
+    marker.setLatLng(ll); pmap.setView(ll,17); setCoords(ll);
+  }, ()=>alert('Unable to get your location. Please pin it on the map.'));
+};
+
+/* submit */
+document.getElementById('reportForm').onsubmit = function(e){
+  e.preventDefault();
+  const loc = document.getElementById('loc').value.trim();
+  if(loc.length < 5){ alert('Please enter the exact location of the incident.'); return; }
+  if(desc.value.trim().length < 10){ alert('Please describe the incident (at least 10 characters).'); return; }
+
+  const d  = new Date();
+  const ll = marker.getLatLng();
+  const seq = String(incidents().length + 1).padStart(4,'0');
+  const inc = {
+    id:'INC-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'-'+seq,
+    type:document.getElementById('type').value,
+    title:desc.value.trim().split('.')[0].slice(0,40),
+    loc:loc, brgy:document.getElementById('brgy').value,
+    lat:ll.lat, lng:ll.lng,
+    sev:document.querySelector('input[name=sev]:checked').value,
+    status:'Under Review',
+    date:document.getElementById('date').value,
+    time:new Date('2026-01-01T'+document.getElementById('time').value).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
+    count:1, mine:true
+  };
+  saveIncident(inc);
+  toast('Report submitted — reference '+inc.id);
+  setTimeout(()=>location.href='my-incidents.html', 1400);
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<?php
+
+namespace App\Services;
+
+use App\Exceptions\RimasException;
+use App\Models\Account;
+use App\Models\RimasSession;
+use App\Models\Setting;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+
+/**
+ * Accounts and sessions — the Laravel counterpart of the old auth.js.
+ *
+ * Accounts live in the SAME database as incidents and prediction inputs, so an administrator
+ * created on the server is the same administrator every browser sees. Passwords are never
+ * stored; only a bcrypt hash, verified through Laravel's Hash facade.
+ */
+class AccountService
+{
+    public const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
+
+    public const DEFAULT_ADMIN = [
+        'name' => 'RIMAS Administrator',
+        'email' => 'admin@rimas.gov.ph',
+        'phone' => '+639171234567',
+        'role' => 'admin',
+        'dept' => 'Mandaluyong City TPMO',
+        'password' => 'Admin@2026',
+    ];
+
+    /** The timestamp format the browser already parses: 2026-09-02T06:53:36.941Z */
+    public static function isoNow(): string
+    {
+        return now()->utc()->format('Y-m-d\TH:i:s.v\Z');
+    }
+
+    public function nextAccountId(): string
+    {
+        return 'USR-' . (1000 + Setting::nextSequence('nextAccountSeq'));
+    }
+
+    public function seedDefaultAdmin(): void
+    {
+        if (Account::where('email', self::DEFAULT_ADMIN['email'])->exists()) {
+            return;
+        }
+
+        Account::create([
+            'id' => $this->nextAccountId(),
+            'name' => self::DEFAULT_ADMIN['name'],
+            'email' => self::DEFAULT_ADMIN['email'],
+            'phone' => self::DEFAULT_ADMIN['phone'],
+            'role' => 'admin',
+            'dept' => self::DEFAULT_ADMIN['dept'],
+            'status' => 'active',
+            'password' => Hash::make(self::DEFAULT_ADMIN['password']),
+            'created_at_iso' => self::isoNow(),
+            'last_login_at_iso' => null,
+        ]);
+    }
+
+    /** Accepts either an email address or a contact number, the way the sign-in page does. */
+    public function findAccount($identifier): ?Account
+    {
+        $email = Account::normaliseEmail($identifier);
+        $phone = Account::normalisePhone($identifier);
+
+        return Account::where('email', $email)
+            ->when(strlen($phone) > 5, fn ($query) => $query->orWhere('phone', $phone))
+            ->first();
+    }
+
+    public function registerAccount(array $body): array
+    {
+        $name = $body['name'] ?? '';
+        $email = Account::normaliseEmail($body['email'] ?? '');
+        $phone = Account::normalisePhone($body['phone'] ?? '');
+        $password = $body['password'] ?? '';
+
+        if (strlen(trim((string) $name)) < 2) {
+            throw new RimasException('Enter your full name.');
+        }
+        if (! preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
+            throw new RimasException('Enter a valid email address.');
+        }
+        if (strlen($phone) < 9) {
+            throw new RimasException('Enter a valid contact number.');
+        }
+        if (strlen((string) $password) < 8) {
+            throw new RimasException('Password must be at least 8 characters.');
+        }
+        if (Account::where('email', $email)->exists()) {
+            throw new RimasException('An account already uses this email address.');
+        }
+        if (Account::where('phone', $phone)->exists()) {
+            throw new RimasException('An account already uses this contact number.');
+        }
+
+        // Only the very first account may claim the admin role by itself; every later admin
+        // has to be promoted by an existing administrator.
+        $role = (($body['role'] ?? null) === 'admin' && Account::count() === 0) ? 'admin' : 'user';
+
+        $account = Account::create([
+            'id' => $this->nextAccountId(),
+            'name' => trim((string) $name),
+            'email' => $email,
+            'phone' => $phone,
+            'role' => $role,
+            'dept' => $body['dept'] ?? 'Mandaluyong City Resident',
+            'status' => 'active',
+            'password' => Hash::make($password),
+            'created_at_iso' => self::isoNow(),
+            'last_login_at_iso' => null,
+        ]);
+
+        return $account->toApi();
+    }
+
+    public function verifyCredentials($identifier, $password): Account
+    {
+        $account = $this->findAccount($identifier);
+
+        if (! $account) {
+            throw new RimasException('Incorrect email/phone number or password.');
+        }
+        if ($account->status === 'inactive') {
+            throw new RimasException('This account has been deactivated. Contact an administrator.');
+        }
+        if (! Hash::check((string) $password, $account->password)) {
+            throw new RimasException('Incorrect email/phone number or password.');
+        }
+
+        return $account;
+    }
+
+    /** Used by the login page to show the masked email / phone on the OTP channel screen. */
+    public function contactDetails($identifier): array
+    {
+        $account = $this->findAccount($identifier);
+
+        if (! $account) {
+            throw new RimasException('We could not find an account with that email address or phone number.');
+        }
+
+        return ['email' => $account->email, 'phone' => $account->phone, 'name' => $account->name];
+    }
+
+    public function resetPassword($identifier, $password): array
+    {
+        if (strlen((string) $password) < 8) {
+            throw new RimasException('Password must be at least 8 characters.');
+        }
+
+        $account = $this->findAccount($identifier);
+        if (! $account) {
+            throw new RimasException('Account not found.');
+        }
+
+        $account->password = Hash::make($password);
+        $account->updated_at_iso = self::isoNow();
+        $account->save();
+
+        return $account->toApi();
+    }
+
+    public function listAccounts(): array
+    {
+        return Account::orderBy('id')->get()->map->toApi()->all();
+    }
+
+    private function activeAdminCount(): int
+    {
+        return Account::where('role', 'admin')->where('status', 'active')->count();
+    }
+
+    public function updateAccount(string $id, array $changes): array
+    {
+        $account = Account::find($id);
+        if (! $account) {
+            throw new RimasException('User not found.');
+        }
+
+        if (array_key_exists('role', $changes) && $changes['role'] !== null) {
+            if (! in_array($changes['role'], ['admin', 'user'], true)) {
+                throw new RimasException('Role must be "admin" or "user".');
+            }
+            // Never let the last remaining administrator demote themselves out of the system.
+            if ($account->role === 'admin' && $changes['role'] !== 'admin' && $this->activeAdminCount() <= 1) {
+                throw new RimasException('At least one active administrator must remain.');
+            }
+            $account->role = $changes['role'];
+        }
+
+        if (array_key_exists('status', $changes) && $changes['status'] !== null) {
+            if (! in_array($changes['status'], ['active', 'inactive'], true)) {
+                throw new RimasException('Status must be "active" or "inactive".');
+            }
+            if ($account->role === 'admin' && $changes['status'] === 'inactive' && $this->activeAdminCount() <= 1) {
+                throw new RimasException('At least one active administrator must remain.');
+            }
+            $account->status = $changes['status'];
+        }
+
+        if (! empty($changes['name'])) {
+            $account->name = trim((string) $changes['name']);
+        }
+        if (! empty($changes['dept'])) {
+            $account->dept = trim((string) $changes['dept']);
+        }
+        $account->updated_at_iso = self::isoNow();
+        $account->save();
+
+        return $account->toApi();
+    }
+
+    public function deleteAccount(string $id): array
+    {
+        $account = Account::find($id);
+        if (! $account) {
+            throw new RimasException('User not found.');
+        }
+        if ($account->role === 'admin' && $this->activeAdminCount() <= 1) {
+            throw new RimasException('At least one active administrator must remain.');
+        }
+
+        RimasSession::where('account_id', $id)->delete();
+        $account->delete();
+
+        return ['deleted' => $id];
+    }
+
+    /* ---------- sessions ---------- */
+
+    public function pruneSessions(): void
+    {
+        RimasSession::where('expires_at_iso', '<=', self::isoNow())->delete();
+    }
+
+    public function createSession(Account $account): array
+    {
+        $this->pruneSessions();
+
+        $token = bin2hex(random_bytes(24));
+        $expiresAt = now()->utc()->addSeconds(self::SESSION_TTL_SECONDS)->format('Y-m-d\TH:i:s.v\Z');
+
+        RimasSession::create([
+            'token' => $token,
+            'account_id' => $account->id,
+            'created_at_iso' => self::isoNow(),
+            'expires_at_iso' => $expiresAt,
+        ]);
+
+        $account->last_login_at_iso = self::isoNow();
+        $account->save();
+
+        return ['token' => $token, 'expiresAt' => $expiresAt, 'account' => $account->toApi()];
+    }
+
+    public function destroySession(?string $token): void
+    {
+        if ($token) {
+            RimasSession::where('token', $token)->delete();
+        }
+    }
+
+    /** Returns the account behind a token, or null when it is missing, expired or disabled. */
+    public function accountForToken(?string $token): ?Account
+    {
+        if (! $token) {
+            return null;
+        }
+
+        $session = RimasSession::find($token);
+        if (! $session || strcmp((string) $session->expires_at_iso, self::isoNow()) <= 0) {
+            return null;
+        }
+
+        $account = Account::find($session->account_id);
+
+        return ($account && $account->status !== 'inactive') ? $account : null;
+    }
+
+    /** Reads the token from an Authorization: Bearer header or an x-rimas-token header. */
+    public function tokenFromRequest(Request $request): ?string
+    {
+        $header = (string) $request->header('authorization', '');
+        if (Str::startsWith(strtolower($header), 'bearer ')) {
+            return trim(substr($header, 7));
+        }
+
+        return $request->header('x-rimas-token');
+    }
+}

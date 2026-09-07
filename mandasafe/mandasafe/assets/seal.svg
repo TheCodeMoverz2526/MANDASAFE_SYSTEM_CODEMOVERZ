@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#0a3d91" stroke="#f7c948" stroke-width="4"/>
+  <circle cx="50" cy="50" r="34" fill="#1152c4"/>
+  <path d="M50 24l4 12 12 1-9 8 3 12-10-7-10 7 3-12-9-8 12-1z" fill="#f7c948"/>
+  <path d="M22 62c8 6 18 9 28 9s20-3 28-9v10c-8 6-18 9-28 9s-20-3-28-9z" fill="#f7c948"/>
+  <text x="50" y="19" text-anchor="middle" font-family="Arial" font-size="8.5" font-weight="bold" fill="#fff">MANDALUYONG</text>
+</svg>

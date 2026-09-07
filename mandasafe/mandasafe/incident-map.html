@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Incident Map — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+
+  <div class="page-head">
+    <div><h1>Incident Map</h1>
+      <p>Real-time road incidents and road conditions in Mandaluyong City.</p></div>
+    <div class="spacer"></div>
+    <div class="head-tools"><span class="pill"><span class="live"></span> Live Updates On</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" style="gap:10px;flex-wrap:wrap">
+      <div class="input-group" style="flex:1;min-width:240px">
+        <span class="gi" data-i="search"></span>
+        <input class="input" id="q" placeholder="Search location, street, or landmark...">
+      </div>
+      <select class="input" id="fType" style="width:170px"><option value="">All Types</option></select>
+      <select class="input" id="fSev"  style="width:170px">
+        <option value="">All Severity</option><option>High</option><option>Medium</option><option>Low</option></select>
+      <select class="input" id="fStat" style="width:180px">
+        <option value="">All Status</option><option>Under Review</option><option>On Process</option><option>Resolved</option></select>
+      <button class="btn btn-ghost" id="reset">Reset</button>
+    </div>
+
+    <div class="card-body" style="padding:16px"><div id="map" class="map map-lg"></div></div>
+
+    <div class="map-legend">
+      <span class="lg"><i class="bg-accident" data-i="car"></i>Accident</span>
+      <span class="lg"><i class="bg-traffic" data-i="car"></i>Traffic</span>
+      <span class="lg"><i class="bg-hazard" data-i="alert"></i>Hazard</span>
+      <span class="lg"><i class="bg-roadwork" data-i="worker"></i>Road Work</span>
+      <span class="lg"><i class="bg-others" data-i="dots"></i>Others</span>
+      <span class="link" id="count"></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="card-head"><h2>Incidents in View</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Type</th><th>Location</th><th>Barangay</th><th>Severity</th><th>Status</th><th>Reported</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="data/mandaluyong.js"></script>
+<script src="js/app.js"></script>
+<script src="js/map.js"></script>
+<script>
+requireAuth();
+buildShell('map');
+document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+
+document.getElementById('fType').innerHTML += Object.keys(TYPES).map(t=>'<option>'+t+'</option>').join('');
+
+const map = createMandaMap('map',{zoom:14});
+let layer = null;
+
+function apply(){
+  const q = document.getElementById('q').value.toLowerCase().trim();
+  const t = document.getElementById('fType').value;
+  const s = document.getElementById('fSev').value;
+  const st= document.getElementById('fStat').value;
+
+  const data = incidents().filter(i=>
+    (!q || (i.loc+' '+i.title+' '+i.brgy+' '+i.id).toLowerCase().includes(q)) &&
+    (!t || i.type===t) && (!s || i.sev===s) && (!st || i.status===st));
+
+  if(layer) map.removeLayer(layer);
+  layer = plotIncidents(map, data);
+
+  document.getElementById('count').textContent = data.length+' incident'+(data.length===1?'':'s')+' shown';
+  document.getElementById('rows').innerHTML = data.map(i=>
+    '<tr><td style="font-weight:600">'+i.id+'</td>'+
+    '<td><span class="td-type">'+typeIcon(i.type)+i.type+'</span></td>'+
+    '<td>'+i.loc+'</td><td>'+i.brgy+'</td>'+
+    '<td><span class="tag '+SEVERITY_TAG[i.sev]+'">'+i.sev+'</span></td>'+
+    '<td><span class="tag '+STATUS_TAG[i.status]+'">'+i.status+'</span></td>'+
+    '<td>'+fmtDate(i.date)+' '+i.time+'</td></tr>').join('')
+    || '<tr><td colspan="7" class="empty">No incidents match your filters.</td></tr>';
+}
+['q','fType','fSev','fStat'].forEach(id=>document.getElementById(id).addEventListener('input',apply));
+document.getElementById('reset').onclick = ()=>{
+  ['q','fType','fSev','fStat'].forEach(id=>document.getElementById(id).value='');
+  apply();
+};
+apply();
+</script>
+</body>
+</html>

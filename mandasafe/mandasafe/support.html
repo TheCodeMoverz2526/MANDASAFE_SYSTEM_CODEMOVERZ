@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact Support — MandaSafe</title>
+<link rel="icon" href="assets/seal.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app">
+<main class="main">
+  <div class="page-head"><div><h1>Contact Support</h1><p>Need help? Send us a message or call the hotlines below.</p></div></div>
+
+  <div class="grid g-main">
+    <form class="card" id="sup">
+      <div class="card-head"><h2>Send a Message</h2></div>
+      <div class="card-body">
+        <div class="row2">
+          <div class="field"><label>Your Name</label><input class="input" id="n"></div>
+          <div class="field"><label>Email Address</label><input class="input" type="email" id="e"></div>
+        </div>
+        <div class="field"><label>Subject</label>
+          <select class="input" id="s">
+            <option>Account concern</option><option>Incident report follow-up</option>
+            <option>Map or location issue</option><option>Suggestion / feedback</option><option>Others</option>
+          </select></div>
+        <div class="field"><label>Message</label><textarea class="input" id="m" placeholder="How can we help?"></textarea></div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Send Message</button></div>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="card-head"><h2>Hotlines &amp; Office</h2></div>
+      <div class="card-body">
+        <div class="hotline"><b>911</b><span>National Emergency Hotline</span></div>
+        <div class="hotline"><b>136</b><span>MMDA Hotline</span></div>
+        <div class="hotline"><b>532-5001</b><span>Mandaluyong City DRRMO</span></div>
+        <div class="hotline"><b>533-1111</b><span>Mandaluyong City TPMO</span></div>
+        <div class="notice" style="margin-top:16px">
+          <span class="ni" data-i="pin"></span>
+          <div><h4>Office Address</h4>
+          <p>Traffic Planning and Management Office, Mandaluyong City Hall,<br>
+             Maysilo Circle, Plainview, Mandaluyong City</p></div></div>
+        <div class="notice" style="margin-top:12px">
+          <span class="ni" data-i="clock"></span>
+          <div><h4>Office Hours</h4><p>Monday to Friday, 8:00 AM – 5:00 PM</p></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="js/app.js"></script>
+<script>
+requireAuth(); buildShell('support');
+document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+const u = currentUser();
+n.value = u.name; e.value = u.email;
+document.getElementById('sup').onsubmit = ev=>{
+  ev.preventDefault();
+  if(m.value.trim().length < 10){ alert('Please write a short message (at least 10 characters).'); return; }
+  m.value=''; toast('Message sent — TPMO will get back to you within 24 hours');
+};
+</script>
+</body>
+</html>
