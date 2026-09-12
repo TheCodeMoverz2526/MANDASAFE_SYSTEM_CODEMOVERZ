@@ -38,6 +38,23 @@ if not exist "%APP%\vendor\autoload.php" (
     if not "!RC!"=="0" goto composer_failed
 )
 
+REM ----------------------------------------------- Python (ML backend)
+python -c "import sys" >nul 2>nul
+if not %errorlevel%==0 (
+    echo.
+    echo MandaSafe's road-safety predictions need Python 3.9+ on your PATH.
+    echo Install it from https://www.python.org/downloads/ ^(check "Add python.exe to PATH"^),
+    echo then run this file again.
+    pause
+    exit /b 1
+)
+
+python -c "import numpy, scipy, sklearn" >nul 2>nul
+if not %errorlevel%==0 (
+    echo Installing the Python ML dependencies for the first time...
+    python -m pip install --quiet -r "%~dp0mlequirements.txt"
+)
+
 REM ------------------------------------------------------------- .env
 if not exist "%APP%\.env" (
     echo  Creating the environment file...

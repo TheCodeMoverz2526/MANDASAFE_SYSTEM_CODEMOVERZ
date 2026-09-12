@@ -29,8 +29,10 @@ php artisan db:seed          # guarantees the default administrator exists
 php artisan serve --port=5500
 ```
 
-Requirements: **PHP 8.2+** and **Composer** (both come with XAMPP — add `C:\xampp\php` to PATH).
-No web server, MySQL or Node.js is needed to run it.
+Requirements: **PHP 8.2+** and **Composer** (both come with XAMPP — add `C:\xampp\php` to PATH),
+plus **Python 3.9+** with `ml/requirements.txt` installed (`pip install -r ml/requirements.txt`)
+for the predictions and hotspots — `start-mandasafe.bat` installs it on first run. No web server,
+MySQL or Node.js is needed to run it.
 
 ## Accounts
 
@@ -111,8 +113,13 @@ barangay by its incident count, and label it on hover.
 ```
 Admin (Mandasafe.html) ──writes──▶ Laravel API ──▶ database ◀── Resident pages + public landing
                                         │
-              PredictionService (trend + Random Forest) · KdeService (hotspots)
+              PredictionService (trend + forest) · KdeService (hotspots) ──▶ ml/*.py (scikit-learn)
 ```
+
+The Random Forest severity classifier and the KDE hotspot surface are both computed by Python
+(scikit-learn) in `ml/`, one level above `laravel/` — `MlBridge` shells out to it, feeding a
+script JSON on stdin and reading JSON back from stdout. `MANDASAFE_PYTHON_BIN` in `.env` points
+at the interpreter to use; it defaults to whatever `python` resolves to on PATH.
 
 Reading is open, writing is not:
 
@@ -189,12 +196,16 @@ laravel/                                                     the backend
   app/Models/          Incident, PredictionInput, Account, RimasSession, Setting,
                        OtpChallenge
   app/Services/        AccountService, VerificationService, OtpService, PredictionService,
-                       RandomForest, KdeService, GeoService, AnalyticsService
+                       MlBridge, KdeService, GeoService, AnalyticsService
   app/Http/            controllers under Api/, the RimasAdmin middleware,
                        StaticSiteController (serves the pages in this folder)
   routes/api.php       every /api endpoint
   database/            migrations, the SQLite file
   tests/Feature/       MandaSafeApiTest — the access rules and payload shapes
+ml/                                                          the ML backend (Python)
+  severity_forest.py   scikit-learn Random Forest: severity probability per barangay/road
+  hotspots.py          scikit-learn KDE: the hotspot density surface
+  requirements.txt      numpy, scipy, scikit-learn
 login.html  login.js  styles.css                             shared sign-in
 Mandasafe.html  script.js                                    admin console
 index.html  dashboard.html  incident-map.html  hotspots.html resident pages
@@ -203,9 +214,10 @@ css/style.css   js/api.js  js/app.js  js/map.js              resident assets
 assets/         vendor/leaflet/                              images, Leaflet
 data/mandaluyong-barangays.geojson                           official boundaries
 data/store.json  data/store.backup.json                      the original JSON store
-server.js  db.js  auth.js  geo.js  kde.js  prediction.js  randomForest.js
+server.js  db.js  auth.js  geo.js  kde.js  prediction.js  mlBridge.js
                                                              the previous Node backend, kept
-                                                             for reference; no longer used
+                                                             for reference; no longer used, but
+                                                             still calls into ml/ if you do
 ```
 
 Leaflet is served from `vendor/`, so the maps work without internet — only the OpenStreetMap

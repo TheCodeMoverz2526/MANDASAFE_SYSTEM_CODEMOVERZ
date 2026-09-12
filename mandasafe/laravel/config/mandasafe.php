@@ -95,4 +95,19 @@ return [
 
     'analytics_cache_seconds' => (int) env('MANDASAFE_ANALYTICS_CACHE', 86400),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Machine learning
+    |--------------------------------------------------------------------------
+    |
+    | The severity Random Forest and the KDE hotspot surface are computed by the Python
+    | (scikit-learn) scripts in ml/, one level above this Laravel app. MlBridge shells out
+    | to the interpreter below, feeding it JSON on stdin and reading JSON back from stdout.
+    |
+    */
+
+    'ml_root' => dirname(base_path()) . DIRECTORY_SEPARATOR . 'ml',
+
+    'python_bin' => env('MANDASAFE_PYTHON_BIN', 'python'),
+
 ];
