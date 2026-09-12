@@ -37,19 +37,49 @@ return [
     | One-time passcode delivery
     |--------------------------------------------------------------------------
     |
-    | Leave OTP_TEST_MODE=true to have the sign-in page accept OTP_TEST_CODE without
-    | contacting a provider. Set the Resend / Twilio credentials to deliver for real.
+    | Leave OTP_TEST_MODE=true and no provider is contacted: the code is generated locally
+    | and shown on the sign-in page, which is how the system runs out of the box. Fill in the
+    | Vocotext credentials (SMS) and/or the Resend credentials (email) to deliver for real —
+    | test mode must be off for either to be used.
+    |
+    | Vocotext iSMS 2FA generates the code on its side, substitutes it for %OTP% in the
+    | message and verifies it on its side too, so MandaSafe never stores those digits.
     |
     */
 
     'otp' => [
         'test_mode' => env('OTP_TEST_MODE', false),
         'test_code' => env('OTP_TEST_CODE', '123456'),
+
+        // Email — Resend
         'resend_key' => env('RESEND_API_KEY'),
         'from_email' => env('OTP_FROM_EMAIL'),
+
+        // SMS — Vocotext iSMS 2FA (preferred)
+        'vocotext_endpoint' => env('VOCOTEXT_ENDPOINT', 'https://smtpapi.vocotext.com/isms_2fa_request.php'),
+        'vocotext_user' => env('VOCOTEXT_USERNAME'),
+        'vocotext_pass' => env('VOCOTEXT_PASSWORD'),
+        'vocotext_sender' => env('VOCOTEXT_SENDER_ID', 'MandaSafe'),
+        'vocotext_type' => env('VOCOTEXT_TYPE', '1'),
+        // %OTP% is replaced by the provider with the code it generated.
+        'vocotext_message' => env('VOCOTEXT_MESSAGE', 'Your MandaSafe verification code is %OTP%. Do not share it with anyone.'),
+        // Minutes the provider keeps the code valid — keep it equal to
+        // VerificationService::CHALLENGE_TTL_SECONDS so both sides expire together.
+        'vocotext_interval' => (int) env('VOCOTEXT_INTERVAL', 10),
+
+        // SMS — Twilio, used only when Vocotext is not configured.
         'twilio_sid' => env('TWILIO_ACCOUNT_SID'),
         'twilio_token' => env('TWILIO_AUTH_TOKEN'),
         'twilio_from' => env('TWILIO_FROM_NUMBER'),
+
+        // Numbers are stored as +639171234567; Vocotext wants the country code separately.
+        'sms_country_code' => (string) env('OTP_SMS_COUNTRY_CODE', '63'),
+        'sms_country_codes' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('OTP_SMS_COUNTRY_CODES', '63,1,44,65,61,971'))
+        ))),
+
+        'http_timeout' => (int) env('OTP_HTTP_TIMEOUT', 20),
     ],
 
     /*

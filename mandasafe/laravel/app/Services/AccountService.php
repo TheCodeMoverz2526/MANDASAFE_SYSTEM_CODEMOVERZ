@@ -72,14 +72,24 @@ class AccountService
             ->first();
     }
 
-    public function registerAccount(array $body): array
+    /**
+     * Everything that can be judged before the account exists: the shape of the details and
+     * whether the email or number is already taken.
+     *
+     * Sign-ups are checked here first and created only once the verification code is
+     * accepted (see VerificationService), so a wrong password or a duplicate address is
+     * reported straight away rather than after an SMS has been sent and paid for.
+     *
+     * @return array  the normalised details, ready for createAccount()
+     */
+    public function validateRegistration(array $body): array
     {
-        $name = $body['name'] ?? '';
+        $name = trim((string) ($body['name'] ?? ''));
         $email = Account::normaliseEmail($body['email'] ?? '');
         $phone = Account::normalisePhone($body['phone'] ?? '');
-        $password = $body['password'] ?? '';
+        $password = (string) ($body['password'] ?? '');
 
-        if (strlen(trim((string) $name)) < 2) {
+        if (strlen($name) < 2) {
             throw new RimasException('Enter your full name.');
         }
         if (! preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
@@ -88,7 +98,7 @@ class AccountService
         if (strlen($phone) < 9) {
             throw new RimasException('Enter a valid contact number.');
         }
-        if (strlen((string) $password) < 8) {
+        if (strlen($password) < 8) {
             throw new RimasException('Password must be at least 8 characters.');
         }
         if (Account::where('email', $email)->exists()) {
@@ -102,20 +112,39 @@ class AccountService
         // has to be promoted by an existing administrator.
         $role = (($body['role'] ?? null) === 'admin' && Account::count() === 0) ? 'admin' : 'user';
 
-        $account = Account::create([
-            'id' => $this->nextAccountId(),
-            'name' => trim((string) $name),
+        return [
+            'name' => $name,
             'email' => $email,
             'phone' => $phone,
+            'password' => $password,
             'role' => $role,
             'dept' => $body['dept'] ?? 'Mandaluyong City Resident',
+        ];
+    }
+
+    /** Writes an account from details validateRegistration() has already approved. */
+    public function createAccount(array $details): array
+    {
+        $account = Account::create([
+            'id' => $this->nextAccountId(),
+            'name' => $details['name'],
+            'email' => $details['email'],
+            'phone' => $details['phone'],
+            'role' => $details['role'] ?? 'user',
+            'dept' => $details['dept'] ?? 'Mandaluyong City Resident',
             'status' => 'active',
-            'password' => Hash::make($password),
+            'password' => Hash::make($details['password']),
             'created_at_iso' => self::isoNow(),
             'last_login_at_iso' => null,
         ]);
 
         return $account->toApi();
+    }
+
+    /** Validate and create in one step — what User Management in the console does. */
+    public function registerAccount(array $body): array
+    {
+        return $this->createAccount($this->validateRegistration($body));
     }
 
     public function verifyCredentials($identifier, $password): Account

@@ -25,6 +25,10 @@ class MandaSafeApiTest extends TestCase
     {
         parent::setUp();
 
+        // No provider is contacted in test mode; the code is generated locally and returned
+        // by /api/auth/otp/send so a test can complete the sign-in.
+        config(['mandasafe.otp.test_mode' => true]);
+
         Setting::put('nextIncidentSeq', 1);
         Setting::put('nextInputSeq', 1);
         // Two accounts are created below, so the next one handed out is USR-1003.
@@ -43,9 +47,21 @@ class MandaSafeApiTest extends TestCase
         ]);
     }
 
+    /**
+     * Signing in is two calls now: the password opens a challenge, the code closes it. The
+     * tests run in OTP test mode (see setUp), where the code comes back in the send reply.
+     */
     private function tokenFor(string $identifier, string $password): string
     {
-        return $this->postJson('/api/auth/login', ['identifier' => $identifier, 'password' => $password])
+        $challengeId = $this->postJson('/api/auth/login', ['identifier' => $identifier, 'password' => $password])
+            ->assertOk()
+            ->json('challengeId');
+
+        $code = $this->postJson('/api/auth/otp/send', ['challengeId' => $challengeId, 'channel' => 'sms'])
+            ->assertOk()
+            ->json('testCode');
+
+        return $this->postJson('/api/auth/otp/verify', ['challengeId' => $challengeId, 'code' => $code])
             ->assertOk()
             ->json('token');
     }
@@ -163,10 +179,17 @@ class MandaSafeApiTest extends TestCase
 
     public function test_sign_up_never_grants_the_admin_role(): void
     {
-        $this->postJson('/api/auth/register', [
+        $challengeId = $this->postJson('/api/auth/register', [
             'name' => 'Sneaky User', 'email' => 'sneaky@example.com',
             'phone' => '+639171110004', 'password' => 'Testing2026', 'role' => 'admin',
-        ])->assertStatus(201)->assertJson(['role' => 'user']);
+        ])->assertOk()->json('challengeId');
+
+        $code = $this->postJson('/api/auth/otp/send', ['challengeId' => $challengeId, 'channel' => 'email'])
+            ->assertOk()->json('testCode');
+
+        $this->postJson('/api/auth/otp/verify', ['challengeId' => $challengeId, 'code' => $code])
+            ->assertOk()
+            ->assertJson(['registered' => true, 'account' => ['role' => 'user']]);
     }
 
     public function test_signing_out_invalidates_the_token(): void
