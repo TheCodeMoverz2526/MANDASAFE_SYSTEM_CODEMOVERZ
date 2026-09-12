@@ -4,60 +4,13 @@
 //
 // Two signals feed the final risk score:
 //  - a linear forecast of incident frequency per barangay/road (trend + volume), and
-//  - a Random Forest classifier trained on logged incidents that estimates how likely a
-//    severe outcome (Fatal/Injury) is for that location, from barangay/road/type/time features.
+//  - a scikit-learn Random Forest classifier (ml/severity_forest.py), trained on logged
+//    incidents, that estimates how likely a severe outcome (Fatal/Injury) is for that location,
+//    from barangay/road/type/time features.
 // The forest needs a minimum amount of labeled, class-diverse history to train at all; until
 // then predictions fall back to the frequency signal alone (mlModel: 'heuristic').
 
-const { trainRandomForest, predictClass } = require('./randomForest');
-
-const SEVERITY_FEATURES = [
-    { key: 'barangay', type: 'categorical' },
-    { key: 'road', type: 'categorical' },
-    { key: 'type', type: 'categorical' },
-    { key: 'hour', type: 'numeric' },
-    { key: 'dayOfWeek', type: 'numeric' },
-    { key: 'month', type: 'numeric' }
-];
-const SEVERE_CLASSES = new Set(['Fatal', 'Injury']);
-
-function parseHour(timeStr) {
-    if (!timeStr) return -1;
-    const parsed = new Date(`2000-01-01 ${timeStr}`);
-    return Number.isNaN(parsed.getTime()) ? -1 : parsed.getHours();
-}
-
-function incidentFeatures(incident) {
-    const d = new Date(incident.date);
-    const valid = !Number.isNaN(d.getTime());
-    return {
-        barangay: incident.barangay || 'Unknown',
-        road: incident.road || 'Unknown',
-        type: incident.type || 'Unknown',
-        hour: parseHour(incident.time),
-        dayOfWeek: valid ? d.getDay() : -1,
-        month: valid ? d.getMonth() : -1
-    };
-}
-
-function trainSeverityForest(incidents) {
-    const rows = (incidents || [])
-        .filter(i => i.barangay && i.road && i.sev)
-        .map(i => ({ ...incidentFeatures(i), sev: i.sev }));
-    return trainRandomForest(rows, { features: SEVERITY_FEATURES, labelKey: 'sev' });
-}
-
-// Average, across a group's own logged incidents, the forest's predicted probability that
-// the outcome is severe (Fatal or Injury). Returns null when there's nothing to score.
-function groupSeverityProbability(forest, groupIncidents) {
-    if (!forest || !groupIncidents || !groupIncidents.length) return null;
-    const total = groupIncidents.reduce((sum, incident) => {
-        const result = predictClass(forest, incidentFeatures(incident));
-        if (!result) return sum;
-        return sum + Object.entries(result.probabilities).reduce((s, [label, p]) => s + (SEVERE_CLASSES.has(label) ? p : 0), 0);
-    }, 0);
-    return total / groupIncidents.length;
-}
+const { runPython } = require('./mlBridge');
 
 function monthKey(dateStr) {
     if (!dateStr) return null;
@@ -86,7 +39,6 @@ function linearForecast(counts) {
 
 function computePredictions(store) {
     const groups = new Map();
-    const forest = trainSeverityForest(store.incidents);
 
     (store.predictionInputs || []).forEach(input => {
         if (!input.barangay || !input.month) return;
@@ -110,6 +62,13 @@ function computePredictions(store) {
         }
     });
 
+    const groupKeys = [...groups.keys()];
+    const severity = runPython('severity_forest.py', {
+        incidents: store.incidents || [],
+        groups: groupKeys.map(key => ({ key, incidents: groups.get(key).incidents }))
+    });
+    const severeProbabilityByKey = new Map(severity.results.map(r => [r.key, r.severeProbability]));
+
     const results = [];
     groups.forEach((g, key) => {
         const months = [...g.history.keys()].sort();
@@ -125,7 +84,7 @@ function computePredictions(store) {
         // The forest's severe-outcome probability nudges the frequency score up to +30% or
         // down to -30%; it modulates volume-based risk rather than replacing it, since a
         // busy-but-minor road shouldn't outrank a low-traffic road with a fatal history.
-        const severeProbability = groupSeverityProbability(forest, g.incidents);
+        const severeProbability = severeProbabilityByKey.get(key) ?? null;
         const mlAdjustment = severeProbability === null ? 1 : 0.7 + 0.6 * severeProbability;
         const rawScore = frequencyScore * mlAdjustment;
 
@@ -139,7 +98,8 @@ function computePredictions(store) {
             trend,
             rawScore,
             severeProbability: severeProbability === null ? null : Math.round(severeProbability * 100) / 100,
-            mlModel: forest ? 'random-forest' : 'heuristic',
+            mlModel: severity.trained ? 'random-forest' : 'heuristic',
+            mlAccuracy: severity.trained ? Math.round(severity.oobAccuracy * 100) / 100 : null,
             sources: [...g.sources]
         });
     });
@@ -179,4 +139,4 @@ function computeStats(store, predictions) {
     };
 }
 
-module.exports = { computePredictions, computeStats, monthKey, trainSeverityForest, incidentFeatures };
+module.exports = { computePredictions, computeStats, monthKey };

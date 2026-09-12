@@ -9,87 +9,42 @@ namespace App\Services;
  *
  * Two signals feed the final risk score:
  *  - a linear forecast of incident frequency per barangay/road (trend + volume), and
- *  - a Random Forest classifier trained on logged incidents that estimates how likely a
- *    severe outcome (Fatal/Injury) is for that location, from barangay/road/type/time features.
+ *  - a scikit-learn Random Forest classifier (ml/severity_forest.py), trained on logged
+ *    incidents, that estimates how likely a severe outcome (Fatal/Injury) is for that
+ *    location, from barangay/road/type/time features.
  *
  * The forest needs a minimum amount of labeled, class-diverse history to train at all; until
  * then predictions fall back to the frequency signal alone (mlModel: 'heuristic').
  */
 class PredictionService
 {
-    private const SEVERITY_FEATURES = [
-        ['key' => 'barangay', 'type' => 'categorical'],
-        ['key' => 'road', 'type' => 'categorical'],
-        ['key' => 'type', 'type' => 'categorical'],
-        ['key' => 'hour', 'type' => 'numeric'],
-        ['key' => 'dayOfWeek', 'type' => 'numeric'],
-        ['key' => 'month', 'type' => 'numeric'],
-    ];
-
-    private const SEVERE_CLASSES = ['Fatal', 'Injury'];
-
-    private static function parseHour($time): int
+    /**
+     * Runs every group's own logged incidents through the severity forest in one call.
+     *
+     * @param  array<string, array>  $groupIncidents  group key => that group's incident rows
+     * @return array{trained: bool, oobAccuracy: ?float, probabilities: array<string, ?float>}
+     */
+    private static function scoreGroupSeverity(array $incidents, array $groupIncidents): array
     {
-        if (empty($time)) {
-            return -1;
+        $response = MlBridge::run('severity_forest.py', [
+            'incidents' => array_values($incidents),
+            'groups' => array_map(
+                fn ($key, $rows) => ['key' => $key, 'incidents' => array_values($rows)],
+                array_keys($groupIncidents),
+                array_values($groupIncidents)
+            ),
+        ]);
+
+        $probabilities = [];
+        foreach ($response['results'] ?? [] as $result) {
+            $probabilities[$result['key']] = $result['severeProbability'];
         }
-
-        $stamp = strtotime('2000-01-01 ' . $time);
-
-        return $stamp === false ? -1 : (int) date('G', $stamp);
-    }
-
-    public static function incidentFeatures(array $incident): array
-    {
-        $stamp = empty($incident['date']) ? false : strtotime((string) $incident['date']);
 
         return [
-            'barangay' => $incident['barangay'] ?: 'Unknown',
-            'road' => $incident['road'] ?: 'Unknown',
-            'type' => $incident['type'] ?: 'Unknown',
-            'hour' => self::parseHour($incident['time'] ?? null),
-            'dayOfWeek' => $stamp === false ? -1 : (int) date('w', $stamp),
-            'month' => $stamp === false ? -1 : ((int) date('n', $stamp)) - 1,
+            'trained' => (bool) ($response['trained'] ?? false),
+            'oobAccuracy' => $response['oobAccuracy'] ?? null,
+            'probabilities' => $probabilities,
         ];
-    }
-
-    public static function trainSeverityForest(array $incidents): ?array
-    {
-        $rows = [];
-        foreach ($incidents as $incident) {
-            if (empty($incident['barangay']) || empty($incident['road']) || empty($incident['sev'])) {
-                continue;
-            }
-            $rows[] = self::incidentFeatures($incident) + ['sev' => $incident['sev']];
-        }
-
-        return RandomForest::train($rows, ['features' => self::SEVERITY_FEATURES, 'labelKey' => 'sev']);
-    }
-
-    /**
-     * Averages, across a group's own logged incidents, the forest's predicted probability that
-     * the outcome is severe (Fatal or Injury). Returns null when there is nothing to score.
-     */
-    private static function groupSeverityProbability(?array $forest, array $groupIncidents): ?float
-    {
-        if ($forest === null || $groupIncidents === []) {
-            return null;
-        }
-
-        $total = 0.0;
-        foreach ($groupIncidents as $incident) {
-            $result = RandomForest::predictClass($forest, self::incidentFeatures($incident));
-            if ($result === null) {
-                continue;
-            }
-            foreach ($result['probabilities'] as $label => $probability) {
-                if (in_array($label, self::SEVERE_CLASSES, true)) {
-                    $total += $probability;
-                }
-            }
-        }
-
-        return $total / count($groupIncidents);
     }
 
     public static function monthKey($date): ?string
@@ -147,7 +102,6 @@ class PredictionService
     public static function computePredictions(array $incidents, array $predictionInputs): array
     {
         $groups = [];
-        $forest = self::trainSeverityForest($incidents);
 
         foreach ($predictionInputs as $input) {
             if (empty($input['barangay']) || empty($input['month'])) {
@@ -179,6 +133,8 @@ class PredictionService
             }
         }
 
+        $severity = self::scoreGroupSeverity($incidents, array_map(fn ($g) => $g['incidents'], $groups));
+
         $results = [];
         foreach ($groups as $key => $group) {
             $history = $group['history'];
@@ -198,7 +154,7 @@ class PredictionService
             // The forest's severe-outcome probability nudges the frequency score up to +30% or
             // down to -30%; it modulates volume-based risk rather than replacing it, since a
             // busy-but-minor road should not outrank a low-traffic road with a fatal history.
-            $severeProbability = self::groupSeverityProbability($forest, $group['incidents']);
+            $severeProbability = $severity['probabilities'][$key] ?? null;
             $mlAdjustment = $severeProbability === null ? 1 : 0.7 + 0.6 * $severeProbability;
             $rawScore = $frequencyScore * $mlAdjustment;
 
@@ -217,7 +173,8 @@ class PredictionService
                 'trend' => $trend,
                 '_rawScore' => $rawScore,
                 'severeProbability' => $severeProbability === null ? null : self::jsRound($severeProbability * 100) / 100,
-                'mlModel' => $forest ? 'random-forest' : 'heuristic',
+                'mlModel' => $severity['trained'] ? 'random-forest' : 'heuristic',
+                'mlAccuracy' => $severity['trained'] ? self::jsRound($severity['oobAccuracy'] * 100) / 100 : null,
                 'sources' => array_keys($group['sources']),
             ];
         }
