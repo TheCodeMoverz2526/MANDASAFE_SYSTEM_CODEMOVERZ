@@ -135,6 +135,53 @@ write anyway — the role is read from the database on every request, not from t
 trend, type/severity mix, top forecasts, newest reports) so the resident pages don't download
 all ~8,000 incident rows.
 
+### Verification (sign in, sign up, forgot password)
+
+All three go through the same three steps, and all three are decided on the server:
+
+| Step | Endpoint | What happens |
+|---|---|---|
+| 1 | `POST /api/auth/login` · `/register` · `/contact` | Proves what can be proved now (the password, the sign-up details, that the account exists) and answers with a **challenge id** and the contacts masked. No session, no account, no password change yet. |
+| 2 | `POST /api/auth/otp/send` | Sends the six-digit code to the chosen channel. |
+| 3 | `POST /api/auth/otp/verify` | Checks the code, then issues the session / creates the account / unlocks `POST /api/auth/reset-password`. |
+
+The browser never generates the code, never receives it, and never decides whether it matched.
+It holds only the challenge id — a random 32-byte handle that is deleted once spent. A sign-in
+issues its token in step 3 and nowhere else, and a password reset is refused unless it quotes a
+challenge that passed step 3 in the last ten minutes.
+
+Per challenge: 10 minutes to use it, 5 codes, 5 guesses in total, 30 seconds between codes —
+counted in the `otp_challenges` table, with further per-IP and per-destination limits on top.
+
+**SMS — Vocotext iSMS 2FA.** The provider generates the code, substitutes it for `%OTP%` in
+the message, and verifies it on its side, so those digits are never stored here; MandaSafe
+keeps only the `uuid` / `sms_id` pair needed to ask. Numbers are stored as `+639171234599` and
+split into `country_code=63` + `mobile=9171234599` on the way out. Set in `laravel/.env`:
+
+```
+OTP_TEST_MODE=false
+VOCOTEXT_USERNAME=...
+VOCOTEXT_PASSWORD=...
+VOCOTEXT_SENDER_ID=MandaSafe
+```
+
+**Email — Resend** (`RESEND_API_KEY`, `OTP_FROM_EMAIL`) is optional; for that channel the code
+is generated here and only its bcrypt hash is stored. Twilio still works as an SMS fallback
+when Vocotext is not configured.
+
+**Credentials win over test mode.** `OTP_TEST_MODE=true` is only the fallback for a system
+with no provider configured yet: it generates the code locally and shows it on the sign-in
+page so MandaSafe can be demonstrated. The moment `VOCOTEXT_USERNAME` and `VOCOTEXT_PASSWORD`
+(or the Resend pair) are filled in, real messages go out and nothing is echoed to the browser
+— whatever `OTP_TEST_MODE` still says.
+
+To check the credentials without going through the sign-in page:
+
+```
+php artisan mandasafe:otp-check                   # what is live
+php artisan mandasafe:otp-check +639171234599     # send a real code to that number
+```
+
 ### Caching
 
 The forecasts and the KDE hotspot surface are the only heavy work, and they only change when
@@ -146,9 +193,10 @@ cache off.
 
 ```
 laravel/                                                     the backend
-  app/Models/          Incident, PredictionInput, Account, RimasSession, Setting
-  app/Services/        AccountService, PredictionService, MlBridge, KdeService,
-                       GeoService, AnalyticsService, OtpService
+  app/Models/          Incident, PredictionInput, Account, RimasSession, Setting,
+                       OtpChallenge
+  app/Services/        AccountService, VerificationService, OtpService, PredictionService,
+                       MlBridge, KdeService, GeoService, AnalyticsService
   app/Http/            controllers under Api/, the RimasAdmin middleware,
                        StaticSiteController (serves the pages in this folder)
   routes/api.php       every /api endpoint

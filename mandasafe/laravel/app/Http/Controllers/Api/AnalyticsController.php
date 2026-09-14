@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Services\AnalyticsService;
 use App\Services\OtpService;
-use Illuminate\Http\Request;
 
 /**
  * The open, read-only endpoints: forecasts, city statistics, the hotspot surface, the single
@@ -58,9 +57,19 @@ class AnalyticsController extends ApiController
         return response()->json($otp->status());
     }
 
-    /** POST /api/send-otp */
-    public function sendOtp(Request $request, OtpService $otp)
+    /**
+     * POST /api/send-otp — retired.
+     *
+     * It took the six digits from the browser and delivered them, which left the browser
+     * holding the answer to its own test. Verification now starts at /api/auth/login,
+     * /api/auth/register or /api/auth/contact and is checked at /api/auth/otp/verify.
+     * The route is kept so an old cached copy of login.js gets a clear message instead of
+     * silently sending a code nobody checks.
+     */
+    public function sendOtp()
     {
-        return $this->attempt(fn () => $otp->send($this->body($request)), 502);
+        return response()->json([
+            'error' => 'This page is out of date. Reload it (Ctrl+F5) to use the current sign-in.',
+        ], 410);
     }
 }

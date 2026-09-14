@@ -1,13 +1,21 @@
-/* RIMAS sign-in.
-   Accounts are NOT kept in this browser any more — they live in the server database
-   (data/store.json, see auth.js). That is what makes one administrator account the same
-   account on every device, and lets the server decide who is allowed to change data. */
+/* MandaSafe sign-in.
+
+   Accounts live in the server database, not in this browser, which is what makes one
+   administrator account the same account on every device.
+
+   The verification step is the server's too. This page never generates a code, never learns
+   what the code is, and never decides whether the one that was typed is right: it starts a
+   challenge, asks for the code to be sent, and posts the six digits back for checking. The
+   only thing it holds is `challenge.id` — a random handle that is useless once spent.
+   Signing in issues no session until the code has been accepted. */
 
 const SESSION_KEY = 'rimasCurrentUser';
 const TOKEN_KEY = 'rimasToken';
 const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:5500' : '';
 
-let verification = null;
+/* { id, purpose, name, email, phone, channels, testMode, channel } — everything here came
+   from the server, and the contacts arrive already masked. */
+let challenge = null;
 let resendInterval = null;
 
 /* ---------- API ---------- */
@@ -19,7 +27,7 @@ async function api(path, options = {}) {
             ...options
         });
     } catch (error) {
-        throw new Error('Cannot reach the RIMAS server. Start it with "node server.js", then reload this page.');
+        throw new Error('Cannot reach the MandaSafe server. Start it with start-mandasafe.bat, then reload this page.');
     }
     let data = null;
     try { data = await response.json(); } catch { /* no body */ }
@@ -33,9 +41,6 @@ function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
 function showError(id, message) { const box = document.getElementById(id); box.textContent = message; box.style.display = 'block'; }
 function clearErrors() { document.querySelectorAll('.auth-error').forEach(error => { error.textContent = ''; error.style.display = 'none'; }); }
 function showPanel(id) { document.querySelectorAll('.auth-panel').forEach(panel => panel.classList.toggle('active', panel.id === id)); clearErrors(); }
-function randomOtp() { return String(Math.floor(100000 + Math.random() * 900000)); }
-function maskEmail(email) { const [name, domain] = String(email).split('@'); return `${name.slice(0, 2)}${'•'.repeat(Math.max(2, name.length - 2))}@${domain}`; }
-function maskPhone(phone) { phone = String(phone); return `${phone.slice(0, 4)} ${'•'.repeat(Math.max(4, phone.length - 7))}${phone.slice(-3)}`; }
 function setBusy(on) { document.querySelectorAll('.auth-submit').forEach(b => b.disabled = on); }
 
 function togglePassword(id, button) {
@@ -75,35 +80,50 @@ function completeLogin(session) {
     window.location.assign(session.account.role === 'admin' ? 'Mandasafe.html' : 'dashboard.html');
 }
 
-/* ---------- registration ---------- */
-function beginRegistration() {
+/* ---------- step one: state the intent ----------
+   Each of the three entry points posts what it has and gets back a challenge. Nothing is
+   granted here: no session for a sign-in, no account for a sign-up, no password change for
+   a reset — all three wait for the code. */
+
+async function beginRegistration() {
     const name = document.getElementById('createName').value.trim();
     const email = document.getElementById('createEmail').value.trim().toLowerCase();
     const phone = normalisePhone(`${document.getElementById('countryCode').value}${document.getElementById('createPhone').value}`);
     const password = document.getElementById('createPassword').value;
     const confirmation = document.getElementById('confirmPassword').value;
 
+    // Checked again on the server; this is only to answer the obvious mistakes instantly.
     if (!validEmail(email)) return showError('createError', 'Enter a valid email address.');
     if (phone.length < 9) return showError('createError', 'Enter a valid contact number.');
     if (password.length < 8) return showError('createError', 'Password must be at least 8 characters.');
     if (password !== confirmation) return showError('createError', 'Your password and confirmation do not match.');
     if (!document.getElementById('privacyAgreement').checked) return showError('createError', 'You must agree to the Privacy Policy to create an account.');
 
-    // The account is only written to the database once the code is verified.
-    verification = { purpose: 'register', account: { name, email, phone, password }, selectedChannel: null };
-    prepareChannelPanel();
+    setBusy(true);
+    try {
+        // The server validates the details and holds them until the code is accepted — the
+        // account is written only then, so no unverified number ever becomes an account.
+        const started = await api('/api/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ name, email, phone, password })
+        });
+        openChallenge(started);
+    } catch (error) {
+        showError('createError', error.message);
+    } finally {
+        setBusy(false);
+    }
 }
 
-/* ---------- sign in ---------- */
 async function beginLogin() {
     const identifier = document.getElementById('loginIdentifier').value.trim();
     const password = document.getElementById('loginPassword').value;
     setBusy(true);
     try {
-        // The server checks the password against the stored hash and issues a session.
-        const session = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password }) });
-        verification = { purpose: 'login', account: session.account, session, selectedChannel: null };
-        prepareChannelPanel();
+        // The password is checked here, but no token comes back yet: the session is created
+        // at /api/auth/otp/verify and nowhere else.
+        const started = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password }) });
+        openChallenge(started);
     } catch (error) {
         showError('loginError', error.message);
     } finally {
@@ -111,14 +131,12 @@ async function beginLogin() {
     }
 }
 
-/* ---------- password reset ---------- */
 async function beginPasswordReset() {
     const identifier = document.getElementById('resetIdentifier').value.trim();
     setBusy(true);
     try {
-        const contact = await api('/api/auth/contact', { method: 'POST', body: JSON.stringify({ identifier }) });
-        verification = { purpose: 'reset', identifier, account: contact, selectedChannel: null };
-        prepareChannelPanel();
+        const started = await api('/api/auth/contact', { method: 'POST', body: JSON.stringify({ identifier }) });
+        openChallenge(started);
     } catch (error) {
         showError('forgotError', error.message);
     } finally {
@@ -126,53 +144,68 @@ async function beginPasswordReset() {
     }
 }
 
-function prepareChannelPanel() {
-    document.getElementById('emailDestination').textContent = maskEmail(verification.account.email);
-    document.getElementById('smsDestination').textContent = maskPhone(verification.account.phone);
-    document.getElementById('channelDescription').textContent = verification.purpose === 'register'
+/* ---------- step two: choose a channel and have the code sent ---------- */
+
+function openChallenge(started) {
+    challenge = { ...started, id: started.challengeId, channel: null };
+
+    document.getElementById('emailDestination').textContent = challenge.email || 'Not available';
+    document.getElementById('smsDestination').textContent = challenge.phone || 'Not available';
+    document.getElementById('channelDescription').textContent = challenge.purpose === 'register'
         ? 'Choose how you would like to verify your new account.'
         : 'Select where we should send your six-digit verification code.';
+
+    // A channel the server cannot deliver on is shown as unavailable rather than failing
+    // after the tap.
+    const channels = challenge.channels || {};
+    [['emailChannel', channels.email], ['smsChannel', channels.sms]].forEach(([id, available]) => {
+        const button = document.getElementById(id);
+        if (!button) return;
+        button.disabled = !available;
+        button.title = available ? '' : 'This verification method is not available right now.';
+    });
+
     showPanel('channelPanel');
 }
 
-/* ---------- one-time code ---------- */
 async function sendOtp(channel) {
-    if (!verification) return;
-    const code = randomOtp();
-    verification.selectedChannel = channel;
-    verification.code = code;
-    verification.expiresAt = Date.now() + 10 * 60 * 1000;
-    const destinationValue = channel === 'email' ? verification.account.email : verification.account.phone;
+    if (!challenge) return showError('channelError', 'This verification has expired. Please start again.');
 
+    setBusy(true);
     try {
-        const payload = await api('/api/send-otp', { method: 'POST', body: JSON.stringify({ channel, destination: destinationValue, code }) });
-        if (payload.testMode && payload.code) verification.code = payload.code;
+        const sent = await api('/api/auth/otp/send', {
+            method: 'POST',
+            body: JSON.stringify({ challengeId: challenge.id, channel })
+        });
+        challenge.channel = channel;
+        showOtpPanel(sent);
     } catch (error) {
-        const localTesting = window.location.protocol === 'file:' || ['localhost', '127.0.0.1'].includes(window.location.hostname);
-        if (!localTesting) return showError('channelError', error.message);
-        verification.code = '123456';
-        verification.expiresAt = Date.now() + 10 * 60 * 1000;
-        const fallbackHint = document.getElementById('demoOtp');
-        fallbackHint.hidden = false;
-        fallbackHint.textContent = 'Local testing code: 123456';
+        // Stay on whichever panel the person can act from.
+        showError(document.getElementById('otpPanel').classList.contains('active') ? 'otpError' : 'channelError', error.message);
+    } finally {
+        setBusy(false);
     }
+}
 
-    document.getElementById('otpTitle').textContent = verification.purpose === 'login' ? 'Verify your sign in' : 'Enter verification code';
-    const destination = channel === 'email' ? maskEmail(verification.account.email) : maskPhone(verification.account.phone);
-    document.getElementById('otpDescription').textContent = `We sent a six-digit ${channel === 'email' ? 'email' : 'SMS'} code to ${destination}.`;
+function showOtpPanel(sent) {
+    document.getElementById('otpTitle').textContent = challenge.purpose === 'login' ? 'Verify your sign in' : 'Enter verification code';
+    document.getElementById('otpDescription').textContent =
+        `We sent a six-digit ${sent.channel === 'email' ? 'email' : 'SMS'} code to ${sent.destination}.`;
     document.querySelectorAll('.otp-inputs input').forEach(input => input.value = '');
+
+    // In test mode the server tells us the code it generated, because no provider was
+    // contacted. With real credentials this field is simply absent.
     const hint = document.getElementById('demoOtp');
-    const localPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    hint.hidden = !localPreview;
-    hint.textContent = localPreview ? `Local preview code: ${verification.code}` : '';
+    hint.hidden = !sent.testCode;
+    hint.textContent = sent.testCode ? `Test mode — your code is ${sent.testCode}` : '';
+
     showPanel('otpPanel');
-    startResendTimer();
+    startResendTimer(sent.resendIn || 30);
     setTimeout(() => document.querySelector('.otp-inputs input').focus(), 0);
 }
 
-function startResendTimer() {
+function startResendTimer(seconds) {
     clearInterval(resendInterval);
-    let seconds = 30;
     const timer = document.getElementById('resendTimer');
     const button = document.getElementById('resendButton');
     button.disabled = true;
@@ -184,49 +217,80 @@ function startResendTimer() {
         render();
     }, 1000);
 }
-function resendOtp() { if (verification?.selectedChannel) sendOtp(verification.selectedChannel); }
-function cancelVerification() { verification = null; clearInterval(resendInterval); showPanel('signInPanel'); }
+
+function resendOtp() { if (challenge && challenge.channel) sendOtp(challenge.channel); }
+
+function cancelVerification() {
+    clearInterval(resendInterval);
+    // Tell the server to drop it as well, rather than leaving a live challenge behind.
+    if (challenge) api('/api/auth/otp/cancel', { method: 'POST', body: JSON.stringify({ challengeId: challenge.id }) }).catch(() => { });
+    challenge = null;
+    showPanel('signInPanel');
+}
+
+/* ---------- step three: the code ---------- */
+
 function enteredOtp() { return [...document.querySelectorAll('.otp-inputs input')].map(input => input.value).join(''); }
 
 async function verifyOtp() {
-    if (!verification || Date.now() > verification.expiresAt) return showError('otpError', 'This code has expired. Please request a new code.');
-    if (enteredOtp() !== verification.code) return showError('otpError', 'The verification code is incorrect. Please try again.');
-    clearInterval(resendInterval);
+    if (!challenge) return showError('otpError', 'This verification has expired. Please start again.');
 
-    if (verification.purpose === 'register') {
-        setBusy(true);
-        try {
-            // Written to the server database — new sign-ups are always plain users;
-            // an administrator promotes them from User Management.
-            await api('/api/auth/register', { method: 'POST', body: JSON.stringify(verification.account) });
-            document.getElementById('loginIdentifier').value = verification.account.email;
-            document.getElementById('loginPassword').value = '';
-            verification = null;
-            showPanel('signInPanel');
-            showError('loginError', 'Account created. You can now sign in.');
-        } catch (error) {
-            showPanel('createPanel');
-            showError('createError', error.message);
-        } finally {
-            setBusy(false);
+    const code = enteredOtp();
+    if (!/^\d{6}$/.test(code)) return showError('otpError', 'Enter all six digits of your code.');
+
+    setBusy(true);
+    try {
+        // The server checks the code (or asks the SMS provider to) and answers with the
+        // outcome of the flow — never with the code itself.
+        const result = await api('/api/auth/otp/verify', {
+            method: 'POST',
+            body: JSON.stringify({ challengeId: challenge.id, code })
+        });
+        clearInterval(resendInterval);
+
+        if (challenge.purpose === 'login') {
+            challenge = null;
+            return completeLogin(result);
         }
-        return;
-    }
 
-    if (verification.purpose === 'login') { completeLogin(verification.session); return; }
-    showPanel('newPasswordPanel');
+        if (challenge.purpose === 'register') {
+            document.getElementById('loginIdentifier').value = result.account.email;
+            document.getElementById('loginPassword').value = '';
+            challenge = null;
+            showPanel('signInPanel');
+            return showError('loginError', 'Account created and verified. You can now sign in.');
+        }
+
+        // A reset: the challenge stays alive for a few minutes so the new password can be
+        // set against it, and for nothing else.
+        return showPanel('newPasswordPanel');
+    } catch (error) {
+        showError('otpError', error.message);
+    } finally {
+        setBusy(false);
+    }
 }
 
 async function finishPasswordReset() {
+    if (!challenge) return showError('newPasswordError', 'This password reset has expired. Please start again.');
+
     const password = document.getElementById('newPassword').value;
     const confirmation = document.getElementById('newPasswordConfirm').value;
+    if (password.length < 8) return showError('newPasswordError', 'Password must be at least 8 characters.');
     if (password !== confirmation) return showError('newPasswordError', 'Your password and confirmation do not match.');
+
     setBusy(true);
     try {
-        await api('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ identifier: verification.identifier, password }) });
-        document.getElementById('loginIdentifier').value = verification.account.email;
+        // The server refuses this unless it was this challenge that passed verification.
+        const account = await api('/api/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ challengeId: challenge.id, password })
+        });
+        document.getElementById('loginIdentifier').value = account.email;
         document.getElementById('loginPassword').value = '';
-        verification = null;
+        document.getElementById('newPassword').value = '';
+        document.getElementById('newPasswordConfirm').value = '';
+        challenge = null;
         showPanel('signInPanel');
         showError('loginError', 'Password updated. Sign in with your new password.');
     } catch (error) {

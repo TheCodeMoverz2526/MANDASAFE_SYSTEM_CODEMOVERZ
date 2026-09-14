@@ -33,6 +33,9 @@ Route::get('/summary', [AnalyticsController::class, 'summary']);
 Route::get('/hotspots', [AnalyticsController::class, 'hotspots']);
 Route::get('/barangays', [AnalyticsController::class, 'barangays']);
 Route::get('/otp-status', [AnalyticsController::class, 'otpStatus']);
+
+/* Retired: this endpoint used to deliver a code the BROWSER had generated, which meant the
+   browser also decided whether it matched. Verification now lives under /api/auth/otp/. */
 Route::post('/send-otp', [AnalyticsController::class, 'sendOtp']);
 
 Route::get('/incidents', [IncidentController::class, 'index']);
@@ -41,10 +44,16 @@ Route::get('/prediction-inputs', [PredictionInputController::class, 'index']);
 /* ---------- sign-in ---------- */
 Route::prefix('auth')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
-    Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/contact', [AuthController::class, 'contact']);
+
+    // Steps two and three — send the code, then check it. The code never leaves the server.
+    Route::post('/otp/send', [AuthController::class, 'sendOtp']);
+    Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);
+    Route::post('/otp/cancel', [AuthController::class, 'cancelOtp']);
+
+    // Only reachable with a challenge that was verified moments ago.
     Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::any('/{any}', [AuthController::class, 'missing'])->where('any', '.*');
