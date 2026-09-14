@@ -10,29 +10,11 @@
 <main class="main">
   <div class="page-head"><div><h1>My Account</h1><p>Your MandaSafe account details.</p></div></div>
 
-  <div class="grid g-2">
-    <div class="card">
-      <div class="card-head"><h2>Account Information</h2></div>
-      <div class="card-body" id="info"><div class="empty">Loading…</div></div>
+  <div class="card">
+    <div class="card-head"><h2>Account Information</h2>
+      <button type="button" class="btn btn-ghost" id="editProfileBtn" style="margin-left:auto;display:none;padding:8px 16px;font-size:13px;">Edit</button>
     </div>
-
-    <div class="card">
-      <div class="card-head"><h2>Access Level</h2></div>
-      <div class="card-body">
-        <div id="role"></div>
-        <div class="ro-note" style="margin-top:16px" data-i="info">
-          <div><b>Resident accounts are read-only.</b><br>
-          Incident records and forecasts are maintained by the Mandaluyong City Traffic Planning
-          and Management Office. To have an incident added or corrected, contact the office —
-          the details are on the Contact Support page.</div>
-        </div>
-        <div class="notice" style="margin-top:14px"><span class="ni" data-i="key"></span>
-          <div><h4>Change your password</h4>
-          <p>Sign out, then use “Forgot password?” on the sign-in page to set a new one.</p></div></div>
-        <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="logout()">
-          <span data-i="logout" style="width:17px;height:17px"></span> Sign Out</button>
-      </div>
-    </div>
+    <div class="card-body" id="info"><div class="empty">Loading…</div></div>
   </div>
 </main>
 
@@ -41,11 +23,10 @@
 <script>
 if (requireAuth()) {
   buildShell('profile');
-  (async () => {
-    let me;
-    try { me = await API.me(); }
-    catch (error) { setState(document.getElementById('info'), error.message, true); return; }
+  let me;
 
+  function renderView() {
+    document.getElementById('editProfileBtn').style.display = '';
     document.getElementById('info').innerHTML = `
       <div class="pf-avatar" style="background:${me.color}22;color:${me.color}">${esc(me.avatar)}</div>
       <div class="pf-row"><span class="k">Full Name</span><span class="v">${esc(me.name)}</span></div>
@@ -54,17 +35,57 @@ if (requireAuth()) {
       <div class="pf-row"><span class="k">Office / Area</span><span class="v">${esc(me.dept || '—')}</span></div>
       <div class="pf-row"><span class="k">Account Created</span><span class="v">${new Date(me.createdAt).toLocaleDateString()}</span></div>
       <div class="pf-row"><span class="k">Last Sign In</span><span class="v">${me.lastLoginAt ? new Date(me.lastLoginAt).toLocaleString() : 'This is your first session'}</span></div>`;
+  }
 
-    document.getElementById('role').innerHTML = me.role === 'admin'
-      ? `<div class="notice"><span class="ni">${icon('shield')}</span><div><h4>Administrator</h4>
-         <p>You can record incidents and baseline data in the RIMAS console.</p>
-         <a class="btn btn-primary" style="margin-top:10px" href="Mandasafe.html">Open Admin Console</a></div></div>`
-      : `<div class="notice"><span class="ni">${icon('user')}</span><div><h4>Resident (read-only)</h4>
-         <p>You can view every incident, hotspot and forecast the city publishes.</p></div></div>`;
+  function renderEdit() {
+    document.getElementById('editProfileBtn').style.display = 'none';
+    document.getElementById('info').innerHTML = `
+      <div class="field"><label for="editName">Full Name</label>
+        <input class="input" id="editName" value="${esc(me.name)}"></div>
+      <div class="field"><label for="editEmail">Email Address</label>
+        <input class="input" id="editEmail" type="email" value="${esc(me.email)}"></div>
+      <div class="field"><label for="editPhone">Contact Number</label>
+        <input class="input" id="editPhone" type="tel" value="${esc(me.phone || '')}"></div>
+      <div id="editProfileError" class="notice notice-amber" style="display:none;margin-bottom:16px"></div>
+      <div style="display:flex;gap:10px">
+        <button type="button" class="btn btn-primary" id="saveProfileBtn">Save Changes</button>
+        <button type="button" class="btn btn-ghost" id="cancelProfileBtn">Cancel</button>
+      </div>`;
 
-    document.querySelectorAll('[data-i]').forEach(el => {
-      if (!el.querySelector('svg')) el.insertAdjacentHTML('afterbegin', icon(el.dataset.i));
-    });
+    document.getElementById('cancelProfileBtn').onclick = renderView;
+    document.getElementById('saveProfileBtn').onclick = async () => {
+      const body = {
+        name: document.getElementById('editName').value.trim(),
+        email: document.getElementById('editEmail').value.trim(),
+        phone: document.getElementById('editPhone').value.trim()
+      };
+      const errorEl = document.getElementById('editProfileError');
+      const saveBtn = document.getElementById('saveProfileBtn');
+      saveBtn.disabled = true;
+      try {
+        me = await API.updateProfile(body);
+        const session = currentUser();
+        if (session) localStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, ...me }));
+        const nameEl = document.querySelector('.userchip .nm');
+        const avatarEl = document.querySelector('.userchip .avatar');
+        if (nameEl) nameEl.textContent = me.name;
+        if (avatarEl) avatarEl.textContent = me.avatar;
+        renderView();
+        toast('Profile updated');
+      } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'flex';
+        saveBtn.disabled = false;
+      }
+    };
+  }
+
+  (async () => {
+    try { me = await API.me(); }
+    catch (error) { setState(document.getElementById('info'), error.message, true); return; }
+
+    renderView();
+    document.getElementById('editProfileBtn').onclick = renderEdit;
   })();
 }
 </script>

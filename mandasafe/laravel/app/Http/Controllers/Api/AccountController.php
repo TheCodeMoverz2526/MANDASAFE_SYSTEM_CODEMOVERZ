@@ -43,8 +43,8 @@ class AccountController extends ApiController
     }
 
     /** DELETE /api/accounts/{id} */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
-        return $this->attempt(fn () => $this->accounts->deleteAccount(rawurldecode($id)));
+        return $this->attempt(fn () => $this->accounts->deleteAccount(rawurldecode($id), $this->actor($request)->email));
     }
 }

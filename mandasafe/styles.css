@@ -1290,34 +1290,45 @@ body {
 .pagination {
     display: flex;
     align-items: center;
-    gap: 4px;
 }
 
 .page-btn {
     width: 30px;
     height: 30px;
-    border-radius: 6px;
-    border: none;
+    border-radius: 0;
     background: white;
     color: var(--gray-600);
     cursor: pointer;
     font-size: 12px;
     font-weight: 600;
     border: 1px solid var(--gray-200);
+    margin-left: -1px;
+    position: relative;
     transition: all .2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
+.page-btn:first-child {
+    margin-left: 0;
+    border-radius: 6px 0 0 6px;
+}
+
+.page-btn:last-child {
+    border-radius: 0 6px 6px 0;
+}
+
 .page-btn.active {
     background: var(--blue);
     color: white;
     border-color: var(--blue);
+    z-index: 1;
 }
 
 .page-btn:hover:not(.active) {
     background: var(--gray-50);
+    z-index: 1;
 }
 
 .page-btn:disabled {
@@ -1965,6 +1976,10 @@ body {
 /* ===== OTP ACCOUNT ACCESS ===== */
 .password-wrap { position: relative; }
 .password-wrap .form-input { padding-right: 43px; }
+/* Edge injects its own reveal/clear icon inside password inputs, which then sits right next
+   to our own eye toggle button — hide the browser's so there's only ever one. */
+.password-wrap .form-input::-ms-reveal,
+.password-wrap .form-input::-ms-clear { display: none; }
 .password-toggle { position: absolute; top: 50%; right: 1px; transform: translateY(-50%); width: 40px; height: calc(100% - 2px); background: transparent; border: 0; color: var(--gray-400); cursor: pointer; border-radius: 8px; }
 .password-toggle:hover { color: var(--blue); }
 .password-strength { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; font-weight: 700; }
@@ -2142,7 +2157,7 @@ body {
     position: absolute;
     top: calc(var(--topbar-h) + 4px);
     right: 8px;
-    z-index: 500;
+    z-index: 1200;
     background: white;
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, .18);

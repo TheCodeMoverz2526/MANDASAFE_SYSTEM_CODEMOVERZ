@@ -34,6 +34,17 @@ class AuthController extends ApiController
         }, 400, 201);
     }
 
+    /** PUT /api/auth/profile — a signed-in account editing its own name, email or phone. */
+    public function updateProfile(Request $request)
+    {
+        $account = $this->accounts->accountForToken($this->accounts->tokenFromRequest($request));
+        if (! $account) {
+            return response()->json(['error' => 'Please sign in to continue.'], 401);
+        }
+
+        return $this->attempt(fn () => $this->accounts->updateOwnProfile($account, $this->body($request)));
+    }
+
     /** POST /api/auth/login — returns the session token the pages keep in localStorage. */
     public function login(Request $request)
     {

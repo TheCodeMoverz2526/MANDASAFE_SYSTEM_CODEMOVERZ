@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Log;
+use Throwable;
+
 /**
  * Road-safety predictions computed purely from data that actually exists in the database:
  * admin-entered baseline monthly counts (prediction inputs) plus logged incidents. No
@@ -26,14 +29,26 @@ class PredictionService
      */
     private static function scoreGroupSeverity(array $incidents, array $groupIncidents): array
     {
-        $response = MlBridge::run('severity_forest.py', [
-            'incidents' => array_values($incidents),
-            'groups' => array_map(
-                fn ($key, $rows) => ['key' => $key, 'incidents' => array_values($rows)],
-                array_keys($groupIncidents),
-                array_values($groupIncidents)
-            ),
-        ]);
+        try {
+            $response = MlBridge::run('severity_forest.py', [
+                'incidents' => array_values($incidents),
+                'groups' => array_map(
+                    fn ($key, $rows) => ['key' => $key, 'incidents' => array_values($rows)],
+                    array_keys($groupIncidents),
+                    array_values($groupIncidents)
+                ),
+            ]);
+        } catch (Throwable $e) {
+            // The forest is an enhancement, not a requirement -- computePredictions() already
+            // falls back to the frequency signal alone (mlModel: 'heuristic') whenever the model
+            // isn't trained, so a broken/unavailable Python interpreter degrades to that same
+            // path instead of failing the whole predictions/summary request.
+            Log::warning('severity_forest.py unavailable, falling back to heuristic scoring', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['trained' => false, 'oobAccuracy' => null, 'probabilities' => []];
+        }
 
         $probabilities = [];
         foreach ($response['results'] ?? [] as $result) {

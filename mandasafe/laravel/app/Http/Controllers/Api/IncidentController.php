@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Incident;
 use App\Models\Setting;
 use App\Services\AccountService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\DB;
  */
 class IncidentController extends ApiController
 {
+    public function __construct(private NotificationService $notifications)
+    {
+    }
+
     private function nextIncidentId(): string
     {
         return '#A' . (10000 + Setting::nextSequence('nextIncidentSeq'));
@@ -69,7 +74,10 @@ class IncidentController extends ApiController
 
             Setting::touchDataVersion();
 
-            return $incident->toApi();
+            $api = $incident->toApi();
+            $this->notifications->notifyIncidentCreated($api, $this->actor($request)->email);
+
+            return $api;
         }, 400, 201);
     }
 
@@ -99,7 +107,10 @@ class IncidentController extends ApiController
 
             Setting::touchDataVersion();
 
-            return $incident->toApi();
+            $api = $incident->toApi();
+            $this->notifications->notifyIncidentUpdated($api, $this->actor($request)->email);
+
+            return $api;
         });
     }
 
@@ -180,6 +191,7 @@ class IncidentController extends ApiController
             });
 
             Setting::touchDataVersion();
+            $this->notifications->notifyIncidentsImported(count($created), $actorEmail);
 
             return [
                 'created' => $created,

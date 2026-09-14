@@ -30,6 +30,10 @@ class AccountService
         'password' => 'Admin@2026',
     ];
 
+    public function __construct(private NotificationService $notifications)
+    {
+    }
+
     /** The timestamp format the browser already parses: 2026-09-02T06:53:36.941Z */
     public static function isoNow(): string
     {
@@ -115,7 +119,76 @@ class AccountService
             'last_login_at_iso' => null,
         ]);
 
-        return $account->toApi();
+        $api = $account->toApi();
+
+        // The very first account bootstraps itself as admin, with nobody yet to notify;
+        // every account after that is someone the administrators should know arrived.
+        if ($role === 'user') {
+            $this->notifications->notifyAccountCreated($api);
+        }
+
+        return $api;
+    }
+
+    /**
+     * A signed-in account editing its own name, email or contact number — resident or admin,
+     * from the profile page rather than User Management. Role, status and dept stay off
+     * limits here; those remain an administrator's call via updateAccount().
+     */
+    public function updateOwnProfile(Account $account, array $body): array
+    {
+        $changed = [];
+
+        if (array_key_exists('name', $body)) {
+            $name = trim((string) $body['name']);
+            if (strlen($name) < 2) {
+                throw new RimasException('Enter your full name.');
+            }
+            if ($name !== $account->name) {
+                $account->name = $name;
+                $changed[] = 'name';
+            }
+        }
+
+        if (array_key_exists('email', $body)) {
+            $email = Account::normaliseEmail($body['email']);
+            if (! preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
+                throw new RimasException('Enter a valid email address.');
+            }
+            if ($email !== $account->email) {
+                if (Account::where('email', $email)->where('id', '!=', $account->id)->exists()) {
+                    throw new RimasException('An account already uses this email address.');
+                }
+                $account->email = $email;
+                $changed[] = 'email';
+            }
+        }
+
+        if (array_key_exists('phone', $body)) {
+            $phone = Account::normalisePhone($body['phone']);
+            if (strlen($phone) < 9) {
+                throw new RimasException('Enter a valid contact number.');
+            }
+            if ($phone !== $account->phone) {
+                if (Account::where('phone', $phone)->where('id', '!=', $account->id)->exists()) {
+                    throw new RimasException('An account already uses this contact number.');
+                }
+                $account->phone = $phone;
+                $changed[] = 'phone';
+            }
+        }
+
+        if ($changed === []) {
+            return $account->toApi();
+        }
+
+        $account->updated_at_iso = self::isoNow();
+        $account->save();
+
+        $api = $account->toApi();
+        $this->notifications->notifyProfileUpdated($api, $changed);
+
+        return $api;
     }
 
     public function verifyCredentials($identifier, $password): Account
@@ -215,7 +288,7 @@ class AccountService
         return $account->toApi();
     }
 
-    public function deleteAccount(string $id): array
+    public function deleteAccount(string $id, ?string $actorEmail = null): array
     {
         $account = Account::find($id);
         if (! $account) {
@@ -225,8 +298,12 @@ class AccountService
             throw new RimasException('At least one active administrator must remain.');
         }
 
+        $api = $account->toApi();
+
         RimasSession::where('account_id', $id)->delete();
         $account->delete();
+
+        $this->notifications->notifyAccountRemoved($api, $actorEmail);
 
         return ['deleted' => $id];
     }

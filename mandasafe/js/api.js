@@ -1,7 +1,8 @@
 /* =========================================================
    MandaSafe — resident (user) side API + session helpers
    Every figure on the resident pages comes from the same database the
-   administrators write to through the RIMAS console. Nothing here writes.
+   administrators write to through the RIMAS console. The one exception is
+   a resident's own profile (name/email/phone) — everything else is read-only.
    ========================================================= */
 
 /* The signed-in account is kept in localStorage rather than sessionStorage: the resident
@@ -40,13 +41,40 @@ async function apiGet(path) {
     return data;
 }
 
+async function apiSend(path, method, body) {
+    let response;
+    try {
+        response = await fetch(path, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                ...(authToken() ? { Authorization: `Bearer ${authToken()}` } : {})
+            },
+            body: JSON.stringify(body)
+        });
+    } catch {
+        throw new Error('Cannot reach the MandaSafe server. Start it with start-rimas.bat (or "node server.js").');
+    }
+    let data = null;
+    try { data = await response.json(); } catch { /* no body */ }
+    if (response.status === 401) {
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(TOKEN_KEY);
+        location.replace('login.html');
+        throw new Error('Session expired.');
+    }
+    if (!response.ok) throw new Error((data && data.error) || `Request failed (${response.status})`);
+    return data;
+}
+
 const API = {
     summary:     () => apiGet('/api/summary'),
     incidents:   () => apiGet('/api/incidents'),
     hotspots:    () => apiGet('/api/hotspots'),
     predictions: () => apiGet('/api/predictions'),
     stats:       () => apiGet('/api/stats'),
-    me:          () => apiGet('/api/auth/me')
+    me:          () => apiGet('/api/auth/me'),
+    updateProfile: (body) => apiSend('/api/auth/profile', 'PUT', body)
 };
 
 /* MandaSafe is a served application, not loose files: opening a page straight from the

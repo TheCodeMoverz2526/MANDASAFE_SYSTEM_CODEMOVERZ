@@ -50,6 +50,8 @@ async function restoreDashboardSession() {
     }
 
     loadIncidentsFromServer();
+    loadNotifications();
+    setInterval(loadNotifications, 60000);
 }
 
 async function doLogout() {
@@ -125,7 +127,10 @@ const api = {
     getAccounts: () => apiRequest('/api/accounts'),
     createAccount: (body) => apiRequest('/api/accounts', { method: 'POST', body: JSON.stringify(body) }),
     updateAccount: (id, body) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
-    deleteAccount: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    deleteAccount: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getNotifications: () => apiRequest('/api/notifications'),
+    markNotificationRead: (id) => apiRequest(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' }),
+    markAllNotificationsRead: () => apiRequest('/api/notifications/read-all', { method: 'POST' })
 };
 
 // ===== DATA =====
@@ -133,7 +138,7 @@ let incidents = [];
 
 let filteredIncidents = incidents.slice();
 let incidentPage = 1;
-const PAGE_SIZE = 5;
+let PAGE_SIZE = 10;
 let editingIndex = -1; // -1 = adding new, otherwise editing incidents[editingIndex]
 
 async function loadIncidentsFromServer() {
@@ -296,9 +301,21 @@ function resetIncidentFilters() {
     showToast('↺ Filters reset');
 }
 
+function updateIncidentPageSize() {
+    const tbody = document.getElementById('incidentTableBody');
+    const card = tbody?.closest('.card');
+    if (!card) return;
+    const ROW_HEIGHT = 41;
+    const FOOTER_HEIGHT = 47;
+    const BOTTOM_GAP = 24;
+    const available = window.innerHeight - card.getBoundingClientRect().top - FOOTER_HEIGHT - BOTTOM_GAP;
+    PAGE_SIZE = Math.max(5, Math.floor(available / ROW_HEIGHT));
+}
+
 function renderTable() {
     const tbody = document.getElementById('incidentTableBody');
     if (!tbody) return;
+    updateIncidentPageSize();
     const total = filteredIncidents.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     if (incidentPage > totalPages) incidentPage = totalPages;
@@ -344,6 +361,14 @@ function renderPagination(totalPages) {
     html += `<button class="page-btn" ${incidentPage === totalPages ? 'disabled' : ''} onclick="gotoPage(${incidentPage + 1})"><i class="fas fa-chevron-right"></i></button>`;
     el.innerHTML = html;
 }
+
+let _resizeIncidentTimer = null;
+window.addEventListener('resize', () => {
+    clearTimeout(_resizeIncidentTimer);
+    _resizeIncidentTimer = setTimeout(() => {
+        if (document.getElementById('page-incidents')?.classList.contains('active')) renderTable();
+    }, 200);
+});
 
 function gotoPage(p) {
     const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE));
@@ -537,6 +562,31 @@ async function saveUser() {
         showToast('⚠️ ' + error.message);
     }
 }
+// A single reusable "are you sure?" modal for actions that shouldn't fire on a stray click,
+// centered on screen (unlike the browser's own confirm()) and styled to match the rest of
+// the console instead of showing the page's URL in the dialog chrome.
+let confirmModalAction = null;
+function openConfirmModal({ title = 'Are you sure?', message = '', icon = 'fas fa-triangle-exclamation', danger = true, confirmLabel = 'Confirm', onConfirm }) {
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalMessage').textContent = message;
+    document.getElementById('confirmModalIcon').className = icon;
+    document.getElementById('confirmModalIconWrap').style.cssText = `width:60px;height:60px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:26px;background:${danger ? '#fef2f2' : '#eff6ff'};color:${danger ? '#dc2626' : '#2563eb'};`;
+    const confirmBtn = document.getElementById('confirmModalConfirmBtn');
+    confirmBtn.textContent = confirmLabel;
+    confirmBtn.className = danger ? 'btn btn-danger' : 'btn btn-primary';
+    confirmModalAction = onConfirm;
+    document.getElementById('confirmModal').classList.add('open');
+}
+function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('open');
+    confirmModalAction = null;
+}
+function runConfirmModal() {
+    const action = confirmModalAction;
+    closeConfirmModal();
+    if (action) action();
+}
+
 let pendingDeleteIdx = -1;
 function askDelete(idx) { pendingDeleteIdx = idx; document.getElementById('deleteModal').classList.add('open'); }
 async function confirmDelete() {
@@ -988,23 +1038,102 @@ function buildDayPeriodMatrix(list) {
 
 // Analytics, Reports, and the GIS Map all read from the same `incidents` array — refreshing
 // it here means anything just imported shows up here without a separate wiring step.
-async function initAnalyticsCharts() {
-    await loadIncidentsFromServer();
+let analyticsPredictions = [];
 
-    const monthly = buildMonthlySeries(incidents);
+function populateAnalyticsFilterOptions() {
+    const fill = (id, values) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = select.firstElementChild.outerHTML + values.map(v => `<option value="${escapeMapHtml(v)}">${escapeMapHtml(v)}</option>`).join('');
+        select.value = values.includes(current) ? current : 'all';
+    };
+    fill('anaFltBarangay', [...new Set(incidents.map(r => r.barangay).filter(Boolean))].sort());
+    fill('anaFltRoad', [...new Set(incidents.map(r => r.road).filter(Boolean))].sort());
+    fill('anaFltVehicle', [...new Set(incidents.map(r => r.type).filter(Boolean))].sort());
+}
+
+function analyticsDateMatches(record, { from, to }) {
+    if (!from && !to) return true;
+    const date = parseIncidentDate(record);
+    if (!date) return false;
+    if (from && date < new Date(from + 'T00:00:00')) return false;
+    if (to && date > new Date(to + 'T23:59:59')) return false;
+    return true;
+}
+
+function applyAnalyticsFilters() {
+    const dateFrom = document.getElementById('anaFltDateFrom').value;
+    const dateTo = document.getElementById('anaFltDateTo').value;
+    const brgy = document.getElementById('anaFltBarangay').value;
+    const road = document.getElementById('anaFltRoad').value;
+    const sev = document.getElementById('anaFltSeverity').value;
+    const type = document.getElementById('anaFltVehicle').value;
+
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+        showToast('⚠️ "From" date must be before "To" date');
+        return;
+    }
+
+    const filtered = incidents.filter(r => {
+        if (brgy !== 'all' && r.barangay !== brgy) return false;
+        if (road !== 'all' && r.road !== road) return false;
+        if (sev !== 'all' && r.sev !== sev) return false;
+        if (type !== 'all' && r.type !== type) return false;
+        if (!analyticsDateMatches(r, { from: dateFrom, to: dateTo })) return false;
+        return true;
+    });
+    renderAnalyticsCharts(filtered, { barangay: brgy, road });
+    showToast(`🔍 Filter applied — ${filtered.length} result${filtered.length === 1 ? '' : 's'}`);
+}
+
+function resetAnalyticsFilters() {
+    ['anaFltBarangay', 'anaFltRoad', 'anaFltSeverity', 'anaFltVehicle'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = 'all';
+    });
+    ['anaFltDateFrom', 'anaFltDateTo'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    renderAnalyticsCharts(incidents, {});
+    showToast('↺ Filters reset');
+}
+
+function renderAnalyticsCharts(list, predictionFilter = {}) {
+    const fatal = list.filter(r => r.sev === 'Fatal').length;
+    const injury = list.filter(r => r.sev === 'Injury').length;
+    const highRisk = analyticsPredictions.filter(p =>
+        p.riskLevel === 'high' &&
+        (!predictionFilter.barangay || predictionFilter.barangay === 'all' || p.barangay === predictionFilter.barangay) &&
+        (!predictionFilter.road || predictionFilter.road === 'all' || p.road === predictionFilter.road)
+    ).length;
+    const setStat = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    setStat('anaStatTotal', list.length);
+    setStat('anaStatFatal', fatal);
+    setStat('anaStatInjury', injury);
+    setStat('anaStatHighRisk', highRisk);
+
+    const monthly = buildMonthlySeries(list);
     safeChart('analyticsTimeChart', { type: 'line', data: { labels: monthly.labels, datasets: [{ label: 'Incidents', data: monthly.totals, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.12)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#1a56db', pointBorderColor: 'white', pointBorderWidth: 2 }, { label: 'Injuries', data: monthly.injuries, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.1)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#f59e0b', pointBorderColor: 'white', pointBorderWidth: 2 }] }, options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } }, scales: { y: { grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
 
-    const topBarangays = topGroupCounts(incidents, 'barangay', 6);
+    const topBarangays = topGroupCounts(list, 'barangay', 6);
     safeChart('barangayChart', { type: 'bar', data: { labels: topBarangays.map(([b]) => b), datasets: [{ data: topBarangays.map(([, c]) => c), backgroundColor: ['#1a56db', '#3b82f6', '#f59e0b', '#22c55e', '#94a3b8', '#f87171'], borderRadius: 5 }] }, options: { ...chartDefaults, indexAxis: 'y', scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
 
-    const topTypes = topGroupCounts(incidents, 'type', 4);
-    const otherCount = incidents.length - topTypes.reduce((a, [, c]) => a + c, 0);
+    const topTypes = topGroupCounts(list, 'type', 4);
+    const otherCount = list.length - topTypes.reduce((a, [, c]) => a + c, 0);
     const typeLabels = topTypes.map(([t]) => t).concat(otherCount > 0 ? ['Other'] : []);
     const typeCounts = topTypes.map(([, c]) => c).concat(otherCount > 0 ? [otherCount] : []);
     safeChart('typeDonut', { type: 'doughnut', data: { labels: typeLabels, datasets: [{ data: typeCounts, backgroundColor: ['#1a56db', '#f59e0b', '#fbbf24', '#94a3b8', '#c4b5fd'], borderWidth: 3, borderColor: 'white', hoverOffset: 6 }] }, options: { ...chartDefaults, cutout: '72%' } });
 
-    const dayPeriods = buildDayPeriodMatrix(incidents);
+    const dayPeriods = buildDayPeriodMatrix(list);
     safeChart('heatmapChart', { type: 'bar', data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Morning', data: dayPeriods.Morning, backgroundColor: 'rgba(34,197,94,.6)', borderRadius: 4 }, { label: 'Afternoon', data: dayPeriods.Afternoon, backgroundColor: 'rgba(245,158,11,.7)', borderRadius: 4 }, { label: 'Evening', data: dayPeriods.Evening, backgroundColor: 'rgba(239,68,68,.8)', borderRadius: 4 }, { label: 'Night', data: dayPeriods.Night, backgroundColor: 'rgba(17,24,39,.7)', borderRadius: 4 }] }, options: { ...chartDefaults, plugins: { legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10 }, padding: 10 } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 } } }, y: { stacked: true, grid: { color: '#f1f5f9' } } } } });
+}
+
+async function initAnalyticsCharts() {
+    await loadIncidentsFromServer();
+    try { analyticsPredictions = await api.getPredictions(); } catch (error) { console.error('Failed to load predictions for analytics:', error); analyticsPredictions = []; }
+
+    populateAnalyticsFilterOptions();
+    renderAnalyticsCharts(incidents, {});
 }
 
 function initReportChart(list) {
@@ -1246,28 +1375,42 @@ async function renderUserTable() {
                     <td><span class="status-badge status-${u.status}">${u.status === 'active' ? '● Active' : '○ Inactive'}</span></td>
                     <td style="font-size:12px;color:var(--gray-500);">${lastLogin}</td>
                     <td><div style="display:flex;gap:5px;">
-                        <button class="btn btn-secondary btn-sm" title="${u.role === 'admin' ? 'Make user' : 'Make administrator'}" onclick="setUserRole('${u.id}','${u.role === 'admin' ? 'user' : 'admin'}')"><i class="fas ${u.role === 'admin' ? 'fa-user' : 'fa-shield-alt'}"></i></button>
                         <button class="btn btn-sm" style="background:${u.status === 'active' ? '#fef2f2' : '#f0fdf4'};color:${u.status === 'active' ? '#dc2626' : '#16a34a'};border:1px solid ${u.status === 'active' ? '#fecaca' : '#bbf7d0'};" title="${u.status === 'active' ? 'Deactivate' : 'Reactivate'}" onclick="toggleUserStatus('${u.id}')"><i class="fas ${u.status === 'active' ? 'fa-ban' : 'fa-check'}"></i></button>
+                        ${isSelf ? '' : `<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" title="Remove account" onclick="deleteUserAccount('${u.id}')"><i class="fas fa-trash-alt"></i></button>`}
                     </div></td>
                 </tr>
             `;
     }).join('');
 }
 
-async function setUserRole(id, role) {
-    try {
-        await api.updateAccount(id, { role });
-        showToast(role === 'admin' ? '🛡️ User promoted to administrator' : '👤 Administrator changed to user');
-        renderUserTable();
-    } catch (error) {
-        showToast('⚠️ ' + error.message);
-    }
-}
-
-async function toggleUserStatus(id) {
+function toggleUserStatus(id) {
     const account = accountList.find(a => a.id === id);
     if (!account) return;
     const status = account.status === 'active' ? 'inactive' : 'active';
+    const apply = () => applyUserStatus(id, status);
+
+    if (status === 'inactive') {
+        openConfirmModal({
+            title: 'Deactivate account?',
+            message: `${account.name} will not be able to sign in until reactivated.`,
+            icon: 'fas fa-ban',
+            danger: true,
+            confirmLabel: 'Deactivate',
+            onConfirm: apply
+        });
+    } else {
+        openConfirmModal({
+            title: 'Reactivate account?',
+            message: `${account.name} will be able to sign in again.`,
+            icon: 'fas fa-check',
+            danger: false,
+            confirmLabel: 'Reactivate',
+            onConfirm: apply
+        });
+    }
+}
+
+async function applyUserStatus(id, status) {
     try {
         await api.updateAccount(id, { status });
         showToast(status === 'active' ? '✅ User reactivated' : '🚫 User deactivated');
@@ -1277,19 +1420,85 @@ async function toggleUserStatus(id) {
     }
 }
 
-// ===== NOTIFICATIONS =====
-const notifications = [];
-function renderNotifications() {
-    const el = document.getElementById('notifList'); if (!el) return;
-    el.innerHTML = notifications.map((n, i) => `
-                <div class="notif-item ${n.type} ${n.unread ? 'unread' : ''}" onclick="markOneRead(${i})">
-                    <div class="notif-icon" style="background:${n.iconBg};color:${n.iconColor};"><i class="${n.icon}"></i></div>
-                    <div class="notif-body"><div class="notif-title">${n.title}</div><div class="notif-desc">${n.desc}</div><div class="notif-time"><i class="fas fa-clock" style="margin-right:4px;opacity:.6;"></i>${n.time}</div></div>
-                    ${n.unread ? '<div class="notif-unread-dot"></div>' : ''}
-                </div>
-            `).join('');
-    updateNotifBadges();
+function deleteUserAccount(id) {
+    const account = accountList.find(a => a.id === id);
+    if (!account) return;
+    openConfirmModal({
+        title: 'Remove account?',
+        message: `This permanently deletes ${account.name}'s account. This action cannot be undone.`,
+        icon: 'fas fa-trash-alt',
+        danger: true,
+        confirmLabel: 'Remove',
+        onConfirm: async () => {
+            try {
+                await api.deleteAccount(id);
+                showToast('🗑️ Account removed');
+                renderUserTable();
+            } catch (error) {
+                showToast('⚠️ ' + error.message);
+            }
+        }
+    });
 }
+
+// ===== NOTIFICATIONS =====
+// The admin console's shared inbox — every administrator reads the same rows from the
+// server, so a new resident sign-up shows up here (and on the bell) for all of them.
+let notifications = [];
+const NOTIF_STYLES = {
+    account_created: { cssType: 'success', icon: 'fas fa-user-plus', iconBg: '#dcfce7', iconColor: '#16a34a' },
+    account_removed: { cssType: 'alert', icon: 'fas fa-user-slash', iconBg: '#fee2e2', iconColor: '#dc2626' },
+    incident_created: { cssType: 'warning', icon: 'fas fa-triangle-exclamation', iconBg: '#ffedd5', iconColor: '#ea580c' },
+    incident_updated: { cssType: 'info', icon: 'fas fa-pen', iconBg: '#dbeafe', iconColor: '#2563eb' },
+    profile_updated: { cssType: 'info', icon: 'fas fa-id-badge', iconBg: '#ede9fe', iconColor: '#7c3aed' }
+};
+const NOTIF_STYLE_DEFAULT = { cssType: 'info', icon: 'fas fa-bell', iconBg: '#dbeafe', iconColor: '#2563eb' };
+
+function notifTimeAgo(iso) {
+    const then = new Date(iso).getTime();
+    if (Number.isNaN(then)) return '';
+    const diffSec = Math.max(0, Math.round((Date.now() - then) / 1000));
+    if (diffSec < 60) return 'just now';
+    const diffMin = Math.round(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.round(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.round(diffHr / 24);
+    return `${diffDay}d ago`;
+}
+
+async function loadNotifications() {
+    try {
+        notifications = await api.getNotifications();
+    } catch (error) {
+        console.error('Failed to load notifications:', error);
+    }
+    updateNotifBadges();
+    if (document.getElementById('page-notifications')?.classList.contains('active')) paintNotifications();
+}
+
+async function renderNotifications() {
+    await loadNotifications();
+    paintNotifications();
+}
+
+function paintNotifications() {
+    const el = document.getElementById('notifList'); if (!el) return;
+    if (notifications.length === 0) {
+        el.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:12px;padding:24px;">No notifications yet.</div>';
+        return;
+    }
+    el.innerHTML = notifications.map(n => {
+        const style = NOTIF_STYLES[n.type] || NOTIF_STYLE_DEFAULT;
+        return `
+                <div class="notif-item ${style.cssType} ${n.unread ? 'unread' : ''}" onclick="markOneRead('${n.id}')">
+                    <div class="notif-icon" style="background:${style.iconBg};color:${style.iconColor};"><i class="${style.icon}"></i></div>
+                    <div class="notif-body"><div class="notif-title">${escapeMapHtml(n.title)}</div><div class="notif-desc">${escapeMapHtml(n.desc || '')}</div><div class="notif-time"><i class="fas fa-clock" style="margin-right:4px;opacity:.6;"></i>${notifTimeAgo(n.createdAt)}</div></div>
+                    ${n.unread ? '<div class="notif-unread-dot"></div>' : ''}
+                </div>`;
+    }).join('');
+}
+
 function updateNotifBadges() {
     const count = notifications.filter(n => n.unread).length;
     const bell = document.getElementById('bellBadge');
@@ -1299,20 +1508,26 @@ function updateNotifBadges() {
     if (sb) sb.textContent = count;
     if (sb) sb.style.display = count ? 'inline-block' : 'none';
 }
-function markOneRead(i) {
-    notifications[i].unread = false;
-    renderNotifications();
+async function markOneRead(id) {
+    const n = notifications.find(x => x.id === id);
+    if (!n || !n.unread) return;
+    n.unread = false;
+    paintNotifications();
+    updateNotifBadges();
+    try { await api.markNotificationRead(id); } catch (error) { console.error('markNotificationRead failed:', error); }
 }
-function markAllRead() {
+async function markAllRead() {
+    if (notifications.every(n => !n.unread)) return;
     notifications.forEach(n => n.unread = false);
-    renderNotifications();
-    showToast('All notifications marked as read');
+    paintNotifications();
+    updateNotifBadges();
+    try {
+        await api.markAllNotificationsRead();
+        showToast('All notifications marked as read');
+    } catch (error) {
+        console.error('markAllNotificationsRead failed:', error);
+    }
 }
-
-// ===== TIME TABS =====
-document.querySelectorAll('.time-tab').forEach(btn => {
-    btn.addEventListener('click', () => { document.querySelectorAll('.time-tab').forEach(b => b.classList.remove('active')); btn.classList.add('active'); });
-});
 
 document.querySelectorAll('.report-type-item').forEach(item => {
     item.addEventListener('click', () => { document.querySelectorAll('.report-type-item').forEach(i => i.classList.remove('active')); item.classList.add('active'); });

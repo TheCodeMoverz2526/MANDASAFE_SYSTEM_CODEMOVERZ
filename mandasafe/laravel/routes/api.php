@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\IncidentController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PredictionInputController;
 use Illuminate\Support\Facades\Route;
 
@@ -40,6 +41,7 @@ Route::get('/prediction-inputs', [PredictionInputController::class, 'index']);
 /* ---------- sign-in ---------- */
 Route::prefix('auth')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/contact', [AuthController::class, 'contact']);
@@ -63,4 +65,8 @@ Route::middleware('rimas.admin')->group(function () {
     Route::post('/accounts', [AccountController::class, 'store']);
     Route::put('/accounts/{id}', [AccountController::class, 'update']);
     Route::delete('/accounts/{id}', [AccountController::class, 'destroy']);
+
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::put('/notifications/{id}/read', [NotificationController::class, 'markRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
 });
