@@ -94,8 +94,15 @@ img{max-width:100%;display:block}
 .side-card p{font-size:11.5px;font-weight:600;color:#e2ecff;line-height:1.35}
 .side-copy{font-size:10.5px;color:#8fb0e6;margin-top:12px;padding:0 4px}
 
-.main{margin-left:var(--sidebar-w);padding:calc(var(--topbar-h) + 26px) 28px 40px}
+.main{margin-left:var(--sidebar-w);padding:calc(var(--topbar-h) + 26px) 28px 40px;transition:margin-left .25s}
 .backdrop{display:none}
+
+/* Collapsed — the hamburger slides the navigation off to the left and the page
+   takes over the full width. On narrow screens the sidebar is already off-canvas,
+   so there the same button opens it instead (body.nav-open, below). */
+body.nav-collapsed .sidebar{transform:translateX(-100%)}
+body.nav-collapsed .main{margin-left:0}
+
 @media(max-width:1024px){
   .sidebar{transform:translateX(-100%)}
   body.nav-open .sidebar{transform:none}
@@ -158,6 +165,61 @@ img{max-width:100%;display:block}
 .bg-hazard{background:var(--amber)} .bg-roadwork{background:var(--blue-500)}
 .bg-others{background:var(--purple)}
 .map-legend .link{margin-left:auto;color:var(--blue-600);font-weight:600;font-size:13px}
+
+.brgy-tooltip{border:0;border-radius:5px;box-shadow:0 2px 9px rgba(15,30,60,.22);color:var(--ink);
+  font:700 11px var(--font);padding:5px 8px;pointer-events:none;white-space:nowrap}
+.leaflet-tooltip-top.brgy-tooltip::before,.leaflet-tooltip-bottom.brgy-tooltip::before,
+.leaflet-tooltip-left.brgy-tooltip::before,.leaflet-tooltip-right.brgy-tooltip::before{display:none}
+
+.map-topbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.map-layer-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--line);background:#fff;color:var(--ink-2);font:600 12.5px var(--font);cursor:pointer}
+.map-layer-btn svg{width:14px;height:14px}
+.map-layer-btn:hover{background:#f8fafc}
+.map-layer-btn.active{background:var(--blue-50);border-color:#cfe0ff;color:var(--blue-600)}
+.map-summary{margin-left:4px;font-size:12px;color:var(--muted)}
+.map-zoom{margin-left:auto;display:flex;gap:6px}
+.map-icon-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:#fff;
+  color:var(--ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.map-icon-btn svg{width:15px;height:15px}
+.map-icon-btn:hover{background:#f8fafc}
+@media(max-width:700px){.map-summary{width:100%;order:5}.map-zoom{margin-left:0}}
+/* ---------- Barangay search (Incident Map) ---------- */
+/* Sits above the map; z-index beats .map so the suggestion list is not clipped. */
+.map-searchbar{position:relative;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;
+  padding:14px 20px;border-top:1px solid var(--line)}
+.brgy-search{position:relative;flex:0 1 420px;min-width:0}
+.brgy-search .input{padding-left:40px;padding-right:38px}
+.brgy-search .input:disabled{background:#f8fafc;color:var(--muted);cursor:not-allowed}
+.brgy-search .gi{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);
+  width:17px;height:17px;cursor:pointer}
+.brgy-search .gi svg{width:17px;height:17px;display:block}
+.brgy-clear{position:absolute;right:9px;top:50%;transform:translateY(-50%);width:24px;height:24px;
+  border:0;border-radius:50%;background:#eef2f9;color:var(--muted);font:400 17px/1 var(--font);
+  cursor:pointer;display:grid;place-items:center}
+.brgy-clear:hover{background:#e2e8f0;color:var(--ink)}
+
+.brgy-suggest{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:1000;max-height:264px;overflow-y:auto;
+  list-style:none;margin:0;padding:5px;background:#fff;border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow)}
+.brgy-opt{padding:9px 12px;border-radius:7px;font-size:13.5px;color:var(--ink-2);cursor:pointer}
+.brgy-opt b{color:var(--blue-600);font-weight:700}
+.brgy-opt:hover,.brgy-opt.active{background:var(--blue-50);color:var(--blue-600)}
+
+.brgy-msg{font-size:12.5px;font-weight:600;color:var(--muted)}
+.brgy-msg.is-ok{color:var(--green)}
+.brgy-msg.is-error{color:var(--red)}
+
+/* The searched barangay pulses twice so the eye lands on it after the fly-to. */
+.brgy-focus{animation:brgyFocus 1.5s ease-in-out 2}
+@keyframes brgyFocus{0%,100%{stroke-opacity:1;fill-opacity:.25}50%{stroke-opacity:.35;fill-opacity:.08}}
+@media(prefers-reduced-motion:reduce){.brgy-focus{animation:none}}
+
+@media(max-width:700px){
+  .map-searchbar{padding:12px 16px}
+  .brgy-search{flex:1 1 100%}
+}
+
 
 /* Leaflet custom pin */
 .pin{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;

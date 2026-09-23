@@ -48,6 +48,9 @@ Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/contact', [AuthController::class, 'contact']);
 
+    // The signed-in account editing its own details; the bearer token is the proof.
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
+
     // Steps two and three — send the code, then check it. The code never leaves the server.
     Route::post('/otp/send', [AuthController::class, 'sendOtp']);
     Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);

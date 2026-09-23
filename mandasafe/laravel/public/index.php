@@ -10,6 +10,13 @@ if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php'))
     require $maintenance;
 }
 
+// Serve the MandaSafe pages and assets before anything else loads. Most requests are
+// plain files that never needed PHP, and answering them here skips the whole framework
+// boot — see bootstrap/static.php.
+if (require __DIR__.'/../bootstrap/static.php') {
+    return;
+}
+
 // Register the Composer autoloader...
 require __DIR__.'/../vendor/autoload.php';
 

@@ -45,7 +45,7 @@ class IncidentController extends ApiController
     /** GET /api/incidents — newest first, the order the console and the maps expect. */
     public function index()
     {
-        return response()->json(Incident::newestFirst()->get()->map->toApi()->all());
+        return response()->json(Incident::listApi());
     }
 
     /** POST /api/incidents */

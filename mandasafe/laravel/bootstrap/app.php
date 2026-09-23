@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\StaticSiteController;
+use App\Http\Middleware\CompressResponse;
 use App\Http\Middleware\RimasAdmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +24,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'rimas.admin' => RimasAdmin::class,
+        ]);
+
+        // /api/incidents alone is over 2 MB of JSON; gzip takes it to about 145 KB.
+        $middleware->api(append: [
+            CompressResponse::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

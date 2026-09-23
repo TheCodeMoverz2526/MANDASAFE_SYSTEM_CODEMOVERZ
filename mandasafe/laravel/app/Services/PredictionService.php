@@ -25,10 +25,16 @@ class PredictionService
      * Runs every group's own logged incidents through the severity forest in one call.
      *
      * @param  array<string, array>  $groupIncidents  group key => that group's incident rows
+     * @param  bool  $degraded  set true only when the fallback was forced by a failure (a
+     *                          crashed/unavailable Python interpreter), never when the forest
+     *                          legitimately has too little class-diverse data to train --
+     *                          that second case is a stable answer, safe to cache normally.
      * @return array{trained: bool, oobAccuracy: ?float, probabilities: array<string, ?float>}
      */
-    private static function scoreGroupSeverity(array $incidents, array $groupIncidents): array
+    private static function scoreGroupSeverity(array $incidents, array $groupIncidents, bool &$degraded = false): array
     {
+        $degraded = false;
+
         try {
             $response = MlBridge::run('severity_forest.py', [
                 'incidents' => array_values($incidents),
@@ -46,6 +52,8 @@ class PredictionService
             Log::warning('severity_forest.py unavailable, falling back to heuristic scoring', [
                 'error' => $e->getMessage(),
             ]);
+
+            $degraded = true;
 
             return ['trained' => false, 'oobAccuracy' => null, 'probabilities' => []];
         }
@@ -114,7 +122,7 @@ class PredictionService
      * @param  array  $incidents  plain rows with barangay/road/sev/type/date/time/status keys
      * @param  array  $predictionInputs  plain rows with barangay/road/month/incidentCount keys
      */
-    public static function computePredictions(array $incidents, array $predictionInputs): array
+    public static function computePredictions(array $incidents, array $predictionInputs, bool &$degraded = false): array
     {
         $groups = [];
 
@@ -148,7 +156,7 @@ class PredictionService
             }
         }
 
-        $severity = self::scoreGroupSeverity($incidents, array_map(fn ($g) => $g['incidents'], $groups));
+        $severity = self::scoreGroupSeverity($incidents, array_map(fn ($g) => $g['incidents'], $groups), $degraded);
 
         $results = [];
         foreach ($groups as $key => $group) {

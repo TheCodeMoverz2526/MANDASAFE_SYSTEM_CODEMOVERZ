@@ -16,9 +16,15 @@ class KdeService
     /**
      * @param  array  $records  [['lat' => .., 'lng' => .., 'weight' => .., 'ref' => incident], ...]
      * @param  array  $bounds  ['minLat' => .., 'maxLat' => .., 'minLng' => .., 'maxLng' => ..]
+     * @param  bool  $degraded  set true when the empty/fallback result came from a failure
+     *                          (Python crashed, subprocess flaked) rather than a real "no
+     *                          hotspots" answer -- callers use this to avoid caching a transient
+     *                          hiccup as if it were the correct answer for a full day.
      */
-    public static function findHotspots(array $records, array $bounds, array $options = []): array
+    public static function findHotspots(array $records, array $bounds, array $options = [], bool &$degraded = false): array
     {
+        $degraded = false;
+
         if ($records === []) {
             return [];
         }
@@ -35,6 +41,8 @@ class KdeService
             Log::warning('hotspots.py unavailable, returning no hotspots', [
                 'error' => $e->getMessage(),
             ]);
+
+            $degraded = true;
 
             return [];
         }

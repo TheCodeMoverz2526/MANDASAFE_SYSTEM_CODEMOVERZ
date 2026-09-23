@@ -126,6 +126,17 @@ function handleAuthApi(request, response, urlPath) {
         return true;
     }
 
+    // The signed-in account editing its own details — the bearer token is the proof.
+    if (action === 'profile' && request.method === 'PUT') {
+        const account = actorFor(request);
+        if (!account) return sendJson(response, 401, { error: 'Not signed in.' }), true;
+        readJson(request).then(body => {
+            requireFields(body, ['name', 'email', 'phone']);
+            sendJson(response, 200, auth.updateOwnProfile(account.id, body));
+        }).catch(error => sendJson(response, 400, { error: error.message }));
+        return true;
+    }
+
     if (action === 'logout' && request.method === 'POST') {
         auth.destroySession(auth.tokenFromRequest(request));
         return sendJson(response, 200, { signedOut: true }), true;

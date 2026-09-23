@@ -28,6 +28,17 @@ function brgyName(feature) {
     return p.brgy_name || p.name || 'Unknown';
 }
 
+/* The exact palette the RIMAS console tints each barangay with, picked by its PSGC code
+   rather than by incident count, so a barangay is always the same colour whatever is
+   filtered — and the resident map now reads the same way the admin one does. */
+const MANDALUYONG_PALETTE = ['#1a56db', '#0f766e', '#7c3aed', '#c2410c', '#be185d', '#047857', '#0369a1', '#6d28d9', '#b45309'];
+function brgyStyle(feature) {
+    const code = String((feature.properties || {}).psgc_10d || '');
+    const index = Number(code.slice(-2)) - 1;
+    const color = MANDALUYONG_PALETTE[((index % MANDALUYONG_PALETTE.length) + MANDALUYONG_PALETTE.length) % MANDALUYONG_PALETTE.length];
+    return { color, weight: 1.5, opacity: .9, fillColor: color, fillOpacity: .18 };
+}
+
 /* Every outer ring of every barangay, as Leaflet [lat, lng] pairs — used both
    for the mask holes and for fitting the map to the real city extent. */
 function outerRings(geo) {
@@ -65,26 +76,19 @@ async function createMandaMap(elId, options = {}) {
     }).addTo(map);
 
     const counts = options.counts || null;
-    const max = counts ? Math.max(1, ...Object.values(counts)) : 1;
 
     const boundaries = L.geoJSON(geo, {
-        style: feature => {
-            const value = counts ? (counts[brgyName(feature)] || 0) : 0;
-            return {
-                color: '#1d4ed8',
-                weight: 1.4,
-                opacity: 0.85,
-                fillColor: counts ? shade(value / max) : '#3b82f6',
-                fillOpacity: counts ? (value ? 0.62 : 0.12) : 0.06
-            };
-        },
+        style: brgyStyle,
         onEachFeature: (feature, layer) => {
             const name = brgyName(feature);
             const value = counts ? (counts[name] || 0) : null;
-            layer.bindTooltip(
-                `<b>${name}</b>` + (value === null ? '' : `<br>${value.toLocaleString()} incident${value === 1 ? '' : 's'}`),
-                { sticky: true }
-            );
+            // A permanent name label, the same way the admin console labels every barangay,
+            // plus a click popup for the count — kept separate so the always-visible label
+            // never has to be redrawn just because the filters changed.
+            layer.bindTooltip(name, { className: 'brgy-tooltip', permanent: true, direction: 'center', opacity: .92 });
+            if (value !== null) {
+                layer.bindPopup(`<b>${name}</b><br>${value.toLocaleString()} incident${value === 1 ? '' : 's'}`);
+            }
             layer.on({
                 mouseover: e => e.target.setStyle({ weight: 3, color: '#f97316' }),
                 mouseout: e => boundaries.resetStyle(e.target)
@@ -97,12 +101,6 @@ async function createMandaMap(elId, options = {}) {
 
     setTimeout(() => map.invalidateSize(), 200);
     return { map, geo, boundaries, cityBounds };
-}
-
-/* Choropleth ramp: pale blue (few) → deep red (many). */
-function shade(ratio) {
-    const stops = ['#dbeafe', '#bfdbfe', '#fde68a', '#fdba74', '#f87171', '#dc2626'];
-    return stops[Math.min(stops.length - 1, Math.floor(Math.sqrt(ratio) * stops.length))];
 }
 
 /* Individual incident pins, capped so the browser stays responsive. */
@@ -119,6 +117,19 @@ function plotIncidents(map, list, limit = 400) {
             `<span class="tag ${statusTag(i.status)}">${esc(i.status)}</span></div>` +
             `<div style="margin-top:6px;font-size:11.5px;color:#64748b">${esc(i.type)}<br>${fmtDate(i.date)} ${fmtTime(i.time)}</div>`
         );
+    });
+    return layer;
+}
+
+/* Soft severity-weighted glow per incident — the same "heatmap" the admin console draws,
+   built from plain circles rather than a raster layer so it needs no extra library. */
+function plotHeat(map, list) {
+    const layer = L.layerGroup().addTo(map);
+    list.filter(i => Number.isFinite(i.lat) && Number.isFinite(i.lng)).forEach(i => {
+        const radius = i.sev === 'Fatal' ? 260 : i.sev === 'Injury' ? 200 : 150;
+        const fillOpacity = i.sev === 'Fatal' ? 0.22 : 0.16;
+        const color = sevMeta(i.sev).color;
+        L.circle([i.lat, i.lng], { radius, color, fillColor: color, fillOpacity, weight: 0, interactive: false }).addTo(layer);
     });
     return layer;
 }
@@ -144,4 +155,75 @@ function plotHotspots(map, spots) {
                 `<br>Intensity ${Math.round((s.intensity || 0) * 100)}%</div>`);
     });
     return layer;
+}
+
+/* =========================================================
+   Barangay search — used by the Incident Map's search bar.
+
+   Matching runs on a "folded" form of the name: lower case, accents stripped,
+   punctuation collapsed to single spaces. That way "wack wack", "Wack-Wack"
+   and "wackwack" all reach Wack-wack Greenhills, "zaniga" still finds
+   New Zañiga, and "mabini j rizal" finds Mabini-J. Rizal.
+   ========================================================= */
+
+function foldName(value) {
+    return String(value ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function barangayNames(geo) {
+    return ((geo || {}).features || []).map(brgyName).sort((a, b) => a.localeCompare(b));
+}
+
+/* Partial or complete names, best first: an exact name, then names that start
+   with what was typed, then names with a word starting with it, then any name
+   containing it — and last, the same test with every space dropped, so
+   "wackwack" and "pagasa" land too. Returns [] for an empty query or a name
+   that is not one of the 27 barangays. */
+function matchBarangays(geo, query) {
+    const q = foldName(query);
+    if (!q) return [];
+    const tight = q.replace(/ /g, '');
+    return barangayNames(geo)
+        .map(name => {
+            const folded = foldName(name);
+            const rank = folded === q ? 0
+                : folded.startsWith(q) ? 1
+                : folded.split(' ').some(word => word.startsWith(q)) ? 2
+                : folded.includes(q) ? 3
+                : folded.replace(/ /g, '').includes(tight) ? 4 : -1;
+            return { name, rank };
+        })
+        .filter(m => m.rank >= 0)
+        .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+        .map(m => m.name);
+}
+
+function findBarangayFeature(geo, name) {
+    const q = foldName(name);
+    return ((geo || {}).features || []).find(f => foldName(brgyName(f)) === q) || null;
+}
+
+/* The searched barangay is outlined in the same orange the hover state uses. */
+const FOCUS_STYLE = {
+    color: '#ea580c', weight: 4, opacity: 1,
+    fillColor: '#f97316', fillOpacity: 0.25,
+    className: 'brgy-focus', interactive: false
+};
+
+/* Zooms to one barangay and outlines it, returning the highlight layer so the
+   caller can clear it again — or null when `name` is not one of the 27.
+   The outline is a layer of its own rather than a restyle of the boundary
+   layer, so it survives a mouse-over (which resets boundary styles) and stays
+   visible even with Barangay Boundaries switched off. */
+function focusBarangay(map, geo, name, previous) {
+    if (previous) map.removeLayer(previous);
+    const feature = findBarangayFeature(geo, name);
+    if (!feature) return null;
+
+    const highlight = L.geoJSON(feature, { style: () => FOCUS_STYLE, interactive: false }).addTo(map);
+    highlight.bringToFront();
+    map.flyToBounds(highlight.getBounds(), { padding: [40, 40], maxZoom: 17, duration: 0.9 });
+    return highlight;
 }

@@ -146,7 +146,7 @@ class AccountService
 
         // The very first account bootstraps itself as admin, with nobody yet to notify;
         // every account after that is someone the administrators should know arrived.
-        if ($role === 'user') {
+        if ($account->role === 'user') {
             $this->notifications->notifyAccountCreated($api);
         }
 

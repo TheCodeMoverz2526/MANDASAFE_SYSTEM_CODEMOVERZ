@@ -37,12 +37,40 @@ class AnalyticsService
         return Cache::remember('mandasafe:' . $name . ':v' . Setting::dataVersion(), $seconds, $callback);
     }
 
+    /**
+     * Same as remember(), but for a computation that can silently degrade (a crashed Python
+     * interpreter falling back to "no hotspots" or "untrained model"). A degraded result is
+     * real data, not a bug, but it is also likely a passing hiccup -- caching it for the full
+     * 24 hours would freeze that hiccup in place long after the interpreter recovers, so it
+     * gets a much shorter TTL instead and the next request tries again for real.
+     */
+    private function rememberUnlessDegraded(string $name, callable $callback)
+    {
+        $seconds = (int) config('mandasafe.analytics_cache_seconds');
+        if ($seconds <= 0) {
+            $degraded = false;
+
+            return $callback($degraded);
+        }
+
+        $key = 'mandasafe:' . $name . ':v' . Setting::dataVersion();
+        $cached = Cache::get($key);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $degraded = false;
+        $result = $callback($degraded);
+        Cache::put($key, $result, $degraded ? 30 : $seconds);
+
+        return $result;
+    }
+
     public function predictions(): array
     {
-        return $this->remember('predictions', fn () => PredictionService::computePredictions(
-            $this->incidents(),
-            $this->predictionInputs()
-        ));
+        return $this->rememberUnlessDegraded('predictions', function (&$degraded) {
+            return PredictionService::computePredictions($this->incidents(), $this->predictionInputs(), $degraded);
+        });
     }
 
     public function stats(): array
@@ -59,7 +87,7 @@ class AnalyticsService
      */
     public function hotspots(): array
     {
-        return $this->remember('hotspots', function () {
+        return $this->rememberUnlessDegraded('hotspots', function (&$degraded) {
             $records = [];
             foreach ($this->incidents() as $incident) {
                 $point = GeoService::resolveIncidentPoint($incident);
@@ -74,7 +102,7 @@ class AnalyticsService
                 ];
             }
 
-            return KdeService::findHotspots($records, GeoService::mandaluyongBounds());
+            return KdeService::findHotspots($records, GeoService::mandaluyongBounds(), [], $degraded);
         });
     }
 

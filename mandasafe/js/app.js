@@ -7,6 +7,8 @@ const ICONS = {
   logo:'<path d="M12 2C7.6 2 4 5.6 4 10c0 5.2 7 12 8 12s8-6.8 8-12c0-4.4-3.6-8-8-8z" fill="currentColor" opacity=".25"/><path d="M12 2C7.6 2 4 5.6 4 10c0 5.2 7 12 8 12s8-6.8 8-12c0-4.4-3.6-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z" stroke="currentColor" stroke-width="1.6" fill="none"/>',
   home:'<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
   plus:'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/>',
+  minus:'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12h8"/>',
+  target:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
   pin:'<path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>',
   clipboard:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/>',
   fire:'<path d="M12 3s5 4 5 8a5 5 0 11-10 0c0-2 1-3 1-3s.5 2 2 2c0-3 2-7 2-7z"/>',
@@ -72,13 +74,68 @@ const NAV = [
     { id: 'map',       label: 'Incident Map',  icon: 'pin',    href: 'incident-map.html' },
     { id: 'hotspots',  label: 'Hotspots',      icon: 'fire',   href: 'hotspots.html' },
     { id: 'safety',    label: 'Safety Index',  icon: 'shield', href: 'safety-index.html' },
-    { id: 'announce',  label: 'Announcements', icon: 'megaphone', href: 'announcements.html' },
     { id: 'profile',   label: 'My Account',    icon: 'user',   href: 'profile.html' }
 ];
 const NAV_SUPPORT = [
     { id: 'about',   label: 'About Us',        icon: 'info',   href: 'about.html' },
     { id: 'support', label: 'Contact Support', icon: 'headset', href: 'support.html' }
 ];
+
+/* ---------------- navigation drawer ----------------
+   The hamburger means two things, because the sidebar starts from two different
+   places. On a wide screen the navigation is pinned open, so the button collapses
+   it: it slides off to the left and the page spreads into the freed width. Below
+   1024px the sidebar is already off-canvas, so the button opens it over the page.
+
+   The resident side is a set of separate pages rather than one app, so the
+   collapsed state is remembered in localStorage — otherwise every link would push
+   the sidebar back open. */
+const NAV_COLLAPSE_KEY = 'mandasafeNavCollapsed';
+
+function isNarrow() { return window.matchMedia('(max-width:1024px)').matches; }
+
+function navCollapsePreferred() {
+    try { return localStorage.getItem(NAV_COLLAPSE_KEY) === '1'; } catch { return false; }
+}
+
+function applyNavState() {
+    // Narrow layout: the drawer is off-canvas already and 'nav-open' is the one that
+    // matters. Leave it alone — mobile browsers fire resize while scrolling, and
+    // clearing it here would snap the open drawer shut under the reader's finger.
+    if (isNarrow()) {
+        document.body.classList.remove('nav-collapsed');
+        return;
+    }
+    document.body.classList.remove('nav-open');
+    document.body.classList.toggle('nav-collapsed', navCollapsePreferred());
+}
+
+/* Leaflet sizes its canvas to the container it was given, so a map that was on the
+   page while the sidebar moved is left with stale dimensions. Leaflet re-measures on
+   a window resize (trackResize), so one event after the slide finishes is enough. */
+function notifyLayoutChanged() {
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 280);
+}
+
+function wireNav() {
+    applyNavState();
+
+    document.getElementById('ms-burger').onclick = () => {
+        if (isNarrow()) {
+            document.body.classList.toggle('nav-open');
+            return;
+        }
+        const collapsed = document.body.classList.toggle('nav-collapsed');
+        try { localStorage.setItem(NAV_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* private mode */ }
+        notifyLayoutChanged();
+    };
+
+    document.getElementById('ms-backdrop').onclick = () => document.body.classList.remove('nav-open');
+
+    // Crossing the breakpoint (rotating a tablet, resizing a window) must not leave the
+    // page holding the class that belongs to the other layout.
+    window.addEventListener('resize', applyNavState);
+}
 
 function buildShell(active) {
     const u = currentUser() || { name: 'Resident', role: 'user' };
@@ -126,8 +183,7 @@ function buildShell(active) {
       '</aside><div class="backdrop" id="ms-backdrop"></div>';
 
     document.body.insertAdjacentHTML('afterbegin', topbar + sidebar);
-    document.getElementById('ms-burger').onclick = () => document.body.classList.toggle('nav-open');
-    document.getElementById('ms-backdrop').onclick = () => document.body.classList.remove('nav-open');
+    wireNav();
     document.getElementById('ms-userchip').onclick = () => { if (confirm('Sign out of MandaSafe?')) logout(); };
     document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
 }

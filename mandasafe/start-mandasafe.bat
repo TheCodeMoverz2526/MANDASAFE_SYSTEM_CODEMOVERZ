@@ -4,6 +4,13 @@ title MandaSafe
 cd /d "%~dp0"
 
 set "PORT=5500"
+set "HOST=127.0.0.1"
+
+REM PHP compiles the whole Laravel framework from disk on every request unless OPcache
+REM is on, which cost about 250ms per API call here. php.d holds an .ini that switches it
+REM on; PHP_INI_SCAN_DIR loads it ALONGSIDE the PHP installation's own php.ini, so every
+REM extension XAMPP already provides stays exactly as it was.
+set "PHP_INI_SCAN_DIR=%~dp0laravel\php.d"
 set "APP=%~dp0laravel"
 set "LOG=%APP%\storage\logs\server.log"
 
@@ -18,10 +25,10 @@ where php >nul 2>nul
 if errorlevel 1 goto no_php
 
 REM --------------------------------------------------- already running?
-curl -s -o nul --max-time 3 "http://localhost:%PORT%/api/otp-status" >nul 2>nul
+curl -s -o nul --max-time 3 "http://127.0.0.1:%PORT%/api/otp-status" >nul 2>nul
 if not errorlevel 1 (
     echo  MandaSafe is already running on port %PORT%.
-    start "" "http://localhost:%PORT%/"
+    start "" "http://127.0.0.1:%PORT%/"
     goto ready
 )
 
@@ -95,14 +102,14 @@ popd
 REM ----------------------------------------------------------- serve
 echo  Starting the MandaSafe server...
 if exist "%LOG%" del "%LOG%" >nul 2>nul
-start "MandaSafe Server" /min cmd /c "cd /d "%APP%" && php artisan serve --port=%PORT% > "%LOG%" 2>&1"
+start "MandaSafe Server" /min cmd /c "cd /d "%APP%" && php artisan serve --host=%HOST% --port=%PORT% > "%LOG%" 2>&1"
 
 REM Wait for it to answer before opening the browser, so a failure is reported here
 REM rather than as a blank page.
 set "READY="
 for /l %%i in (1,1,20) do (
     if not defined READY (
-        curl -s -o nul --max-time 2 "http://localhost:%PORT%/" >nul 2>nul
+        curl -s -o nul --max-time 2 "http://127.0.0.1:%PORT%/" >nul 2>nul
         if not errorlevel 1 (
             set "READY=1"
         ) else (
@@ -112,14 +119,20 @@ for /l %%i in (1,1,20) do (
 )
 if not defined READY goto server_failed
 
-start "" "http://localhost:%PORT%/"
+REM The hotspot surface and the forecasts are computed by the Python scripts in ml\ and
+REM then cached until the data changes. Cold, that is several seconds; the migrate/seed
+REM above can invalidate the cache, so warm it here rather than making the first person
+REM through the door wait for it. Runs in its own window and does not hold up the browser.
+start "MandaSafe warm-up" /min cmd /c "curl -s -o nul --max-time 300 http://127.0.0.1:%PORT%/api/summary & curl -s -o nul --max-time 300 http://127.0.0.1:%PORT%/api/predictions & curl -s -o nul --max-time 300 http://127.0.0.1:%PORT%/api/hotspots & curl -s -o nul --max-time 300 http://127.0.0.1:%PORT%/api/stats"
+
+start "" "http://127.0.0.1:%PORT%/"
 
 :ready
 echo.
 echo  MandaSafe is running:
-echo    Residents / public : http://localhost:%PORT%/
-echo    Sign in            : http://localhost:%PORT%/login.html
-echo    Admin console      : http://localhost:%PORT%/Mandasafe.html
+echo    Residents / public : http://127.0.0.1:%PORT%/
+echo    Sign in            : http://127.0.0.1:%PORT%/login.html
+echo    Admin console      : http://127.0.0.1:%PORT%/Mandasafe.html
 echo.
 echo  Leave the minimised "MandaSafe Server" window open while using MandaSafe.
 echo  Closing it stops MandaSafe.

@@ -39,15 +39,25 @@ class AuthController extends ApiController
         return response()->json($account->toApi());
     }
 
-    /** POST /api/auth/register — public sign-up; new accounts are always residents. */
-    public function register(Request $request)
+    /**
+     * PUT /api/auth/profile — a signed-in account editing its own name, email or contact
+     * number from the My Account page. No verification code here: the bearer token already
+     * proves who is asking, and nothing about the sign-in credentials changes.
+     */
+    public function updateProfile(Request $request)
     {
-        return $this->attempt(function () use ($request) {
-            $body = $this->body($request);
-            $this->requireFields($body, ['name', 'email', 'phone', 'password']);
+        $account = $this->accounts->accountForToken($this->accounts->tokenFromRequest($request));
 
-            return $this->accounts->registerAccount($body);
-        }, 400, 201);
+        if (! $account) {
+            return response()->json(['error' => 'Not signed in.'], 401);
+        }
+
+        return $this->attempt(function () use ($request, $account) {
+            $body = $this->body($request);
+            $this->requireFields($body, ['name', 'email', 'phone']);
+
+            return $this->accounts->updateOwnProfile($account, $body);
+        }, 400);
     }
 
     /** POST /api/auth/login — returns the session token the pages keep in localStorage. */
