@@ -24,6 +24,8 @@ class Notification extends Model
     {
         return [
             'id' => $this->id,
+            // Increasing number the console polls against: "anything after seq N?".
+            'seq' => (int) $this->sort_key,
             'type' => $this->type,
             'title' => $this->title,
             'desc' => $this->desc,

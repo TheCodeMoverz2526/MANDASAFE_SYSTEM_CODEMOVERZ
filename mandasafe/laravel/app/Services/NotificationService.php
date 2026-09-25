@@ -97,6 +97,16 @@ class NotificationService
         );
     }
 
+    /** Raised when an account sets a new password through "Forgot password?". */
+    public function notifyPasswordChanged(array $account): Notification
+    {
+        return $this->create(
+            'password_changed',
+            'Password changed',
+            "{$account['name']} ({$account['email']}) changed their password."
+        );
+    }
+
     /** Raised when a signed-in account edits its own name, email or contact number. */
     public function notifyProfileUpdated(array $account, array $changedFields): Notification
     {
@@ -113,6 +123,20 @@ class NotificationService
     public function list(): array
     {
         return Notification::newestFirst()->get()->map->toApi()->all();
+    }
+
+    /**
+     * What the console asks every few seconds: only the notifications newer than the last
+     * one it has, plus the unread total so it notices another administrator reading them.
+     * Two indexed queries and usually an empty list — cheap enough to call constantly.
+     */
+    public function changesSince(int $after): array
+    {
+        return [
+            'latest' => (int) Notification::max('sort_key'),
+            'unread' => Notification::whereNull('read_at_iso')->count(),
+            'items' => Notification::where('sort_key', '>', $after)->newestFirst()->limit(50)->get()->map->toApi()->all(),
+        ];
     }
 
     public function markRead(string $id): array

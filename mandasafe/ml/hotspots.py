@@ -185,7 +185,74 @@ def main():
         h.pop('x', None)
         h.pop('y', None)
 
-    print(json.dumps(result))
+    if not options.get('withBarangays'):
+        print(json.dumps(result))
+        return
+
+    print(json.dumps({'peaks': result, 'barangays': barangay_ranking(kde, records, points, weights, bandwidth,
+                                                                      options.get('boundaries') or {}, options.get('centroids') or {})}))
+
+
+def inside(lng, lat, rings):
+    """Ray-casting point-in-polygon over a barangay's outer ring(s) of [lng, lat]."""
+    for ring in rings:
+        hit, j = False, len(ring) - 1
+        for i in range(len(ring)):
+            xi, yi = ring[i][0], ring[i][1]
+            xj, yj = ring[j][0], ring[j][1]
+            if (yi > lat) != (yj > lat) and lng < (xj - xi) * (lat - yi) / (yj - yi) + xi:
+                hit = not hit
+            j = i
+        if hit:
+            return True
+    return False
+
+
+def barangay_ranking(kde, records, points, weights, bandwidth, boundaries, centroids):
+    """Every barangay with accidents, scored on the same density surface as the peaks.
+
+    A barangay's "heat" is the density summed over each of its own (severity-weighted)
+    accident locations: many accidents packed tightly together score highest, a few scattered
+    ones score lowest. Intensity is that heat relative to the hottest barangay (100%).
+
+    Summing, rather than taking the single strongest spot, matters here: with a ~50 m kernel a
+    small pile of accidents at one corner can out-peak a whole busy district, which would put
+    two dozen barangays at the same 100%."""
+    # Many accidents share coordinates, so score each distinct point once.
+    unique_points, inverse = np.unique(np.round(points, 1), axis=0, return_inverse=True)
+    point_density = np.exp(kde.score_samples(unique_points))[inverse.ravel()]
+
+    by_barangay = {}
+    for i, record in enumerate(records):
+        ref = record.get('ref') or {}
+        name = ref.get('barangay') or 'Unknown'
+        entry = by_barangay.setdefault(name, {'barangay': name, 'heat': 0.0, 'incidentCount': 0,
+                                              'fatalCount': 0, 'peak': -1.0, 'lat': None, 'lng': None})
+        entry['incidentCount'] += 1
+        entry['heat'] += float(point_density[i] * weights[i])
+        if ref.get('sev') == 'Fatal':
+            entry['fatalCount'] += 1
+        # The map position shown for a barangay is its densest accident spot INSIDE its own
+        # boundary -- some records carry another barangay's coordinates, and their pile must
+        # not pull this barangay's marker into a neighbour.
+        rings = boundaries.get(name)
+        if rings and not inside(float(record['lng']), float(record['lat']), rings):
+            continue
+        if point_density[i] > entry['peak']:
+            entry['peak'] = float(point_density[i])
+            entry['lat'], entry['lng'] = float(record['lat']), float(record['lng'])
+
+    ranking = sorted(by_barangay.values(), key=lambda b: (-b['heat'], -b['incidentCount']))
+    top_heat = ranking[0]['heat'] if ranking and ranking[0]['heat'] > 0 else 1.0
+    for b in ranking:
+        if b['lat'] is None:
+            # None of its accidents sit inside its boundary: use the barangay's centre.
+            centre = centroids.get(b['barangay']) or {}
+            b['lat'], b['lng'] = centre.get('lat'), centre.get('lng')
+        b['intensity'] = round(b['heat'] / top_heat, 4)
+        b['bandwidthMeters'] = round(bandwidth, 1)
+        b.pop('peak', None)
+    return ranking
 
 
 if __name__ == '__main__':

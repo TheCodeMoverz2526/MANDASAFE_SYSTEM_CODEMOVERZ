@@ -31,6 +31,7 @@ Route::get('/predictions', [AnalyticsController::class, 'predictions']);
 Route::get('/stats', [AnalyticsController::class, 'stats']);
 Route::get('/summary', [AnalyticsController::class, 'summary']);
 Route::get('/hotspots', [AnalyticsController::class, 'hotspots']);
+Route::get('/hotspots/barangays', [AnalyticsController::class, 'barangayHotspots']);
 Route::get('/barangays', [AnalyticsController::class, 'barangays']);
 Route::get('/otp-status', [AnalyticsController::class, 'otpStatus']);
 
@@ -56,6 +57,9 @@ Route::prefix('auth')->group(function () {
     Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);
     Route::post('/otp/cancel', [AuthController::class, 'cancelOtp']);
 
+    // Administrators only: the code from their authenticator app, after the password.
+    Route::post('/totp/verify', [AuthController::class, 'verifyTotp']);
+
     // Only reachable with a challenge that was verified moments ago.
     Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -79,6 +83,7 @@ Route::middleware('rimas.admin')->group(function () {
     Route::delete('/accounts/{id}', [AccountController::class, 'destroy']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/poll', [NotificationController::class, 'poll']);
     Route::put('/notifications/{id}/read', [NotificationController::class, 'markRead']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
 });

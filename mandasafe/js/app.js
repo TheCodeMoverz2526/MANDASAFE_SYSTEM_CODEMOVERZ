@@ -71,8 +71,9 @@ const RISK_TAG = { high: 't-high', medium: 't-med', low: 't-resolved' };
 /* ---------------- Shell ---------------- */
 const NAV = [
     { id: 'dashboard', label: 'Dashboard',     icon: 'home',   href: 'dashboard.html' },
-    { id: 'map',       label: 'Incident Map',  icon: 'pin',    href: 'incident-map.html' },
+    { id: 'map',       label: 'Accident Map',  icon: 'pin',    href: 'incident-map.html' },
     { id: 'hotspots',  label: 'Hotspots',      icon: 'fire',   href: 'hotspots.html' },
+    { id: 'forecast',  label: 'Forecast',      icon: 'trend',  href: 'forecast.html' },
     { id: 'safety',    label: 'Safety Index',  icon: 'shield', href: 'safety-index.html' },
     { id: 'profile',   label: 'My Account',    icon: 'user',   href: 'profile.html' }
 ];
@@ -152,17 +153,16 @@ function buildShell(active) {
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>' +
         '</button>' +
         '<a class="brand" href="dashboard.html">' +
-          '<span class="brand-logo">' + icon('logo') + '</span>' +
+          '<img class="brand-logo" src="assets/logo-192.png" alt="MandaSafe logo">' +
           '<span><span class="brand-name">Manda<span>Safe</span></span>' +
-          '<span class="brand-sub" style="display:block">Road Incident Mapping &amp; Analytics System</span></span>' +
+          '<span class="brand-sub" style="display:block">Road Accident Mapping &amp; Analytics System</span></span>' +
         '</a>' +
         '<div class="topbar-actions">' +
           '<span class="pill" id="ms-live" title="Data source"><span class="live"></span> Live data</span>' +
-          '<div class="userchip" id="ms-userchip" title="Sign out">' +
+          '<div class="userchip is-static" id="ms-userchip">' +
             '<span class="avatar">' + initials + '</span>' +
             '<span><span class="nm">' + u.name + '</span>' +
             '<span class="rl" style="display:block">' + (u.role === 'admin' ? 'Administrator' : 'Resident') + '</span></span>' +
-            '<svg style="width:16px;height:16px;color:#64748b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>' +
           '</div>' +
         '</div>' +
       '</header>';
@@ -175,17 +175,50 @@ function buildShell(active) {
         '<div class="nav-label">NAVIGATION</div>' + NAV.map(item).join('') + adminLink +
         '<div class="nav-sep"></div>' +
         '<div class="nav-label">SUPPORT</div>' + NAV_SUPPORT.map(item).join('') +
+        '<div class="nav-sep"></div>' +
+        '<button type="button" class="nav-item nav-signout" id="ms-signout">' + icon('logout') + '<span>Sign Out</span></button>' +
         '<div class="side-card">' +
-          '<img class="seal" src="assets/seal.svg" alt="Mandaluyong City seal">' +
+          '<img class="seal" src="assets/logo-192.png" alt="MandaSafe logo">' +
           '<p>Mandaluyong City<br>Traffic Planning and<br>Management Office</p>' +
         '</div>' +
         '<div class="side-copy">&copy; 2026 All rights reserved.</div>' +
       '</aside><div class="backdrop" id="ms-backdrop"></div>';
 
-    document.body.insertAdjacentHTML('afterbegin', topbar + sidebar);
+    // Styled sign-out confirmation, in place of the browser's plain confirm() pop-up.
+    const signOutDialog =
+      '<div class="ms-modal" id="ms-signout-modal" role="dialog" aria-modal="true" aria-labelledby="ms-signout-title" hidden>' +
+        '<div class="ms-modal-card">' +
+          '<span class="ms-modal-ic">' + icon('logout') + '</span>' +
+          '<h3 id="ms-signout-title">Sign out of MandaSafe?</h3>' +
+          '<p>You will need to sign in again to see the dashboard, maps and forecasts.</p>' +
+          '<div class="ms-modal-actions">' +
+            '<button type="button" class="ms-btn ms-btn-ghost" id="ms-signout-cancel">Cancel</button>' +
+            '<button type="button" class="ms-btn ms-btn-danger" id="ms-signout-confirm">Sign Out</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.body.insertAdjacentHTML('afterbegin', topbar + sidebar + signOutDialog);
     wireNav();
-    document.getElementById('ms-userchip').onclick = () => { if (confirm('Sign out of MandaSafe?')) logout(); };
+    wireSignOut();
     document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+}
+
+function wireSignOut() {
+    const modal = document.getElementById('ms-signout-modal');
+    const confirmBtn = document.getElementById('ms-signout-confirm');
+    const open = () => { modal.hidden = false; confirmBtn.focus(); };
+    const close = () => { modal.hidden = true; };
+
+    document.getElementById('ms-signout').onclick = open;
+    document.getElementById('ms-signout-cancel').onclick = close;
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });   // click outside the card
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
+    confirmBtn.onclick = () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Signing out…';
+        logout();
+    };
 }
 
 /* ---------------- formatting ---------------- */

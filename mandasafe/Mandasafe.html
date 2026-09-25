@@ -2,9 +2,10 @@
 <html lang="en">
 
 <head>
+    <link rel="icon" href="assets/logo-192.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mandaluyong RIMAS – Road Incident Mapping & Analytics System</title>
+    <title>Mandaluyong RIMAS – Road Accident Mapping & Analytics System</title>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
@@ -34,37 +35,20 @@
                     class="fas fa-cog"></i> Account Settings</div>
             <div class="profile-menu-item" id="adminPanelLink" style="display:none;"
                 onclick="showPage('users');toggleProfileDropdown()"><i class="fas fa-shield-alt"></i> Admin Panel</div>
-            <div class="profile-divider"></div>
-            <div class="profile-menu-item" onclick="doLogout()" style="display:flex;align-items:center;gap:10px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink:0;">
-                    <path
-                        d="M9.24 8.19v2.46h5.88c-.18 1.38-.64 2.39-1.34 3.1-.86.86-2.2 1.8-4.54 1.8-3.62 0-6.45-2.92-6.45-6.54s2.83-6.54 6.45-6.54c1.95 0 3.38.77 4.43 1.76L15.4 2.5C13.94 1.08 11.98 0 9.24 0 4.28 0 .11 4.04.11 9s4.17 9 9.13 9c2.68 0 4.7-.88 6.28-2.52 1.62-1.62 2.13-3.91 2.13-5.75 0-.57-.04-1.1-.13-1.54H9.24z"
-                        fill="#4285F4" />
-                </svg>
-                Sign out of Google
-            </div>
         </div>
     </div>
 
     <!-- TOPBAR -->
     <div class="topbar">
         <div class="topbar-logo" onclick="showPage('home')">
-            <div class="logo-badge">M</div>
-            <div class="topbar-title">Mandaluyong Road Incident Mapping and Analytics System</div>
+            <img class="logo-badge" src="assets/logo-192.png" alt="MandaSafe logo">
+            <div class="topbar-title">Mandaluyong Road Accident Mapping and Analytics System</div>
         </div>
-        <nav class="topbar-nav">
-            <a onclick="showPage('home')" id="nav-home" class="active">Home</a>
-            <a onclick="showPage('incidents')" id="nav-incidents">Incident Records</a>
-            <a onclick="showPage('map')" id="nav-map">GIS Map</a>
-            <a onclick="showPage('hotspot')" id="nav-hotspot">Hotspot Analysis</a>
-            <a onclick="showPage('safety')" id="nav-safety">Safety Index</a>
-        </nav>
         <div class="topbar-actions" style="position:relative;">
-            <button class="icon-btn" onclick="toggleProfileDropdown()"><i class="fas fa-user-circle"></i><span
-                    class="badge">2</span></button>
-            <button class="icon-btn" onclick="showPage('notifications')"><i class="fas fa-bell"></i><span class="badge"
-                    id="bellBadge">3</span></button>
-            <div class="avatar" id="avatarBtn" onclick="toggleProfileDropdown()" title="Account">RC</div>
+            <div class="userchip" id="accountChip" onclick="toggleProfileDropdown()" title="Account">
+                <span class="avatar" id="avatarBtn">RC</span>
+                <span><span class="nm" id="chipName">—</span><span class="rl" id="chipRole">Administrator</span></span>
+            </div>
         </div>
     </div>
 
@@ -74,11 +58,13 @@
             <div class="sidebar-label">Navigation</div>
             <a class="sidebar-item active" onclick="showPage('home')" id="sb-home"><i class="fas fa-home"></i> Home</a>
             <a class="sidebar-item" onclick="showPage('incidents')" id="sb-incidents"><i
-                    class="fas fa-clipboard-list"></i> Incident Records</a>
+                    class="fas fa-clipboard-list"></i> Accident Records</a>
             <a class="sidebar-item" onclick="showPage('map')" id="sb-map"><i class="fas fa-map-marked-alt"></i> GIS
                 Map</a>
             <a class="sidebar-item" onclick="showPage('hotspot')" id="sb-hotspot"><i class="fas fa-fire"></i> Hotspot
                 Analysis</a>
+            <a class="sidebar-item" onclick="showPage('forecast')" id="sb-forecast"><i class="fas fa-chart-line"></i>
+                Forecast</a>
             <a class="sidebar-item" onclick="showPage('safety')" id="sb-safety"><i class="fas fa-shield-alt"></i> Safety
                 Index</a>
             <a class="sidebar-item" onclick="showPage('analytics')" id="sb-analytics"><i class="fas fa-chart-bar"></i>
@@ -86,17 +72,15 @@
             <a class="sidebar-item" onclick="showPage('reports')" id="sb-reports"><i class="fas fa-file-alt"></i>
                 Reports</a>
             <div class="sidebar-label">System</div>
-            <a class="sidebar-item admin-only" onclick="showPage('predictdata')" id="sb-predictdata" style="display:none;"><i
-                    class="fas fa-database"></i> Prediction Data</a>
             <a class="sidebar-item admin-only" onclick="showPage('users')" id="sb-users" style="display:none;"><i
                     class="fas fa-users-cog"></i> User Management</a>
             <a class="sidebar-item" onclick="showPage('notifications')" id="sb-notifications"><i
                     class="fas fa-bell"></i> Notifications <span id="sbNotifCount"
-                    style="margin-left:auto;background:#ef4444;color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;">3</span></a>
+                    style="margin-left:auto;background:#ef4444;color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;display:none;"></span></a>
             <a class="sidebar-item" onclick="showPage('settings')" id="sb-settings"><i class="fas fa-cog"></i>
                 Settings</a>
             <div class="sidebar-bottom">
-                <a class="sidebar-item" onclick="doLogout()" style="color:rgba(239,68,68,.8);"><i
+                <a class="sidebar-item" onclick="askSignOut()" style="color:rgba(239,68,68,.8);"><i
                         class="fas fa-sign-out-alt"></i> Sign Out</a>
             </div>
         </aside>
@@ -107,7 +91,7 @@
             <!-- ===== HOME PAGE ===== -->
             <div class="page active" id="page-home">
                 <div class="hero">
-                    <h1>Mandaluyong Road Incident Mapping and Analytics System</h1>
+                    <h1>Mandaluyong Road Accident Mapping and Analytics System</h1>
                     <p>Monitoring, Hotspot Identification &amp; Safety Planning for Mandaluyong TPMO</p>
                 </div>
                 <div style="padding:24px 24px 16px;background:white;">
@@ -116,7 +100,7 @@
                         <div style="display:flex;align-items:center;gap:10px;">
                             <span id="dashWelcome" style="font-size:13px;color:var(--gray-500);"></span>
                             <button class="btn btn-primary btn-sm admin-only" onclick="showPage('incidents');openModal()"><i
-                                    class="fas fa-plus"></i> New Incident</button>
+                                    class="fas fa-plus"></i> New Accident</button>
                         </div>
                     </div>
                 </div>
@@ -129,15 +113,14 @@
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                                 <div>
                                     <div class="stat-val" style="color:var(--blue);" id="homeStatTotal">0</div>
-                                    <div class="stat-label">Total Incidents</div>
+                                    <div class="stat-label">Total Accidents</div>
                                 </div>
                                 <div
                                     style="width:42px;height:42px;background:#eff6ff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--blue);">
                                     <i class="fas fa-clipboard-list"></i>
                                 </div>
                             </div>
-                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
-                                    class="fas fa-minus"></i> No data yet</div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);" id="homeFootTotal">—</div>
                         </div>
                         <div class="stat-card"
                             style="cursor:pointer;transition:transform .15s;border-left:4px solid var(--red);"
@@ -146,15 +129,14 @@
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                                 <div>
                                     <div class="stat-val" style="color:var(--red);" id="homeStatFatal">0</div>
-                                    <div class="stat-label">Fatal Incidents</div>
+                                    <div class="stat-label">Fatal Accidents</div>
                                 </div>
                                 <div
                                     style="width:42px;height:42px;background:#fef2f2;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--red);">
                                     <i class="fas fa-skull-crossbones"></i>
                                 </div>
                             </div>
-                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
-                                    class="fas fa-minus"></i> No data yet</div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);" id="homeFootFatal">—</div>
                         </div>
                         <div class="stat-card"
                             style="cursor:pointer;transition:transform .15s;border-left:4px solid var(--orange);"
@@ -163,15 +145,14 @@
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                                 <div>
                                     <div class="stat-val" style="color:var(--orange);" id="homeStatInjury">0</div>
-                                    <div class="stat-label">Injury Incidents</div>
+                                    <div class="stat-label">Injury Accidents</div>
                                 </div>
                                 <div
                                     style="width:42px;height:42px;background:#fff7ed;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--orange);">
                                     <i class="fas fa-ambulance"></i>
                                 </div>
                             </div>
-                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
-                                    class="fas fa-minus"></i> Same as last month</div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);" id="homeFootInjury">—</div>
                         </div>
                         <div class="stat-card"
                             style="cursor:pointer;transition:transform .15s;border-left:4px solid var(--green);"
@@ -179,7 +160,7 @@
                             onmouseleave="this.style.transform=''" onclick="showPage('hotspot')">
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                                 <div>
-                                    <div class="stat-val" style="color:var(--green);">0</div>
+                                    <div class="stat-val" style="color:var(--green);" id="homeStatRisk">0</div>
                                     <div class="stat-label">High-Risk Zones</div>
                                 </div>
                                 <div
@@ -187,8 +168,7 @@
                                     <i class="fas fa-map-pin"></i>
                                 </div>
                             </div>
-                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);"><i
-                                    class="fas fa-minus"></i> No data yet</div>
+                            <div style="margin-top:10px;font-size:11px;color:var(--gray-400);" id="homeFootRisk">—</div>
                         </div>
                     </div>
                     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px;">
@@ -208,20 +188,7 @@
                                         style="color:var(--orange);margin-right:6px;"></i>By Severity</span></div>
                             <div class="card-body" style="display:flex;flex-direction:column;align-items:center;">
                                 <div style="height:130px;width:130px;"><canvas id="dashSevDonut"></canvas></div>
-                                <div style="width:100%;margin-top:10px;font-size:11px;">
-                                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span
-                                            style="display:flex;align-items:center;gap:5px;"><span
-                                                style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block;"></span>Fatal</span><strong>0</strong>
-                                    </div>
-                                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span
-                                            style="display:flex;align-items:center;gap:5px;"><span
-                                                style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;"></span>Injury</span><strong>0</strong>
-                                    </div>
-                                    <div style="display:flex;justify-content:space-between;"><span
-                                            style="display:flex;align-items:center;gap:5px;"><span
-                                                style="width:8px;height:8px;border-radius:50%;background:#fbbf24;display:inline-block;"></span>Minor</span><strong>0</strong>
-                                    </div>
-                                </div>
+                                <div style="width:100%;margin-top:10px;font-size:11px;" id="dashSevLegend"></div>
                             </div>
                         </div>
                     </div>
@@ -229,7 +196,7 @@
                         <div class="card" style="grid-column:span 2;">
                             <div class="card-header"><span class="card-title"><i class="fas fa-clock"
                                         style="color:var(--gray-400);margin-right:6px;"></i>Recent
-                                    Incidents</span><button class="btn btn-secondary btn-sm" style="margin-left:auto;"
+                                    Accidents</span><button class="btn btn-secondary btn-sm" style="margin-left:auto;"
                                     onclick="showPage('incidents')">View All</button></div>
                             <table class="data-table" id="dashRecentTable">
                                 <thead>
@@ -253,7 +220,7 @@
                                     <button class="btn btn-primary btn-sm admin-only"
                                         style="justify-content:flex-start;gap:10px;"
                                         onclick="showPage('incidents');openModal()"><i class="fas fa-plus-circle"
-                                            style="width:16px;"></i>Add New Incident</button>
+                                            style="width:16px;"></i>Add New Accident</button>
                                     <button class="btn btn-secondary btn-sm"
                                         style="justify-content:flex-start;gap:10px;" onclick="showPage('map')"><i
                                             class="fas fa-map" style="width:16px;"></i>View Live Map</button>
@@ -267,52 +234,19 @@
                             </div>
                             <div class="card" style="flex:1;">
                                 <div class="card-header"><span class="card-title"><i class="fas fa-exclamation-triangle"
-                                            style="color:var(--red);margin-right:6px;"></i>Active Alerts</span></div>
-                                <div style="padding:8px 0;">
-                                    <div
-                                        style="padding:10px 16px;border-bottom:1px solid var(--gray-100);font-size:12px;">
-                                        <div style="color:var(--red);font-weight:700;margin-bottom:2px;"><i
-                                                class="fas fa-circle"
-                                                style="font-size:7px;margin-right:5px;"></i>Critical – Shaw Blvd at EDSA
-                                        </div>
-                                        <div style="color:var(--gray-500);">3 incidents in last 2 hours</div>
-                                    </div>
-                                    <div style="padding:10px 16px;font-size:12px;">
-                                        <div style="color:var(--orange);font-weight:700;margin-bottom:2px;"><i
-                                                class="fas fa-circle" style="font-size:7px;margin-right:5px;"></i>High –
-                                            Boni Ave at EDSA</div>
-                                        <div style="color:var(--gray-500);">Fatal incident reported</div>
-                                    </div>
+                                            style="color:var(--red);margin-right:6px;"></i>Alerts</span>
+                                    <span id="dashAlertsWhen" style="margin-left:auto;font-size:10.5px;color:var(--gray-400);"></span></div>
+                                <div style="padding:8px 0;" id="dashAlerts">
+                                    <div style="padding:10px 16px;font-size:12px;color:var(--gray-400);">Loading…</div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
-                        <div
-                            style="background:linear-gradient(135deg,#dc2626,#b91c1c);border-radius:10px;padding:14px;color:white;text-align:center;">
-                            <div style="font-size:22px;font-weight:800;">4.0</div>
-                            <div style="font-size:11px;opacity:.8;margin-top:2px;">Plainview</div>
-                            <div style="font-size:10px;opacity:.6;">HIGH RISK</div>
-                        </div>
-                        <div
-                            style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;padding:14px;color:white;text-align:center;">
-                            <div style="font-size:22px;font-weight:800;">5.5</div>
-                            <div style="font-size:11px;opacity:.8;margin-top:2px;">San Jose</div>
-                            <div style="font-size:10px;opacity:.6;">MODERATE</div>
-                        </div>
-                        <div
-                            style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:10px;padding:14px;color:white;text-align:center;">
-                            <div style="font-size:22px;font-weight:800;">7.0</div>
-                            <div style="font-size:11px;opacity:.8;margin-top:2px;">Highway Hills</div>
-                            <div style="font-size:10px;opacity:.6;">SAFE</div>
-                        </div>
-                        <div
-                            style="background:linear-gradient(135deg,#22c55e,#15803d);border-radius:10px;padding:14px;color:white;text-align:center;">
-                            <div style="font-size:22px;font-weight:800;">8.0</div>
-                            <div style="font-size:11px;opacity:.8;margin-top:2px;">Wack-Wack</div>
-                            <div style="font-size:10px;opacity:.6;">VERY SAFE</div>
-                        </div>
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;margin:4px 0 10px;">
+                        <h3 style="font-size:14px;font-weight:700;color:var(--gray-800);margin:0;">Barangays Needing Attention</h3>
+                        <a style="font-size:12px;color:var(--blue);cursor:pointer;" onclick="showPage('safety')">Safety Index →</a>
                     </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;" id="dashBarangayTiles"></div>
                 </div>
             </div>
 
@@ -320,13 +254,13 @@
             <div class="page" id="page-incidents">
                 <div class="page-header">
                     <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
-                            class="current">Incident Records</span></div>
+                            class="current">Accident Records</span></div>
                     <div class="page-actions">
                         <button class="btn btn-secondary btn-sm" onclick="triggerImport()"><i class="fas fa-upload"></i>
                             Import Data</button>
                         <button class="btn btn-primary btn-sm admin-only" onclick="openModal()"><i
                                 class="fas fa-plus"></i> Add
-                            Incident</button>
+                            Accident</button>
                     </div>
                 </div>
                 <div style="padding:20px 24px 0;">
@@ -335,26 +269,16 @@
                     </div>
                     <div class="filter-bar" style="padding:0 0 14px;border:none;">
                         <select class="filter-select" id="fltDateRange">
-                            <option value="all">Date Range</option>
-                            <option value="today">Today</option>
-                            <option value="week">This Week</option>
-                            <option value="month">This Month</option>
+                            <option value="all">All dates</option>
+                            <option value="1">Latest month</option>
+                            <option value="3">Latest 3 months</option>
+                            <option value="12">Latest 12 months</option>
                         </select>
                         <select class="filter-select" id="fltBarangay">
-                            <option value="all">Barangay</option>
-                            <option>Plainview</option>
-                            <option>Highway Hills</option>
-                            <option>Wack-Wack</option>
-                            <option>San Jose</option>
-                            <option>Addition Hills</option>
-                            <option>Mauway</option>
+                            <option value="all">All barangays</option>
                         </select>
                         <select class="filter-select" id="fltRoad">
-                            <option value="all">Road Name</option>
-                            <option>Shaw Blvd</option>
-                            <option>EDSA</option>
-                            <option>Boni Ave</option>
-                            <option>Ortigas Ave</option>
+                            <option value="all">All roads</option>
                         </select>
                         <select class="filter-select" id="fltSeverity">
                             <option value="all">Severity</option>
@@ -364,11 +288,7 @@
                             <option value="Damage">Damage Only</option>
                         </select>
                         <select class="filter-select" id="fltVehicle">
-                            <option value="all">Vehicle Type</option>
-                            <option>Car</option>
-                            <option>Motorcycle</option>
-                            <option>Truck</option>
-                            <option>Bus</option>
+                            <option value="all">All accident types</option>
                         </select>
                         <button class="btn btn-primary btn-sm" onclick="applyIncidentFilters()">Apply Filter</button>
                         <button class="btn btn-secondary btn-sm" onclick="resetIncidentFilters()">Reset</button>
@@ -377,18 +297,17 @@
                 <div style="padding:0 24px 24px;">
                     <div class="card">
                         <div class="card-header">
-                            <span class="card-title">All Incidents</span>
+                            <span class="card-title">All Accidents</span>
                             <span style="margin-left:auto;font-size:12px;color:var(--gray-500);"
-                                id="incidentCountLabel">Showing 1–10 of 1,250
-                                entries</span>
+                                id="incidentCountLabel">Loading…</span>
                             <button class="btn btn-secondary btn-sm" style="margin-left:12px;"
                                 onclick="openExportModal()"><i class="fas fa-download"></i> Export Report</button>
                         </div>
-                        <div style="overflow-x:auto;">
+                        <div class="table-scroll" id="incidentScroll">
                             <table class="data-table">
                                 <thead>
                                     <tr>
-                                        <th>Incident ID</th>
+                                        <th>Accident ID</th>
                                         <th>Date</th>
                                         <th>Time</th>
                                         <th>Location</th>
@@ -401,12 +320,6 @@
                                 </thead>
                                 <tbody id="incidentTableBody"></tbody>
                             </table>
-                        </div>
-                        <div
-                            style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--gray-100);">
-                            <span style="font-size:12px;color:var(--gray-500);" id="incidentPagerLabel">Showing 1 to 10
-                                of 1,250 entries</span>
-                            <div class="pagination" id="incidentPagination"></div>
                         </div>
                     </div>
                 </div>
@@ -421,7 +334,7 @@
                 <div style="display:grid;grid-template-columns:220px 1fr 0px;height:calc(100vh - 56px - 47px);transition:grid-template-columns .3s;"
                     id="mapLayout">
                     <div class="map-sidebar">
-                        <h3><i class="fas fa-filter" style="color:var(--blue);margin-right:6px;"></i>Filter Incidents
+                        <h3><i class="fas fa-filter" style="color:var(--blue);margin-right:6px;"></i>Filter Accidents
                         </h3>
                         <div class="form-group">
                             <div class="form-label">Date Range</div>
@@ -434,13 +347,10 @@
                             </div>
                         </div>
                         <div class="form-group">
-                            <div class="form-label">Incident Type</div><select class="form-select" id="mapFltType"
+                            <div class="form-label">Accident Type</div><select class="form-select" id="mapFltType"
                                 style="font-size:12px;">
-                                <option value="all">All Types</option>
-                                <option>Vehicular Collision</option>
-                                <option>Pedestrian Involved</option>
-                                <option>Single Vehicle</option>
-                            </select>
+                                    <option value="all">All Types</option>
+                        </select>
                         </div>
                         <div class="form-group">
                             <div class="form-label">Severity</div><select class="form-select" id="mapFltSev"
@@ -466,7 +376,7 @@
                                 Filter</button><button class="btn btn-secondary btn-sm"
                                 onclick="resetMapFilters()">Reset</button></div>
                         <div class="legend" style="margin-top:20px;">
-                            <div class="form-label" style="margin-bottom:10px;">Incident Severity</div>
+                            <div class="form-label" style="margin-bottom:10px;">Accident Severity</div>
                             <div class="legend-item">
                                 <div class="legend-dot" style="background:#dc2626;"></div><span>Fatal</span>
                             </div>
@@ -488,13 +398,13 @@
                                 onclick="toggleMapLayer('boundary', this)"><i class="fas fa-draw-polygon"></i> Barangay
                                 Boundaries</button>
                             <button class="map-layer-btn" id="layerIncidents"
-                                onclick="toggleMapLayer('incidents', this)"><i class="fas fa-map-marker-alt"></i> Incident
+                                onclick="toggleMapLayer('incidents', this)"><i class="fas fa-map-marker-alt"></i> Accident
                                 Markers</button>
                             <button class="map-layer-btn" id="layerHeatmap" onclick="toggleMapLayer('heatmap', this)"><i
                                     class="fas fa-fire" style="color:#f59e0b;"></i> Heatmap</button>
                             <button class="map-layer-btn" id="layerHotspots" onclick="toggleMapLayer('hotspots', this)"><i
                                     class="fas fa-bullseye" style="color:#dc2626;"></i> Hotspots</button>
-                            <span id="mapResultSummary" style="margin-left:12px;font-size:11px;color:var(--gray-500);">0 incidents shown</span>
+                            <span id="mapResultSummary" style="margin-left:12px;font-size:11px;color:var(--gray-500);">0 accidents shown</span>
                             <div style="margin-left:auto;display:flex;gap:6px;">
                                 <button class="icon-btn" style="background:var(--gray-100);color:var(--gray-700);"
                                     onclick="mapZoom(1)"><i class="fas fa-plus"></i></button>
@@ -630,7 +540,7 @@
                     <div class="map-info-panel" id="mapInfoPanel">
                         <div class="info-panel-header">
                             <div>
-                                <div style="font-size:11px;color:var(--gray-400);margin-bottom:2px;">Selected Incident
+                                <div style="font-size:11px;color:var(--gray-400);margin-bottom:2px;">Selected Accident
                                 </div>
                                 <div class="info-panel-title" id="infoPanelId">—</div>
                             </div>
@@ -648,11 +558,11 @@
                         <div class="quick-stats">
                             <div class="qs-item">
                                 <div class="qs-val" style="color:var(--orange);" id="infoInjuries">—</div>
-                                <div class="qs-label">Injuries</div>
+                                <div class="qs-label">Injury / Fatal (200 m)</div>
                             </div>
                             <div class="qs-item">
                                 <div class="qs-val" style="color:var(--blue);" id="infoCount">—</div>
-                                <div class="qs-label">In Cluster</div>
+                                <div class="qs-label">Accidents within 200 m</div>
                             </div>
                         </div>
                         <button class="btn btn-primary" style="width:100%;margin-top:14px;justify-content:center;"
@@ -696,7 +606,7 @@
                     <div class="grid-4 mb-16">
                         <div class="stat-card" style="background:linear-gradient(135deg,#1a56db,#1e3060);color:white;">
                             <div class="stat-val" style="color:white;" id="anaStatTotal">0</div>
-                            <div class="stat-label" style="color:rgba(255,255,255,.7);">Total Incidents</div>
+                            <div class="stat-label" style="color:rgba(255,255,255,.7);">Total Accidents</div>
                         </div>
                         <div class="stat-card" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:white;">
                             <div class="stat-val" style="color:white;" id="anaStatFatal">0</div>
@@ -721,17 +631,13 @@
                                 style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;margin-top:16px;">
                                 <div style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:8px;"><i
                                         class="fas fa-lightbulb"></i> Recommendations</div>
-                                <ol style="font-size:12px;color:var(--gray-700);padding-left:18px;line-height:1.8;">
-                                    <li>Increase patrols in high-risk areas.</li>
-                                    <li>Improve road signage and lighting at accident-prone areas.</li>
-                                    <li>Adjust traffic enforcement schedule during peak hours.</li>
-                                </ol>
+                                <ol style="font-size:12px;color:var(--gray-700);padding-left:18px;line-height:1.8;" id="anaRecommendations"><li>Loading…</li></ol>
                             </div>
                         </div>
                     </div>
                     <div>
                         <div class="card" style="margin-bottom:16px;">
-                            <div class="card-header"><span class="card-title">Incidents by Barangay</span></div>
+                            <div class="card-header"><span class="card-title">Accidents by Barangay</span></div>
                             <div class="card-body">
                                 <div class="chart-wrap"><canvas id="barangayChart"></canvas></div>
                             </div>
@@ -741,49 +647,31 @@
                             <div class="insight-item">
                                 <div class="insight-icon" style="background:#fff7ed;color:#ea580c;"><i
                                         class="fas fa-moon"></i></div>
-                                <div class="insight-text"><strong>Peak Incidents</strong>occur during evening hours
-                                    (6–10 PM)</div>
+                                <div class="insight-text" id="anaInsightPeak"><strong>Peak Accidents</strong>—</div>
                             </div>
                             <div class="insight-item">
                                 <div class="insight-icon" style="background:#eff6ff;color:#1a56db;"><i
                                         class="fas fa-map-pin"></i></div>
-                                <div class="insight-text"><strong>Most Frequent</strong>incidents occur in Barangay
-                                    Plainview</div>
+                                <div class="insight-text" id="anaInsightTop"><strong>Most Frequent</strong>—</div>
                             </div>
                             <div class="insight-item" style="border:none;">
                                 <div class="insight-icon" style="background:#fef2f2;color:#dc2626;"><i
                                         class="fas fa-road"></i></div>
-                                <div class="insight-text"><strong>Shaw Blvd–EDSA</strong>has the highest risk score
-                                </div>
+                                <div class="insight-text" id="anaInsightRisk"><strong>Highest Risk</strong>—</div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="analytics-grid-full">
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Incident Type Distribution</span></div>
+                        <div class="card-header"><span class="card-title">Accident Type Distribution</span></div>
                         <div class="card-body" style="display:flex;gap:20px;align-items:center;">
                             <div style="width:160px;height:160px;flex-shrink:0;"><canvas id="typeDonut"></canvas></div>
-                            <div style="flex:1;font-size:12px;">
-                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                    <div style="width:12px;height:12px;border-radius:3px;background:#1a56db;"></div>
-                                    <span>Vehicular Collision</span><span
-                                        style="margin-left:auto;font-weight:700;">60%</span>
-                                </div>
-                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                    <div style="width:12px;height:12px;border-radius:3px;background:#f59e0b;"></div>
-                                    <span>Pedestrian Involved</span><span
-                                        style="margin-left:auto;font-weight:700;">20%</span>
-                                </div>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <div style="width:12px;height:12px;border-radius:3px;background:#94a3b8;"></div>
-                                    <span>Other</span><span style="margin-left:auto;font-weight:700;">20%</span>
-                                </div>
-                            </div>
+                            <div style="flex:1;font-size:12px;" id="typeLegend"></div>
                         </div>
                     </div>
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Time of Day vs. Incident Count</span></div>
+                        <div class="card-header"><span class="card-title">Time of Day vs. Accident Count</span></div>
                         <div class="card-body">
                             <div style="height:200px;"><canvas id="heatmapChart"></canvas></div>
                         </div>
@@ -791,38 +679,10 @@
                 </div>
                 <div style="padding:0 24px 24px;">
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Top Contributing Risk Factors</span></div>
+                        <div class="card-header"><span class="card-title">Where Accidents Are Rising</span>
+                            <span id="risingWindow" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
                         <div class="card-body">
-                            <div class="risk-factors">
-                                <div class="risk-bar-item">
-                                    <div class="risk-bar-label">Poor Road Condition</div>
-                                    <div class="risk-bar-track">
-                                        <div class="risk-bar-fill" style="width:80%;background:#1a56db;"></div>
-                                    </div>
-                                    <div class="risk-count" style="color:#1a56db;">520</div>
-                                </div>
-                                <div class="risk-bar-item">
-                                    <div class="risk-bar-label">Lack of Signage</div>
-                                    <div class="risk-bar-track">
-                                        <div class="risk-bar-fill" style="width:50%;background:#f59e0b;"></div>
-                                    </div>
-                                    <div class="risk-count" style="color:#f59e0b;">250</div>
-                                </div>
-                                <div class="risk-bar-item">
-                                    <div class="risk-bar-label">Speeding</div>
-                                    <div class="risk-bar-track">
-                                        <div class="risk-bar-fill" style="width:34%;background:#fbbf24;"></div>
-                                    </div>
-                                    <div class="risk-count" style="color:#d97706;">170</div>
-                                </div>
-                                <div class="risk-bar-item">
-                                    <div class="risk-bar-label">Distracted Driving</div>
-                                    <div class="risk-bar-track">
-                                        <div class="risk-bar-fill" style="width:28%;background:#ef4444;"></div>
-                                    </div>
-                                    <div class="risk-count" style="color:#ef4444;">150</div>
-                                </div>
-                            </div>
+                            <div class="risk-factors" id="risingList"></div>
                         </div>
                     </div>
                 </div>
@@ -854,7 +714,7 @@
                             </div>
                             <div class="report-type-item">
                                 <div class="report-icon" style="background:#fff7ed;color:#ea580c;"><i
-                                        class="fas fa-file-alt"></i></div><span>Custom Incident Report</span>
+                                        class="fas fa-file-alt"></i></div><span>Custom Accident Report</span>
                             </div>
                         </div>
                         <div class="report-params">
@@ -896,7 +756,7 @@
                                     <div
                                         style="background:var(--blue);color:white;border-radius:8px;padding:14px;text-align:center;">
                                         <div id="reportStatTotal" style="font-size:24px;font-weight:800;">0</div>
-                                        <div style="font-size:11px;opacity:.8;">Total Incidents</div>
+                                        <div style="font-size:11px;opacity:.8;">Total Accidents</div>
                                     </div>
                                     <div
                                         style="background:var(--red);color:white;border-radius:8px;padding:14px;text-align:center;">
@@ -913,16 +773,6 @@
                                         <div id="reportStatHighRisk" style="font-size:24px;font-weight:800;">0</div>
                                         <div style="font-size:11px;opacity:.8;">High Risk Roads</div>
                                     </div>
-                                </div>
-                                <div
-                                    style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;margin-top:16px;">
-                                    <div style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:8px;"><i
-                                            class="fas fa-lightbulb"></i> Recommendations</div>
-                                    <ol style="font-size:12px;color:var(--gray-700);padding-left:18px;line-height:1.8;">
-                                        <li>Increase patrols in high-risk areas.</li>
-                                        <li>Improve road signage and lighting at accident-prone areas.</li>
-                                        <li>Adjust traffic enforcement schedule during peak hours.</li>
-                                    </ol>
                                 </div>
                                 <div style="margin-top:20px;"><canvas id="reportChart" height="120"></canvas></div>
                             </div>
@@ -969,7 +819,7 @@
                                     <tr>
                                         <th>#</th>
                                         <th>Location</th>
-                                        <th>Incidents</th>
+                                        <th>Accidents</th>
                                         <th>Risk Score</th>
                                         <th>Level</th>
                                     </tr>
@@ -983,7 +833,7 @@
                         </div>
                     </div>
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Incidents by Road</span></div>
+                        <div class="card-header"><span class="card-title">Accidents by Road</span></div>
                         <div class="card-body">
                             <div class="chart-wrap"><canvas id="hotspotChart"></canvas></div>
                         </div>
@@ -995,9 +845,83 @@
                         </div>
                     </div>
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Peak Incident Hours</span></div>
+                        <div class="card-header"><span class="card-title">Peak Accident Hours</span></div>
                         <div class="card-body">
                             <div class="chart-wrap"><canvas id="peakHoursChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== FORECAST ===== -->
+            <div class="page" id="page-forecast">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Accident Forecast</span></div>
+                    <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportForecastCsv()"><i
+                                class="fas fa-download"></i> Export CSV</button></div>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div id="fcModelNote" style="font-size:11.5px;color:var(--gray-500);margin-bottom:12px;line-height:1.5;"></div>
+                    <div class="grid-4 mb-16">
+                        <div class="stat-card" style="border-left:4px solid var(--blue);">
+                            <div class="stat-val" id="fcStatMonth" style="color:var(--blue);">—</div>
+                            <div class="stat-label">Forecast Month</div>
+                        </div>
+                        <div class="stat-card" style="border-left:4px solid #7c3aed;">
+                            <div class="stat-val" id="fcStatTotal" style="color:#7c3aed;">—</div>
+                            <div class="stat-label">Predicted Accidents (City)</div>
+                        </div>
+                        <div class="stat-card" style="border-left:4px solid #dc2626;">
+                            <div class="stat-val" id="fcStatUp" style="color:#dc2626;">—</div>
+                            <div class="stat-label">Areas Trending Up</div>
+                        </div>
+                        <div class="stat-card" style="border-left:4px solid #16a34a;">
+                            <div class="stat-val" id="fcStatAccuracy" style="color:#16a34a;">—</div>
+                            <div class="stat-label" id="fcStatAccuracyLabel">Forecast Error (avg / area)</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hotspot-grid">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">City Trend &amp; Next Month</span></div>
+                        <div class="card-body">
+                            <div class="chart-wrap"><canvas id="fcCityChart"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Last Month vs. Predicted — by Barangay</span></div>
+                        <div class="card-body">
+                            <div class="chart-wrap"><canvas id="fcBarangayChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:0 24px 24px;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Predicted Accidents Next Month — All Areas</span>
+                            <span id="fcModelTag" style="margin-left:auto;font-size:11px;font-weight:600;color:var(--blue);"></span></div>
+                        <div style="overflow-x:auto;">
+                            <table class="hotspot-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Barangay</th>
+                                        <th>Road</th>
+                                        <th>Recorded</th>
+                                        <th>Last Month</th>
+                                        <th>Predicted</th>
+                                        <th>Change</th>
+                                        <th>Trend</th>
+                                        <th>Risk Score</th>
+                                        <th>Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fcTableBody">
+                                    <tr>
+                                        <td colspan="10" style="text-align:center;color:var(--gray-400);padding:24px;"><i class="fas fa-spinner fa-spin"></i> Loading forecast…</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -1015,8 +939,8 @@
                     <div class="card mb-16">
                         <div class="card-body" style="font-size:12.5px;color:var(--gray-500);line-height:1.65;padding:16px;">
                             <i class="fas fa-circle-info" style="color:var(--blue);"></i>
-                            Enter monthly incident counts per barangay/road below. This is the real dataset — combined
-                            with logged road incidents — that the prediction engine uses to compute risk scores and
+                            Enter monthly accident counts per barangay/road below. This is the real dataset — combined
+                            with logged road accidents — that the prediction engine uses to compute risk scores and
                             forecasts shown on <strong>Hotspot Analysis</strong>, <strong>Safety Index</strong>, and the
                             public main page. Nothing here is hardcoded: every prediction updates automatically as soon
                             as you add, edit, or remove a data entry.
@@ -1031,7 +955,7 @@
                                         <th>Barangay</th>
                                         <th>Road</th>
                                         <th>Month</th>
-                                        <th>Incident Count</th>
+                                        <th>Accident Count</th>
                                         <th>Notes</th>
                                         <th>Last Updated</th>
                                         <th></th>
@@ -1072,14 +996,16 @@
                                 <div
                                     style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
                                     <div id="safetyGaugeScore" style="font-size:30px;font-weight:800;color:#f59e0b;">—</div>
-                                    <div style="font-size:10px;color:var(--gray-400);">/ 10</div>
+                                    <div style="font-size:10px;color:var(--gray-400);">/ 100</div>
                                 </div>
                             </div>
                             <div id="safetyGaugeBadge" class="risk-pill risk-med" style="font-size:12px;">—</div>
+                            <div id="safetyCategories" style="margin-top:14px;text-align:left;display:flex;flex-direction:column;gap:8px;"></div>
                         </div>
                         <div class="safety-card">
-                            <div style="font-size:13px;font-weight:700;margin-bottom:14px;">Barangay Safety Scores</div>
-                            <div id="safetyBarangayList" style="display:flex;flex-direction:column;gap:10px;">
+                            <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Barangay Safety Scores</div>
+                            <div style="font-size:11px;color:var(--gray-400);margin-bottom:12px;">Lowest first · 0–100, higher is safer</div>
+                            <div id="safetyBarangayList" style="display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;padding-right:4px;">
                                 <div style="text-align:center;color:var(--gray-400);font-size:12px;padding:12px;"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
                             </div>
                         </div>
@@ -1092,7 +1018,7 @@
                         </div>
                     </div>
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Safety Index Trend (Monthly)</span></div>
+                        <div class="card-header"><span class="card-title">Safety Index Trend (Monthly)</span><span id="safetyTrendNote" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
                         <div class="card-body">
                             <div class="chart-wrap"><canvas id="safetyTrendChart"></canvas></div>
                         </div>
@@ -1275,9 +1201,9 @@
                                         <div
                                             style="display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--gray-100);">
                                             <div>
-                                                <div style="font-size:13px;font-weight:600;">Fatal Incident Alerts</div>
+                                                <div style="font-size:13px;font-weight:600;">Fatal Accident Alerts</div>
                                                 <div style="font-size:12px;color:var(--gray-500);">Get notified
-                                                    immediately when a fatal incident is reported.</div>
+                                                    immediately when a fatal accident is reported.</div>
                                             </div><label
                                                 style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer;"><input
                                                     type="checkbox" checked style="opacity:0;width:0;height:0;"
@@ -1336,12 +1262,12 @@
     <div class="modal-overlay" id="addIncidentModal">
         <div class="modal">
             <div class="modal-header">
-                <div class="modal-title" id="incidentModalTitle">Add Road Incident</div><button class="modal-close"
+                <div class="modal-title" id="incidentModalTitle">Add Road Accident</div><button class="modal-close"
                     onclick="closeModal()"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <div class="form-label">Incident ID</div><input class="form-input" id="incIdField"
+                    <div class="form-label">Accident ID</div><input class="form-input" id="incIdField"
                         value="Auto Generated" readonly style="background:var(--gray-50);color:var(--gray-400);">
                 </div>
                 <div class="form-row">
@@ -1355,7 +1281,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <div class="form-label">Incident Type</div><select class="form-select" id="incType">
+                    <div class="form-label">Accident Type</div><select class="form-select" id="incType">
                         <option>Vehicular Collision</option>
                         <option>Pedestrian Involved</option>
                         <option>Single Vehicle</option>
@@ -1406,7 +1332,7 @@
                 </div>
             </div>
             <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button
-                    id="incidentSaveBtn" class="btn btn-primary" onclick="saveIncident()"><i class="fas fa-save"></i> Save Incident</button>
+                    id="incidentSaveBtn" class="btn btn-primary" onclick="saveIncident()"><i class="fas fa-save"></i> Save Accident</button>
             </div>
         </div>
     </div>
@@ -1493,7 +1419,7 @@
                         <div class="form-label">Month</div><input type="month" class="form-input" id="predInputMonth">
                     </div>
                     <div class="form-group">
-                        <div class="form-label">Incident Count</div><input type="number" min="0" class="form-input"
+                        <div class="form-label">Accident Count</div><input type="number" min="0" class="form-input"
                             id="predInputCount" placeholder="e.g. 12">
                     </div>
                 </div>
@@ -1517,9 +1443,9 @@
                     style="width:60px;height:60px;background:#fef2f2;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:26px;color:#dc2626;">
                     <i class="fas fa-trash-alt"></i>
                 </div>
-                <div style="font-size:17px;font-weight:800;margin-bottom:8px;">Delete Incident?</div>
+                <div style="font-size:17px;font-weight:800;margin-bottom:8px;">Delete Accident?</div>
                 <div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:20px;">This action cannot
-                    be undone. The incident record will be permanently removed.</div>
+                    be undone. The accident record will be permanently removed.</div>
                 <div style="display:flex;gap:10px;justify-content:center;"><button class="btn btn-secondary"
                         onclick="document.getElementById('deleteModal').classList.remove('open')">Cancel</button><button
                         class="btn btn-danger" onclick="confirmDelete()"><i class="fas fa-trash-alt"></i>
@@ -1552,7 +1478,7 @@
             <div class="modal-header"
                 style="background:linear-gradient(135deg,var(--navy),var(--navy-light));border-radius:14px 14px 0 0;">
                 <div>
-                    <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:3px;">INCIDENT RECORD</div>
+                    <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:3px;">ACCIDENT RECORD</div>
                     <div class="modal-title" style="color:white;" id="detailId">#A05932</div>
                 </div>
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center;"><span
@@ -1564,7 +1490,7 @@
                     <div>
                         <div style="font-size:12px;color:var(--gray-500);">Date &amp; Time</div>
                         <div style="font-size:13px;font-weight:600;margin-bottom:8px;" id="detailDateTime">—</div>
-                        <div style="font-size:12px;color:var(--gray-500);">Incident Type</div>
+                        <div style="font-size:12px;color:var(--gray-500);">Accident Type</div>
                         <div style="font-size:13px;font-weight:600;margin-bottom:8px;" id="detailType">—</div>
                     </div>
                     <div>
@@ -1681,7 +1607,7 @@
         <div class="modal" style="width:460px;">
             <div class="modal-header">
                 <div class="modal-title"><i class="fas fa-file-export"
-                        style="color:var(--blue);margin-right:8px;"></i>Export Incident Data</div>
+                        style="color:var(--blue);margin-right:8px;"></i>Export Accident Data</div>
                 <button class="modal-close" onclick="closeExportModal()"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
@@ -1722,7 +1648,7 @@
                     <div class="form-label">Include Columns</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="id"
-                                style="accent-color:var(--blue);"> Incident ID</label>
+                                style="accent-color:var(--blue);"> Accident ID</label>
                         <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="date"
                                 style="accent-color:var(--blue);"> Date</label>
                         <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="time"
@@ -1734,7 +1660,7 @@
                         <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="sev"
                                 style="accent-color:var(--blue);"> Severity</label>
                         <label class="checkbox-label"><input type="checkbox" checked class="export-col" value="type"
-                                style="accent-color:var(--blue);"> Incident Type</label>
+                                style="accent-color:var(--blue);"> Accident Type</label>
                         <label class="checkbox-label"><input type="checkbox" class="export-col" value="loc"
                                 style="accent-color:var(--blue);"> Municipality</label>
                     </div>
@@ -1742,7 +1668,7 @@
                 <div
                     style="background:var(--gray-50);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--gray-600);display:flex;align-items:center;gap:8px;">
                     <i class="fas fa-info-circle" style="color:var(--blue);"></i>
-                    <span id="exportRowCount">Exporting <strong>10</strong> incident records</span>
+                    <span id="exportRowCount">Exporting <strong>10</strong> accident records</span>
                 </div>
             </div>
             <div class="modal-footer">

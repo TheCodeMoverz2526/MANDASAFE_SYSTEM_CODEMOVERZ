@@ -18,7 +18,10 @@ class MlBridge
         $python = config('mandasafe.python_bin');
         $scriptPath = config('mandasafe.ml_root') . DIRECTORY_SEPARATOR . $script;
 
-        $result = Process::input(json_encode($payload))->run([$python, $scriptPath]);
+        $result = Process::input(json_encode($payload))
+            ->env(self::pythonEnvironment())
+            ->timeout(120)
+            ->run([$python, $scriptPath]);
 
         if (! $result->successful()) {
             throw new RuntimeException("ML script {$script} failed: " . $result->errorOutput());
@@ -30,5 +33,34 @@ class MlBridge
         }
 
         return $decoded;
+    }
+
+    /**
+     * `php artisan serve` on Windows hands the web process only a short list of environment
+     * variables, and SYSTEMROOT is not among them. Without it Python cannot load Windows'
+     * networking layer, so `import sklearn` dies with "WinError 10106" and every prediction
+     * silently falls back to the heuristic. These are put back explicitly.
+     */
+    private static function pythonEnvironment(): array
+    {
+        if (PHP_OS_FAMILY !== 'Windows') {
+            return [];
+        }
+
+        $systemRoot = getenv('SYSTEMROOT') ?: getenv('SystemRoot') ?: getenv('WINDIR') ?: 'C:\\Windows';
+        $temp = getenv('TEMP') ?: getenv('TMP') ?: sys_get_temp_dir();
+
+        return array_filter([
+            'SYSTEMROOT' => $systemRoot,
+            'WINDIR' => getenv('WINDIR') ?: $systemRoot,
+            'TEMP' => $temp,
+            'TMP' => $temp,
+            'PATH' => getenv('PATH') ?: $systemRoot . '\\System32;' . $systemRoot,
+            'USERPROFILE' => getenv('USERPROFILE') ?: null,
+            'APPDATA' => getenv('APPDATA') ?: null,
+            'LOCALAPPDATA' => getenv('LOCALAPPDATA') ?: null,
+            // Keep the JSON on stdout plain UTF-8 whatever the console code page is.
+            'PYTHONIOENCODING' => 'utf-8',
+        ], fn ($value) => $value !== null && $value !== false && $value !== '');
     }
 }

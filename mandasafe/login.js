@@ -60,8 +60,24 @@ function updatePasswordStrength(password) {
     meter.querySelector('.strength-label').textContent = state === 'strong' ? 'Strong password' : state === 'moderate' ? 'Moderate password' : 'Weak password';
 }
 
-function openPrivacyPolicy(event) { event.preventDefault(); document.getElementById('privacyPolicy').classList.add('open'); }
+function openPrivacyPolicy(event) {
+    event.preventDefault();
+    document.getElementById('privacyPolicy').classList.add('open');
+    const body = document.querySelector('#privacyPolicy .privacy-body');
+    if (body) { body.scrollTop = 0; body.focus(); }
+}
 function closePrivacyPolicy() { document.getElementById('privacyPolicy').classList.remove('open'); }
+/* "I Agree" in the policy ticks the consent box on the sign-up form — the same choice as
+   ticking it by hand, made right after reading the policy. */
+function agreePrivacyPolicy() {
+    const box = document.getElementById('privacyAgreement');
+    if (box) box.checked = true;
+    closePrivacyPolicy();
+}
+
+// The policy opens at the top every time, and closes with Escape or a click outside it.
+document.addEventListener('keydown', event => { if (event.key === 'Escape') closePrivacyPolicy(); });
+document.addEventListener('click', event => { if (event.target && event.target.id === 'privacyPolicy') closePrivacyPolicy(); });
 
 /* The session the dashboard reads: the server-issued token plus the account's role,
    so Mandasafe.html shows admin tools only to real administrators. */
@@ -101,13 +117,18 @@ async function beginRegistration() {
 
     setBusy(true);
     try {
-        // The server validates the details and holds them until the code is accepted — the
-        // account is written only then, so no unverified number ever becomes an account.
-        const started = await api('/api/auth/register', {
+        // No verification code: the server validates the details and creates the account.
+        const result = await api('/api/auth/register', {
             method: 'POST',
             body: JSON.stringify({ name, email, phone, password })
         });
-        openChallenge(started);
+        document.getElementById('loginIdentifier').value = result.account.email;
+        document.getElementById('loginPassword').value = '';
+        ['createName', 'createEmail', 'createPhone', 'createPassword', 'confirmPassword'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('privacyAgreement').checked = false;
+        updatePasswordStrength('');
+        showPanel('signInPanel');
+        showError('loginError', 'Account created. You can now sign in.');
     } catch (error) {
         showError('createError', error.message);
     } finally {
@@ -120,10 +141,11 @@ async function beginLogin() {
     const password = document.getElementById('loginPassword').value;
     setBusy(true);
     try {
-        // The password is checked here, but no token comes back yet: the session is created
-        // at /api/auth/otp/verify and nowhere else.
-        const started = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password }) });
-        openChallenge(started);
+        // A correct password signs a resident straight in. An administrator gets a challenge
+        // instead, closed by the code from their authenticator app.
+        const result = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password }) });
+        if (result.totpRequired) return showTotpPanel(result);
+        completeLogin(result);
     } catch (error) {
         showError('loginError', error.message);
     } finally {
@@ -131,45 +153,34 @@ async function beginLogin() {
     }
 }
 
+/* Password recovery is by registered email only: there is no channel to choose, so the code
+   is sent to the account's email address as soon as the server has found the account. */
 async function beginPasswordReset() {
-    const identifier = document.getElementById('resetIdentifier').value.trim();
+    const email = document.getElementById('resetEmail').value.trim().toLowerCase();
+    if (!validEmail(email)) return showError('forgotError', 'Enter a valid email address.');
+
+    clearErrors();
     setBusy(true);
+    let started;
     try {
-        const started = await api('/api/auth/contact', { method: 'POST', body: JSON.stringify({ identifier }) });
-        openChallenge(started);
+        started = await api('/api/auth/contact', { method: 'POST', body: JSON.stringify({ email }) });
     } catch (error) {
-        showError('forgotError', error.message);
+        return showError('forgotError', error.message);
     } finally {
         setBusy(false);
     }
-}
 
-/* ---------- step two: choose a channel and have the code sent ---------- */
-
-function openChallenge(started) {
     challenge = { ...started, id: started.challengeId, channel: null };
-
-    document.getElementById('emailDestination').textContent = challenge.email || 'Not available';
-    document.getElementById('smsDestination').textContent = challenge.phone || 'Not available';
-    document.getElementById('channelDescription').textContent = challenge.purpose === 'register'
-        ? 'Choose how you would like to verify your new account.'
-        : 'Select where we should send your six-digit verification code.';
-
-    // A channel the server cannot deliver on is shown as unavailable rather than failing
-    // after the tap.
-    const channels = challenge.channels || {};
-    [['emailChannel', channels.email], ['smsChannel', channels.sms]].forEach(([id, available]) => {
-        const button = document.getElementById(id);
-        if (!button) return;
-        button.disabled = !available;
-        button.title = available ? '' : 'This verification method is not available right now.';
-    });
-
-    showPanel('channelPanel');
+    if (!(started.channels || {}).email) {
+        return showError('forgotError', 'Email verification is not available right now. Please try again later.');
+    }
+    sendOtp('email');
 }
+
+/* ---------- step two: have the code emailed ---------- */
 
 async function sendOtp(channel) {
-    if (!challenge) return showError('channelError', 'This verification has expired. Please start again.');
+    if (!challenge) return showError('forgotError', 'This verification has expired. Please start again.');
 
     setBusy(true);
     try {
@@ -181,7 +192,8 @@ async function sendOtp(channel) {
         showOtpPanel(sent);
     } catch (error) {
         // Stay on whichever panel the person can act from.
-        showError(document.getElementById('otpPanel').classList.contains('active') ? 'otpError' : 'channelError', error.message);
+        const active = document.querySelector('.auth-panel.active');
+        showError(active && active.id === 'otpPanel' ? 'otpError' : 'forgotError', error.message);
     } finally {
         setBusy(false);
     }
@@ -193,11 +205,12 @@ function showOtpPanel(sent) {
         `We sent a six-digit ${sent.channel === 'email' ? 'email' : 'SMS'} code to ${sent.destination}.`;
     document.querySelectorAll('.otp-inputs input').forEach(input => input.value = '');
 
-    // In test mode the server tells us the code it generated, because no provider was
-    // contacted. With real credentials this field is simply absent.
+    // Until email delivery is set up, the server hands back the code it generated so it can
+    // be shown here. With real credentials this field is simply absent.
     const hint = document.getElementById('demoOtp');
     hint.hidden = !sent.testCode;
-    hint.textContent = sent.testCode ? `Test mode — your code is ${sent.testCode}` : '';
+    hint.textContent = sent.testCode ? `Your verification code: ${sent.testCode}` : '';
+    if (sent.testCode) document.getElementById('otpDescription').textContent = 'Enter the six-digit code shown below the boxes.';
 
     showPanel('otpPanel');
     startResendTimer(sent.resendIn || 30);
@@ -220,6 +233,16 @@ function startResendTimer(seconds) {
 
 function resendOtp() { if (challenge && challenge.channel) sendOtp(challenge.channel); }
 
+/* Going back means entering a different email — the challenge for the old one is dropped on
+   the server first. */
+function leaveOtpPanel() {
+    clearInterval(resendInterval);
+    if (!challenge) return showPanel('forgotPanel');
+    api('/api/auth/otp/cancel', { method: 'POST', body: JSON.stringify({ challengeId: challenge.id }) }).catch(() => { });
+    challenge = null;
+    showPanel('forgotPanel');
+}
+
 function cancelVerification() {
     clearInterval(resendInterval);
     // Tell the server to drop it as well, rather than leaving a live challenge behind.
@@ -230,7 +253,60 @@ function cancelVerification() {
 
 /* ---------- step three: the code ---------- */
 
-function enteredOtp() { return [...document.querySelectorAll('.otp-inputs input')].map(input => input.value).join(''); }
+function enteredOtp(groupSelector = '#otpPanel .otp-inputs') { return [...document.querySelectorAll(`${groupSelector} input`)].map(input => input.value).join(''); }
+
+/* ---------- administrators: authenticator app (TOTP) ----------
+   On the first sign-in the server hands over a new secret to scan; it is only kept once a
+   code from the app has been accepted. After that, just the six digits are asked for. */
+
+function showTotpPanel(started) {
+    challenge = { id: started.challengeId, purpose: 'totp' };
+    const enroll = !!started.enroll;
+
+    document.getElementById('totpTitle').textContent = enroll ? 'Set up your authenticator app' : 'Enter authenticator code';
+    document.getElementById('totpDescription').textContent = enroll
+        ? 'Administrator accounts need a second step. Scan this QR code with Google Authenticator, Microsoft Authenticator or a similar app, then enter the six-digit code it shows.'
+        : 'Open your authenticator app and enter the six-digit code shown for MandaSafe.';
+
+    const setup = document.getElementById('totpSetup');
+    const qrBox = document.getElementById('totpQr');
+    setup.hidden = !enroll;
+    qrBox.innerHTML = '';
+    document.getElementById('totpSecret').textContent = enroll ? started.secret.replace(/(.{4})/g, '$1 ').trim() : '';
+    if (enroll && typeof qrcode === 'function') {
+        const qr = qrcode(0, 'M');
+        qr.addData(started.otpauthUri);
+        qr.make();
+        qrBox.innerHTML = qr.createImgTag(4, 0);
+    }
+
+    document.querySelectorAll('#totpInputs input').forEach(input => input.value = '');
+    showPanel('totpPanel');
+    setTimeout(() => document.querySelector('#totpInputs input').focus(), 0);
+}
+
+async function verifyTotp() {
+    if (!challenge || challenge.purpose !== 'totp') return showError('totpError', 'This sign-in has expired. Please start again.');
+
+    const code = enteredOtp('#totpInputs');
+    if (!/^\d{6}$/.test(code)) return showError('totpError', 'Enter all six digits from your authenticator app.');
+
+    setBusy(true);
+    try {
+        const session = await api('/api/auth/totp/verify', {
+            method: 'POST',
+            body: JSON.stringify({ challengeId: challenge.id, code })
+        });
+        challenge = null;
+        completeLogin(session);
+    } catch (error) {
+        document.querySelectorAll('#totpInputs input').forEach(input => input.value = '');
+        document.querySelector('#totpInputs input').focus();
+        showError('totpError', error.message);
+    } finally {
+        setBusy(false);
+    }
+}
 
 async function verifyOtp() {
     if (!challenge) return showError('otpError', 'This verification has expired. Please start again.');
@@ -251,14 +327,6 @@ async function verifyOtp() {
         if (challenge.purpose === 'login') {
             challenge = null;
             return completeLogin(result);
-        }
-
-        if (challenge.purpose === 'register') {
-            document.getElementById('loginIdentifier').value = result.account.email;
-            document.getElementById('loginPassword').value = '';
-            challenge = null;
-            showPanel('signInPanel');
-            return showError('loginError', 'Account created and verified. You can now sign in.');
         }
 
         // A reset: the challenge stays alive for a few minutes so the new password can be
@@ -310,7 +378,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.location.hash === '#signup') showPanel('createPanel');
 
     document.getElementById('createPassword').addEventListener('input', event => updatePasswordStrength(event.target.value));
-    document.querySelectorAll('.otp-inputs input').forEach((input, index, inputs) => {
+    // Each six-box group moves focus within itself only (there is one on the email/SMS panel
+    // and one on the authenticator panel).
+    document.querySelectorAll('.otp-inputs').forEach(group => group.querySelectorAll('input').forEach((input, index, inputs) => {
         input.addEventListener('input', event => {
             input.value = event.target.value.replace(/\D/g, '').slice(-1);
             if (input.value && inputs[index + 1]) inputs[index + 1].focus();
@@ -324,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             [...digits].forEach((digit, digitIndex) => { if (inputs[digitIndex]) inputs[digitIndex].value = digit; });
             inputs[Math.min(digits.length, 5)].focus();
         });
-    });
+    }));
 });
 
 if (localStorage.getItem(SESSION_KEY) && localStorage.getItem(TOKEN_KEY)) {

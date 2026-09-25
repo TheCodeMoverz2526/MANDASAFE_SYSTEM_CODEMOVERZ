@@ -150,7 +150,7 @@ class ImportLegacyStore extends Command
         });
 
         $this->info(sprintf(
-            'Imported %d incidents, %d prediction inputs, %d accounts, %d sessions.',
+            'Imported %d accidents, %d prediction inputs, %d accounts, %d sessions.',
             count($incidents),
             count($inputs),
             count($accounts),

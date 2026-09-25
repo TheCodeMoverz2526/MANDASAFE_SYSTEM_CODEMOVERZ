@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MandaSafe — Mandaluyong Road Incident Mapping &amp; Analytics System</title>
-<link rel="icon" href="assets/seal.svg">
+<title>MandaSafe — Mandaluyong Road Accident Mapping &amp; Analytics System</title>
+<link rel="icon" href="assets/logo-192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -12,9 +12,9 @@
 <nav class="pub-nav">
   <div class="pub-nav-in">
     <a class="brand" href="index.html">
-      <span class="brand-logo" data-i="logo"></span>
+      <img class="brand-logo" src="assets/logo-192.png" alt="MandaSafe logo">
       <span><span class="brand-name">Manda<span>Safe</span></span>
-      <span class="brand-sub" style="display:block">Mandaluyong Road Incident Mapping &amp; Analytics System</span></span>
+      <span class="brand-sub" style="display:block">Mandaluyong Road Accident Mapping &amp; Analytics System</span></span>
     </a>
     <div class="pub-links">
       <a href="index.html" class="on" data-i="home">Home</a>
@@ -30,8 +30,8 @@
   <div class="hero-in">
     <div>
       <span class="chip" data-i="shield">Making Mandaluyong Roads Safer</span>
-      <h1>Road Incident Mapping &amp;<br>Safety System for Mandaluyong</h1>
-      <p class="lead">Every road incident recorded by the City Traffic Planning and Management Office —
+      <h1>Road Accident Mapping &amp; <br>Safety System for Mandaluyong</h1>
+      <p class="lead">Every road accident recorded by the City Traffic Planning and Management Office —
         mapped inside the city's 27 barangay boundaries, analysed for hotspots, and forecast a month ahead.</p>
       <div class="hero-cta">
         <a class="btn btn-orange btn-lg" href="login.html" data-i="login">Sign In to MandaSafe</a>
@@ -42,15 +42,15 @@
     <div class="hero-card">
       <div class="hero-card-head">
         <span style="width:10px;height:10px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.18)"></span>
-        <div><h3>Live Incident Map</h3><p id="mapSub">Loading city data…</p></div>
+        <div><h3>Live Accident Map</h3><p id="mapSub">Loading city data…</p></div>
       </div>
       <div class="hero-grid">
         <div><div id="heroMap" class="map" style="height:300px"></div></div>
         <div>
           <div class="mini-stat"><span class="ic ic-blue" data-i="shield"></span>
-            <div><div class="k">Recorded Incidents</div><div class="v" id="hTotal">—</div><div class="s" id="hRange">All time</div></div></div>
+            <div><div class="k">Recorded Accidents</div><div class="v" id="hTotal">—</div><div class="s" id="hRange">All time</div></div></div>
           <div class="mini-stat"><span class="ic ic-orange" data-i="wifi"></span>
-            <div><div class="k">Active Cases</div><div class="v" id="hActive">—</div><div class="s">Not yet resolved</div></div></div>
+            <div><div class="k">Latest Month</div><div class="v" id="hActive">—</div><div class="s" id="hLatest">Accidents recorded</div></div></div>
           <div class="mini-stat"><span class="ic ic-purple" data-i="chart"></span>
             <div><div class="k">High-Risk Areas</div><div class="v" id="hRisk">—</div><div class="s">Identified</div></div></div>
         </div>
@@ -69,7 +69,7 @@
   <div class="section-in">
     <div class="sec-title"><i></i><h2>Predicted High-Risk Locations</h2><i></i></div>
     <p style="text-align:center;color:var(--muted);font-size:13.5px;max-width:620px;margin:-22px auto 30px">
-      Computed from the incidents and baseline data the administrators record — updated the moment new data comes in.</p>
+      Computed from the accidents and baseline data the administrators record — updated the moment new data comes in.</p>
     <div class="g-3" id="predGrid" style="display:grid;gap:18px">
       <div class="empty" style="grid-column:1/-1">Loading predictions…</div>
     </div>
@@ -81,7 +81,7 @@
     <div class="sec-title"><i></i><h2>How MandaSafe Works</h2><i></i></div>
     <div class="g-5">
       <div class="feat"><div class="ic" data-i="edit"></div><h3>Officers Record</h3>
-        <p>TPMO officers log every road incident in the RIMAS admin console — date, barangay, road, type and severity.</p></div>
+        <p>TPMO officers log every road accident in the RIMAS admin console — date, barangay, road, type and severity.</p></div>
       <div class="feat"><div class="ic" data-i="pin"></div><h3>Mapped by Barangay</h3>
         <p>Each record is placed inside the city's official barangay boundaries, by coordinates or barangay centroid.</p></div>
       <div class="feat"><div class="ic" data-i="fire"></div><h3>Hotspots Found</h3>
@@ -97,9 +97,9 @@
 <section class="section" style="padding-top:0">
   <div class="section-in">
     <div class="band">
-      <img src="assets/seal.svg" alt="Seal" style="width:64px;height:64px">
+      <img src="assets/logo-192.png" alt="MandaSafe logo" style="width:96px;height:96px;object-fit:contain">
       <div class="motto">Safer Roads.<br>Stronger Mandaluyong.</div>
-      <div class="bstat"><span class="ic" data-i="shield"></span><div><div class="v" id="bTotal">—</div><div class="k">Incidents<br>On Record</div></div></div>
+      <div class="bstat"><span class="ic" data-i="shield"></span><div><div class="v" id="bTotal">—</div><div class="k">Accidents<br>On Record</div></div></div>
       <div class="bstat"><span class="ic" data-i="pin"></span><div><div class="v" id="bBrgy">—</div><div class="k">Barangays<br>Covered</div></div></div>
       <div class="bstat"><span class="ic" data-i="calendar"></span><div><div class="v" id="bMonths">—</div><div class="k">Months of<br>History</div></div></div>
       <div class="band-card">
@@ -113,7 +113,7 @@
   </div>
 </section>
 
-<footer class="pub-foot">© 2026 MandaSafe – Mandaluyong Road Incident Mapping &amp; Analytics System.
+<footer class="pub-foot">© 2026 MandaSafe – Mandaluyong Road Accident Mapping &amp; Analytics System.
   Data maintained by the Mandaluyong City Traffic Planning and Management Office.</footer>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -133,19 +133,20 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
   }
 
   countUp(document.getElementById('hTotal'), s.totalIncidents);
-  countUp(document.getElementById('hActive'), s.activeIncidents);
+  countUp(document.getElementById('hActive'), s.latestMonth ? s.latestMonth.count : 0);
+  if (s.latestMonth) document.getElementById('hLatest').textContent = `Accidents in ${fmtMonth(s.latestMonth.month)}`;
   countUp(document.getElementById('hRisk'), s.highRiskLocations);
   countUp(document.getElementById('bTotal'), s.totalIncidents);
   countUp(document.getElementById('bBrgy'), s.barangayCount);
   countUp(document.getElementById('bMonths'), s.byMonth.length);
   document.getElementById('hRange').textContent = `${fmtDate(s.range.from)} – ${fmtDate(s.range.to)}`;
-  document.getElementById('mapSub').textContent = `${num(s.totalIncidents)} incidents across ${s.barangayCount} barangays`;
+  document.getElementById('mapSub').textContent = `${num(s.totalIncidents)} accidents across ${s.barangayCount} barangays`;
 
   const top = s.byBarangay[0];
   if (top) {
     document.getElementById('topName').textContent = top.barangay;
     document.getElementById('topBody').textContent =
-      `${num(top.count)} recorded incidents — ${Math.round(top.count / s.totalIncidents * 100)}% of the city total. Plan alternate routes during peak hours.`;
+      `${num(top.count)} recorded accidents — ${Math.round(top.count / s.totalIncidents * 100)}% of the city total. Plan alternate routes during peak hours.`;
   }
 
   const levelClass = { high: 'level-high', medium: 'level-medium', low: 'level-low' };
@@ -165,7 +166,7 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
             <div style="font-size:11px;color:var(--muted)">Risk score / 10</div></div>
         </div>
       </div>
-    </div>`).join('') || '<div class="empty" style="grid-column:1/-1">No forecasts yet — the database has no incidents.</div>';
+    </div>`).join('') || '<div class="empty" style="grid-column:1/-1">No forecasts yet — the database has no accidents.</div>';
 
   const counts = {};
   s.byBarangay.forEach(b => { counts[b.barangay] = b.count; });

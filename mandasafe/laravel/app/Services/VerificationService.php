@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * The verification step behind signing in, signing up and resetting a password.
+ * The verification step behind signing in and resetting a password, and signing up (which
+ * needs no code).
  *
  * Everything that decides the outcome happens here, on the server:
  *
@@ -25,8 +26,14 @@ use Illuminate\Support\Facades\RateLimiter;
  */
 class VerificationService
 {
-    /** How long a code stays usable. Keep OTP_SMS_INTERVAL in step with this. */
+    /** How long a challenge (the whole reset attempt, resends included) stays open. */
     public const CHALLENGE_TTL_SECONDS = 600;
+
+    /**
+     * How long each code stays usable after it is sent. Matches the resend cooldown, so the
+     * moment a code expires the person can ask for a new one without starting over.
+     */
+    public const CODE_TTL_SECONDS = 30;
 
     /** Guesses allowed per challenge, counted across every code it sent. */
     public const MAX_ATTEMPTS = 5;
@@ -40,15 +47,19 @@ class VerificationService
     /** How long a verified reset challenge may still be used to set the new password. */
     public const VERIFIED_TTL_SECONDS = 600;
 
-    public function __construct(private AccountService $accounts, private OtpService $otp)
+    /** How long an administrator has to type the authenticator code after the password. */
+    public const TOTP_TTL_SECONDS = 300;
+
+    public function __construct(private AccountService $accounts, private OtpService $otp, private TotpService $totp)
     {
     }
 
     /* ------------------------------------------------------------------ starting points */
 
     /**
-     * Step one of signing in: the password is checked now, but no session is created. Until
-     * the code is accepted the caller holds nothing more useful than a challenge id.
+     * Signing in: a correct password creates a resident's session straight away. An
+     * administrator gets no session yet — only a challenge that the code from their
+     * authenticator app (TOTP) has to close, see verifyTotp().
      */
     public function startLogin(array $body, string $ip): array
     {
@@ -62,45 +73,144 @@ class VerificationService
         // The password was right, so this attempt should not count against the account.
         RateLimiter::clear('login-id:' . strtolower($identifier));
 
-        return $this->begin('login', [
-            'account_id' => $account->id,
-            'identifier' => $account->email,
-            'name' => $account->name,
-            'email' => $account->email,
-            'phone' => $account->phone,
-        ], $ip);
+        if ($account->isAdmin()) {
+            return $this->startTotp($account, $ip);
+        }
+
+        return $this->accounts->createSession($account);
     }
 
     /**
-     * Step one of signing up. The details are validated in full now — a duplicate email or a
-     * short password should be reported before an SMS is paid for — but the account is only
-     * created once the code is accepted, so an unverified number never becomes an account.
+     * Opens the authenticator step for an administrator. One who has not set up an app yet
+     * gets a new secret to scan; it is held encrypted on the challenge and only copied to the
+     * account once a code from it has been accepted, so a half-finished setup changes nothing.
      */
-    public function startRegistration(array $body, string $ip): array
+    private function startTotp(Account $account, string $ip): array
+    {
+        $this->prune();
+
+        $enroll = ! $account->totp_enabled_at_iso || ! $account->totp_secret;
+        $secret = $enroll ? $this->totp->generateSecret() : null;
+
+        $challenge = OtpChallenge::create([
+            'id' => bin2hex(random_bytes(32)),
+            'purpose' => 'totp',
+            'channel' => 'totp',
+            'account_id' => $account->id,
+            'identifier' => $account->email,
+            'name' => $account->name,
+            'payload' => $enroll ? ['secret' => $secret] : null,
+            'attempts' => 0,
+            'sends' => 0,
+            'ip' => $ip,
+            'created_at_iso' => AccountService::isoNow(),
+            'expires_at_iso' => $this->isoIn(self::TOTP_TTL_SECONDS),
+        ]);
+
+        return array_filter([
+            'totpRequired' => true,
+            'challengeId' => $challenge->id,
+            'name' => $account->name,
+            'enroll' => $enroll,
+            'secret' => $secret,
+            'otpauthUri' => $enroll ? $this->totp->provisioningUri($secret, $account->email) : null,
+            'expiresIn' => self::TOTP_TTL_SECONDS,
+        ], fn ($value) => $value !== null);
+    }
+
+    /** Checks the authenticator code for an administrator's sign-in and issues the session. */
+    public function verifyTotp(array $body, string $ip): array
+    {
+        $challenge = $this->activeChallenge($body['challengeId'] ?? null);
+        $code = preg_replace('/\D/', '', (string) ($body['code'] ?? ''));
+
+        if ($challenge->purpose !== 'totp') {
+            throw new RimasException('This verification is no longer valid. Please start again.');
+        }
+        if (! preg_match('/^\d{6}$/', (string) $code)) {
+            throw new RimasException('Enter the six-digit code from your authenticator app.');
+        }
+        if ($challenge->attempts >= self::MAX_ATTEMPTS) {
+            $this->discard($challenge);
+
+            throw new RimasException('Too many incorrect codes. Please sign in again.');
+        }
+
+        $this->throttle('otp-verify-ip:' . $ip, 30, 900, 'Too many verification attempts. Please wait a few minutes and try again.');
+
+        $challenge->attempts = $challenge->attempts + 1;
+        $challenge->save();
+
+        $account = Account::find((string) $challenge->account_id);
+
+        if (! $account || $account->status === 'inactive' || ! $account->isAdmin()) {
+            $this->discard($challenge);
+
+            throw new RimasException('This account can no longer sign in here. Contact an administrator.');
+        }
+
+        $enrolling = ! $account->totp_enabled_at_iso || ! $account->totp_secret;
+        $secret = $enrolling ? (string) (($challenge->payload ?? [])['secret'] ?? '') : (string) $account->totp_secret;
+
+        // A code already used for an earlier sign-in is refused, even inside its 30 seconds.
+        $step = $secret === '' ? null : $this->totp->verify($secret, $code, $enrolling ? null : $account->totp_last_step);
+
+        if ($step === null) {
+            $left = max(0, self::MAX_ATTEMPTS - $challenge->attempts);
+
+            if ($left === 0) {
+                $this->discard($challenge);
+
+                throw new RimasException('Too many incorrect codes. Please sign in again.');
+            }
+
+            throw new RimasException('The authenticator code is incorrect. ' . $left . ' ' . ($left === 1 ? 'try' : 'tries') . ' left.');
+        }
+
+        if ($enrolling) {
+            $account->totp_secret = $secret;
+            $account->totp_enabled_at_iso = AccountService::isoNow();
+        }
+        $account->totp_last_step = $step;
+        $account->save();
+
+        $this->consume($challenge);
+
+        return $this->accounts->createSession($account);
+    }
+
+    /**
+     * Signing up. No verification code: the details are validated in full and the account is
+     * created straight away as a resident. The per-connection limit still applies.
+     */
+    public function register(array $body, string $ip): array
     {
         $this->throttle('register-ip:' . $ip, 10, 3600, 'Too many sign-up attempts from this connection. Please try again later.');
 
-        $details = $this->accounts->validateRegistration($body);
+        $account = $this->accounts->createAccount($this->accounts->validateRegistration($body));
 
-        return $this->begin('register', [
-            'identifier' => $details['email'],
-            'name' => $details['name'],
-            'email' => $details['email'],
-            'phone' => $details['phone'],
-            'payload' => $details,
-        ], $ip);
+        return ['registered' => true, 'account' => $account];
     }
 
-    /** Step one of "Forgot password?" — nothing about the account changes until the code is accepted. */
+    /**
+     * Step one of "Forgot password?" — nothing about the account changes until the code is
+     * accepted. Recovery is by registered email only: the challenge carries no phone number,
+     * so the code can only ever go to the address on the account.
+     */
     public function startReset(array $body, string $ip): array
     {
         $this->throttle('reset-ip:' . $ip, 10, 3600, 'Too many password reset requests from this connection. Please try again later.');
 
-        $identifier = trim((string) ($body['identifier'] ?? ''));
-        $account = $this->accounts->findAccount($identifier);
+        $email = Account::normaliseEmail($body['email'] ?? '');
+
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new RimasException('Enter a valid email address.');
+        }
+
+        $account = Account::where('email', $email)->first();
 
         if (! $account) {
-            throw new RimasException('We could not find an account with that email address or phone number.');
+            throw new RimasException('We could not find an account with that email address.');
         }
         if ($account->status === 'inactive') {
             throw new RimasException('This account has been deactivated. Contact an administrator.');
@@ -111,7 +221,6 @@ class VerificationService
             'identifier' => $account->email,
             'name' => $account->name,
             'email' => $account->email,
-            'phone' => $account->phone,
         ], $ip);
     }
 
@@ -123,8 +232,15 @@ class VerificationService
         $challenge = $this->activeChallenge($body['challengeId'] ?? null);
         $channel = (string) ($body['channel'] ?? '');
 
+        if ($challenge->purpose === 'totp') {
+            throw new RimasException('Administrators verify with their authenticator app, not by email or SMS.');
+        }
+
         if (! in_array($channel, ['email', 'sms'], true)) {
             throw new RimasException('Choose email or SMS.');
+        }
+        if ($challenge->purpose === 'reset' && $channel !== 'email') {
+            throw new RimasException('Password reset codes are sent by email only.');
         }
 
         $destination = $channel === 'email' ? (string) $challenge->email : (string) $challenge->phone;
@@ -169,7 +285,7 @@ class VerificationService
             'sent' => true,
             'channel' => $channel,
             'destination' => $channel === 'email' ? $this->maskEmail($destination) : $this->maskPhone($destination),
-            'expiresIn' => self::CHALLENGE_TTL_SECONDS,
+            'expiresIn' => self::CODE_TTL_SECONDS,
             'resendIn' => self::RESEND_COOLDOWN_SECONDS,
             'sendsLeft' => self::MAX_SENDS - $challenge->sends,
             // Only ever populated with OTP_TEST_MODE=true, where no provider is contacted.
@@ -179,19 +295,29 @@ class VerificationService
 
     /**
      * Checks the digits and, when they are right, does the thing the challenge was for:
-     * issues the session, creates the account, or unlocks the new-password step.
+     * issues the session or unlocks the new-password step.
      */
     public function verify(array $body, string $ip): array
     {
         $challenge = $this->activeChallenge($body['challengeId'] ?? null);
         $code = preg_replace('/\D/', '', (string) ($body['code'] ?? ''));
 
+        if ($challenge->purpose === 'totp') {
+            return $this->verifyTotp($body, $ip);
+        }
         if (! $challenge->channel) {
             throw new RimasException('Request a verification code first.');
         }
         if (! preg_match('/^\d{6}$/', (string) $code)) {
             throw new RimasException('Enter the six-digit code from your ' . ($challenge->channel === 'email' ? 'email' : 'phone') . '.');
         }
+
+        // Checked before a guess is counted: an expired code is not a wrong code.
+        $age = $this->secondsSince($challenge->last_sent_at_iso);
+        if ($age === null || $age > self::CODE_TTL_SECONDS) {
+            throw new RimasException('This code has expired. Click "Resend code" to get a new one.');
+        }
+
         if ($challenge->attempts >= self::MAX_ATTEMPTS) {
             $this->discard($challenge);
 
@@ -229,7 +355,6 @@ class VerificationService
 
         return match ($challenge->purpose) {
             'login' => $this->completeLogin($challenge),
-            'register' => $this->completeRegistration($challenge),
             'reset' => ['verified' => true, 'purpose' => 'reset', 'challengeId' => $challenge->id],
             default => throw new RimasException('This verification is no longer valid. Please start again.'),
         };
@@ -296,25 +421,6 @@ class VerificationService
         return $this->accounts->createSession($account);
     }
 
-    private function completeRegistration(OtpChallenge $challenge): array
-    {
-        $details = $challenge->payload;
-
-        if (! is_array($details)) {
-            $this->discard($challenge);
-
-            throw new RimasException('These sign-up details are no longer available. Please start again.');
-        }
-
-        // Re-checked at the last moment: the address or number may have been taken while the
-        // code was in transit.
-        $account = $this->accounts->createAccount($this->accounts->validateRegistration($details));
-
-        $this->consume($challenge);
-
-        return ['registered' => true, 'account' => $account];
-    }
-
     /* --------------------------------------------------------------------------- helpers */
 
     /**
@@ -367,12 +473,9 @@ class VerificationService
         return $challenge;
     }
 
+    /** A fresh random code every time — in test mode too, where it is shown on the page. */
     private function generateCode(): string
     {
-        if ($this->otp->testMode()) {
-            return str_pad(preg_replace('/\D/', '', (string) config('mandasafe.otp.test_code')) ?: '123456', 6, '0', STR_PAD_LEFT);
-        }
-
         return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     }
 

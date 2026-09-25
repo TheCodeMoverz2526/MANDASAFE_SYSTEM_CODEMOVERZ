@@ -28,6 +28,10 @@ REM --------------------------------------------------- already running?
 curl -s -o nul --max-time 3 "http://127.0.0.1:%PORT%/api/otp-status" >nul 2>nul
 if not errorlevel 1 (
     echo  MandaSafe is already running on port %PORT%.
+    REM Still apply any new database changes, or new code would hit columns that aren't there.
+    pushd "%APP%"
+    call php artisan migrate --force --no-interaction >nul 2>nul
+    popd
     start "" "http://127.0.0.1:%PORT%/"
     goto ready
 )

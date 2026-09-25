@@ -87,7 +87,7 @@ class IncidentController extends ApiController
         return $this->attempt(function () use ($request, $id) {
             $incident = Incident::find(rawurldecode($id));
             if (! $incident) {
-                return response()->json(['error' => 'Incident not found.'], 404);
+                return response()->json(['error' => 'Accident not found.'], 404);
             }
 
             $body = $this->body($request);
@@ -119,7 +119,7 @@ class IncidentController extends ApiController
     {
         $incident = Incident::find(rawurldecode($id));
         if (! $incident) {
-            return response()->json(['error' => 'Incident not found.'], 404);
+            return response()->json(['error' => 'Accident not found.'], 404);
         }
 
         $incident->delete();
@@ -162,7 +162,7 @@ class IncidentController extends ApiController
 
                         $key = strtolower(implode('||', [$body['date'], $body['time'] ?? '', $body['barangay'], $body['road'], $body['type']]));
                         if (isset($existingKeys[$key])) {
-                            $skipped[] = ['index' => $index, 'reason' => 'Duplicate of an existing incident'];
+                            $skipped[] = ['index' => $index, 'reason' => 'Duplicate of an existing accident'];
 
                             continue;
                         }

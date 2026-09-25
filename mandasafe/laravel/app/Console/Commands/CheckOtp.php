@@ -35,7 +35,8 @@ class CheckOtp extends Command
         if ($status['testMode']) {
             $this->newLine();
             $this->warn('  Test mode: no provider is contacted and the code is shown on the sign-in page.');
-            $this->line('  Put VOCOTEXT_USERNAME and VOCOTEXT_PASSWORD in laravel/.env to send real messages.');
+            $this->line('  Put APPWRITE_PROJECT_ID (email) or VOCOTEXT_USERNAME and VOCOTEXT_PASSWORD (SMS)');
+            $this->line('  in laravel/.env to send real messages.');
         }
 
         $destination = $this->argument('destination');

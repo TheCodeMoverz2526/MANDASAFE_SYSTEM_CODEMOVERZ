@@ -68,17 +68,10 @@ body {
 }
 
 .logo-badge {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    font-weight: 700;
-    color: white;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, .35);
+    width: 46px;
+    height: 46px;
+    object-fit: contain;
+    flex-shrink: 0;
 }
 
 .topbar-title {
@@ -112,11 +105,94 @@ body {
     color: var(--blue);
 }
 
+/* Top-right of the admin console, matching the resident pages: a "Live data" pill, the
+   notification bell, and a name chip (initials + name + role) that opens the account menu. */
 .topbar-actions {
     display: flex;
     align-items: center;
+    gap: 16px;
+    /* The top bar has no nav links any more; this keeps the group at the right. */
+    margin-left: auto;
+}
+
+.topbar-actions .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-800);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+}
+
+.topbar-actions .pill .live {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #16a34a;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, .18);
+    animation: liveBlip 1.6s infinite;
+}
+
+@keyframes liveBlip { 50% { opacity: .35; } }
+
+.topbar-actions .icon-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--gray-700);
+    flex-shrink: 0;
+}
+
+.topbar-actions .icon-btn:hover {
+    background: #f1f5f9;
+}
+
+.userchip {
+    display: flex;
+    align-items: center;
     gap: 10px;
-    margin-left: 14px;
+    padding: 5px 10px 5px 5px;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: background .15s;
+}
+
+.userchip:hover {
+    background: #f1f5f9;
+}
+
+.userchip .avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.userchip .nm {
+    display: block;
+    font-weight: 700;
+    font-size: 13.5px;
+    line-height: 1.15;
+    color: var(--gray-800);
+}
+
+.userchip .rl {
+    display: block;
+    font-size: 11.5px;
+    color: var(--gray-500);
+}
+
+@media (max-width: 768px) {
+    .topbar-actions .pill,
+    .userchip .nm,
+    .userchip .rl { display: none; }
+    .userchip { padding: 0; }
 }
 
 .topbar-search {
@@ -404,6 +480,20 @@ body {
 .data-table {
     width: 100%;
     border-collapse: collapse;
+}
+
+/* A table that scrolls inside its card (Accident Records): the header row stays pinned. */
+.table-scroll {
+    overflow: auto;
+    max-height: 70vh;
+    border-radius: 0 0 12px 12px;
+}
+
+.table-scroll .data-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    box-shadow: inset 0 -1px 0 var(--gray-200);
 }
 
 .data-table th {
@@ -1668,17 +1758,14 @@ body {
 }
 
 .auth-brand-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, .15);
-    backdrop-filter: blur(10px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    color: white;
-    border: 1px solid rgba(255, 255, 255, .2);
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    flex-shrink: 0;
+    /* The emblem's navy edges would sink into the dark panel; a soft light disc lifts it. */
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .92);
+    padding: 3px;
 }
 
 .auth-brand-name {
@@ -1767,18 +1854,11 @@ body {
 }
 
 .auth-logo-wrap {
-    width: 64px;
-    height: 64px;
-    border-radius: 18px;
-    background: linear-gradient(135deg, #f59e0b, #ef4444);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    font-weight: 800;
-    color: white;
-    margin-bottom: 20px;
-    box-shadow: 0 8px 24px rgba(239, 68, 68, .3);
+    display: block;
+    width: 112px;
+    height: 112px;
+    object-fit: contain;
+    margin-bottom: 16px;
 }
 
 .auth-welcome-title {
@@ -1996,6 +2076,19 @@ body {
 .privacy-check { display: flex; gap: 8px; align-items: flex-start; color: var(--gray-600); font-size: 11px; line-height: 1.5; margin: -2px 0 15px; cursor: pointer; }
 .privacy-check input { accent-color: var(--blue); margin-top: 3px; flex-shrink: 0; }
 .privacy-check a { color: var(--blue); font-weight: 700; }
+
+/* The sign-up form has the most fields, so it gets a tighter layout than the other panels. */
+.auth-right:has(#createPanel.active) { padding-top: 28px; padding-bottom: 28px; }
+.auth-right:has(#createPanel.active) .auth-logo-wrap { width: 72px; height: 72px; margin-bottom: 8px; }
+#createPanel .auth-back { margin-bottom: 8px; }
+#createPanel .auth-welcome-title { font-size: 20px; margin-bottom: 2px; }
+#createPanel .auth-welcome-sub { margin-bottom: 14px; }
+#createPanel .form-group { margin-bottom: 10px; }
+#createPanel .form-label { margin-bottom: 4px; }
+#createPanel .form-input { padding-top: 7px; padding-bottom: 7px; }
+#createPanel .password-wrap .form-input { padding-right: 34px; }
+#createPanel .password-strength { gap: 6px; margin-top: 6px; font-size: 10px; }
+#createPanel .privacy-check { margin: 2px 0 12px; }
 .channel-options { display: grid; gap: 10px; }
 .channel-option { display: flex; align-items: center; gap: 12px; width: 100%; background: white; border: 1.5px solid var(--gray-200); border-radius: 10px; padding: 13px; text-align: left; cursor: pointer; color: var(--gray-600); font-family: inherit; transition: .2s; }
 .channel-option:hover { border-color: var(--blue-light); background: #f0f7ff; }
@@ -2010,12 +2103,42 @@ body {
 .resend-row { display: flex; justify-content: center; gap: 7px; align-items: center; margin-top: 16px; color: var(--gray-400); font-size: 11px; }
 .resend-row button { padding: 0; border: 0; background: none; color: var(--blue); cursor: pointer; font: inherit; font-weight: 700; }
 .resend-row button:disabled { color: var(--gray-400); cursor: default; }
-.demo-otp { margin-top: 12px; border: 1px dashed #fbbf24; background: #fffbeb; color: #92400e; border-radius: 7px; padding: 8px; text-align: center; font-size: 11px; font-weight: 700; }
+.totp-setup { display: grid; justify-items: center; gap: 10px; margin: 0 0 14px; }
+.totp-setup[hidden] { display: none; }
+.totp-qr { background: white; border: 1px solid var(--gray-200); border-radius: 10px; padding: 8px; line-height: 0; }
+.totp-qr img { width: 172px; height: 172px; image-rendering: pixelated; }
+.totp-key { display: grid; gap: 4px; justify-items: center; color: var(--gray-400); font-size: 11px; text-align: center; }
+.totp-key code { color: var(--navy); background: #f8fafc; border: 1px solid var(--gray-200); border-radius: 6px; padding: 5px 8px; font-size: 12px; letter-spacing: .08em; word-break: break-all; user-select: all; }
+.demo-otp { margin: 4px 0 12px; border: 1px dashed #fbbf24; background: #fffbeb; color: #92400e; border-radius: 7px; padding: 10px; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: .5px; }
 .privacy-modal { display: none; position: fixed; inset: 0; z-index: 10010; background: rgba(15,30,60,.65); align-items: center; justify-content: center; padding: 20px; }
 .privacy-modal.open { display: flex; }
 .privacy-modal-card { position: relative; width: min(420px, 100%); background: white; border-radius: 14px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
 .privacy-modal-card h2 { font-size: 18px; color: var(--gray-800); margin-bottom: 10px; }
 .privacy-modal-card p { font-size: 13px; line-height: 1.6; color: var(--gray-600); margin-bottom: 20px; }
+
+/* The full policy: a larger card with a fixed header and footer and a scrolling body. */
+.privacy-doc { width: min(720px, 100%); max-height: calc(100vh - 40px); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.privacy-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 26px 14px; border-bottom: 1px solid var(--gray-200); }
+.privacy-head h2 { margin-bottom: 4px; font-size: 20px; }
+.privacy-doc .privacy-head .privacy-meta { margin: 0; font-size: 12px; color: var(--gray-400); }
+.privacy-doc .modal-close { position: static; flex-shrink: 0; }
+.privacy-body { flex: 1; overflow-y: auto; padding: 18px 26px 8px; scroll-behavior: smooth; }
+.privacy-body:focus { outline: none; }
+.privacy-doc .privacy-body p { margin-bottom: 12px; font-size: 13px; line-height: 1.65; color: var(--gray-600); }
+.privacy-body h3 { font-size: 14.5px; font-weight: 700; color: var(--gray-800); margin: 20px 0 8px; scroll-margin-top: 8px; }
+.privacy-body ul { margin: 0 0 12px 18px; padding: 0; }
+.privacy-body li { font-size: 13px; line-height: 1.6; color: var(--gray-600); margin-bottom: 6px; }
+.privacy-body b { color: var(--gray-800); }
+.privacy-toc { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; padding: 12px 14px; margin: 4px 0 6px; background: #f8fafc; border: 1px solid var(--gray-200); border-radius: 10px; }
+.privacy-toc a { font-size: 12.5px; color: var(--blue); text-decoration: none; padding: 2px 0; }
+.privacy-toc a:hover { text-decoration: underline; }
+.privacy-doc .privacy-body .privacy-contact { background: #f8fafc; border: 1px solid var(--gray-200); border-radius: 10px; padding: 12px 14px; }
+.privacy-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 26px; border-top: 1px solid var(--gray-200); background: #fff; }
+@media (max-width: 560px) {
+    .privacy-toc { grid-template-columns: 1fr; }
+    .privacy-head, .privacy-body, .privacy-foot { padding-left: 18px; padding-right: 18px; }
+    .privacy-foot .btn { flex: 1; }
+}
 
 /* ===== GOOGLE ACCOUNT PICKER MODAL ===== */
 .google-picker-overlay {
@@ -2464,4 +2587,33 @@ body {
     .auth-role-card {
         padding: 12px 6px;
     }
+}
+
+/* GIS Map on phones: the three desktop columns (filters | map | details) become a stack
+   with the map first and a fixed height of its own; the details panel opens as a sheet
+   over the bottom of the screen. The !importants beat the inline desktop sizes. */
+@media (max-width: 768px) {
+    #page-map { height: auto !important; }
+    #mapLayout { display: flex !important; flex-direction: column; height: auto !important; }
+    #mapLayout .map-container { order: -1; flex: none; height: 62vh; min-height: 340px; }
+    #mapLayout .map-sidebar { border-right: 0; border-top: 1px solid var(--gray-200); }
+    .map-layer-btn { white-space: nowrap; flex: none; }
+    #mapResultSummary { white-space: nowrap; }
+    .map-info-panel.open {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        max-height: 58vh;
+        z-index: 1500;
+        border-left: 0;
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -12px 32px rgba(15, 30, 60, .25);
+    }
+}
+
+/* On phones the top bar is sticky at z-index 600; pop-up forms must sit above it or their
+   title and close button end up hidden behind it. */
+@media (max-width: 768px) {
+    .modal-overlay { z-index: 1700; padding: 12px; }
 }

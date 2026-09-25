@@ -39,7 +39,7 @@ return [
     |
     | Leave OTP_TEST_MODE=true and no provider is contacted: the code is generated locally
     | and shown on the sign-in page, which is how the system runs out of the box. Fill in the
-    | Vocotext credentials (SMS) and/or the Resend credentials (email) to deliver for real —
+    | Vocotext credentials (SMS) and/or the Resend or SMTP (MAIL_*) credentials (email) to deliver for real —
     | test mode must be off for either to be used.
     |
     | Vocotext iSMS 2FA generates the code on its side, substitutes it for %OTP% in the
@@ -49,7 +49,12 @@ return [
 
     'otp' => [
         'test_mode' => env('OTP_TEST_MODE', false),
-        'test_code' => env('OTP_TEST_CODE', '123456'),
+
+        // Email — Appwrite Email OTP (preferred). Appwrite generates, mails and checks the code.
+        'appwrite_endpoint' => env('APPWRITE_ENDPOINT', 'https://cloud.appwrite.io/v1'),
+        'appwrite_project' => env('APPWRITE_PROJECT_ID'),
+        // Optional: lets MandaSafe delete the throwaway Appwrite session once a code is accepted.
+        'appwrite_key' => env('APPWRITE_API_KEY'),
 
         // Email — Resend
         'resend_key' => env('RESEND_API_KEY'),
@@ -109,5 +114,18 @@ return [
     'ml_root' => dirname(base_path()) . DIRECTORY_SEPARATOR . 'ml',
 
     'python_bin' => env('MANDASAFE_PYTHON_BIN', 'python'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Demo notice
+    |--------------------------------------------------------------------------
+    |
+    | When set, this text is shown in a bar at the top of every page. Use it whenever the
+    | system is online as a demo, so no visitor mistakes it for an official City website:
+    |   MANDASAFE_DEMO_NOTICE="Capstone demo — not an official Mandaluyong City website."
+    |
+    */
+
+    'demo_notice' => env('MANDASAFE_DEMO_NOTICE'),
 
 ];

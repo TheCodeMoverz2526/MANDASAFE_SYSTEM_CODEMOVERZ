@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Incident Map — MandaSafe</title>
-<link rel="icon" href="assets/seal.svg">
+<title>Accident Map — MandaSafe</title>
+<link rel="icon" href="assets/logo-192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -11,30 +11,35 @@
 <main class="main">
 
   <div class="page-head">
-    <div><h1>Incident Map</h1>
-      <p>Road incidents recorded across the 27 barangays of Mandaluyong City.</p></div>
+    <div><h1>Accident Map</h1>
+      <p>Road accidents recorded across the 27 barangays of Mandaluyong City.</p></div>
     <div class="spacer"></div>
     <div class="head-tools"><span class="pill"><span class="live"></span> <span id="shown">Loading…</span></span></div>
   </div>
 
   <div class="card">
-    <div class="map-searchbar">
-      <div class="brgy-search" id="brgySearch">
-        <span class="gi" data-i="search"></span>
-        <input class="input" id="brgyQ" type="text" placeholder="Find a barangay — type a name to zoom to it…"
-               autocomplete="off" spellcheck="false" aria-label="Find a barangay on the map"
-               role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="brgySuggest">
-        <button type="button" class="brgy-clear" id="brgyClear" title="Clear search" aria-label="Clear barangay search" hidden>&times;</button>
-        <ul class="brgy-suggest" id="brgySuggest" role="listbox" aria-label="Matching barangays" hidden></ul>
+    <div class="map-filterbar" id="filterBar">
+      <label class="mf-field"><span>Barangay</span>
+        <select class="input" id="fBarangay" aria-label="Filter by barangay"><option value="">All barangays</option></select></label>
+      <label class="mf-field"><span>From</span>
+        <input class="input" type="date" id="fFrom" aria-label="Show accidents from this date"></label>
+      <label class="mf-field"><span>To</span>
+        <input class="input" type="date" id="fTo" aria-label="Show accidents up to this date"></label>
+      <div class="mf-presets" role="group" aria-label="Quick date ranges">
+        <button type="button" class="mf-chip" data-months="1">Last month</button>
+        <button type="button" class="mf-chip" data-months="3">Last 3 months</button>
+        <button type="button" class="mf-chip" data-months="12">Last 12 months</button>
+        <button type="button" class="mf-chip" data-months="0">All time</button>
       </div>
+      <button type="button" class="mf-reset" id="fReset" hidden>Clear filters</button>
+      <span class="mf-hint" id="fHint"></span>
       <p class="brgy-msg" id="brgyMsg" role="status" aria-live="polite"></p>
     </div>
 
     <div class="map-topbar">
       <button type="button" class="map-layer-btn active" id="layerBoundary" data-layer="boundary"><span data-i="map"></span>Barangay Boundaries</button>
-      <button type="button" class="map-layer-btn" id="layerMarkers" data-layer="markers"><span data-i="pin"></span>Incident Markers</button>
+      <button type="button" class="map-layer-btn" id="layerMarkers" data-layer="markers"><span data-i="pin"></span>Accident Markers</button>
       <button type="button" class="map-layer-btn" id="layerHeatmap" data-layer="heatmap"><span data-i="fire"></span>Heatmap</button>
-      <button type="button" class="map-layer-btn" id="layerHotspots" data-layer="hotspots"><span data-i="target"></span>Hotspots</button>
       <span class="map-summary" id="mapSummary"></span>
       <div class="map-zoom">
         <button type="button" class="map-icon-btn" id="zoomIn" title="Zoom in" aria-label="Zoom in"><span data-i="plus"></span></button>
@@ -51,7 +56,7 @@
       <span class="lg"><i style="background:#3b82f6"></i>Damage</span>
       <span class="link" id="pinNote"></span>
     </div>
-    <div class="src">Search a barangay above to fly straight to it, or click one to see how many incidents fall inside it. Toggle Incident Markers, Heatmap and Hotspots the same way the RIMAS console does.</div>
+    <div class="src">Choose a barangay or a date range above to narrow what the map shows — the counts, pins and heatmap all follow the filters. Choosing a barangay also zooms to it; click any barangay to see how many accidents fall inside it.</div>
   </div>
 
 
@@ -65,25 +70,103 @@
 if (requireAuth()) {
   buildShell('map');
 
-  let all = [], hotspotsAll = [], mapRef = null, boundaries = null;
-  let markerLayer = null, heatLayer = null, hotspotLayer = null;
-  // The search bar needs the raw boundary geojson and the full-city view to return to.
+  let all = [], mapRef = null, boundaries = null;
+  let markerLayer = null, heatLayer = null;
+  // Focusing a barangay needs the raw boundary geojson and the full-city view to return to.
   let geoRef = null, cityBoundsRef = null, focusLayer = null, focusName = '';
 
-  // Same four layers the RIMAS console's GIS Map offers, off by default the same way too —
+  // The RIMAS console's GIS Map layers minus Hotspots, off by default the same way too —
   // only Barangay Boundaries starts on.
-  const layersOn = { boundary: true, markers: false, heatmap: false, hotspots: false };
+  const layersOn = { boundary: true, markers: false, heatmap: false };
 
   const $ = id => document.getElementById(id);
 
-  /* The map shows every recorded incident: the filter bar is gone, so `all` is the
-     only set there is. Layers are still drawn here, in one place. */
+  /* ---------------- Filters: barangay + date range ----------------
+     `all` is every accident on record; `shownData()` is what the filters let through, and
+     it is the only set the counts, pins, heatmap and popups are drawn from. Dates are
+     ISO strings (YYYY-MM-DD), so plain string comparison orders them correctly. */
+  const fBarangay = $('fBarangay'), fFrom = $('fFrom'), fTo = $('fTo');
+  let newestDate = '', oldestDate = '';
+
+  function shownData() {
+    const brgy = fBarangay.value, from = fFrom.value, to = fTo.value;
+    return all.filter(i => {
+      if (brgy && i.barangay !== brgy) return false;
+      const d = String(i.date || '').slice(0, 10);
+      if (from && (!d || d < from)) return false;
+      if (to && (!d || d > to)) return false;
+      return true;
+    });
+  }
+
+  function syncFilterUi() {
+    const active = !!(fBarangay.value || fFrom.value || fTo.value);
+    $('fReset').hidden = !active;
+    // Highlight a preset only while the dates still match it exactly.
+    document.querySelectorAll('.mf-chip').forEach(chip => {
+      const months = Number(chip.dataset.months);
+      const expectFrom = months ? monthsBack(months) : '';
+      const expectTo = months ? newestDate : '';
+      chip.classList.toggle('active', fFrom.value === expectFrom && fTo.value === expectTo);
+    });
+  }
+
+  /* Presets count back from the newest record, not from today, so "Last month" always
+     has data to show even when the records stop some time ago. */
+  function monthsBack(months) {
+    if (!newestDate) return '';
+    const d = new Date(newestDate + 'T00:00:00');
+    d.setMonth(d.getMonth() - months);
+    d.setDate(d.getDate() + 1);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return iso < oldestDate ? oldestDate : iso;
+  }
+
+  function onFilterChange() {
+    // Keep the range the right way round.
+    if (fFrom.value && fTo.value && fFrom.value > fTo.value) [fFrom.value, fTo.value] = [fTo.value, fFrom.value];
+    syncFilterUi();
+    apply();
+  }
+
+  fBarangay.addEventListener('change', () => {
+    // Picking a barangay also flies the map to it; "All barangays" pulls back to the city.
+    if (fBarangay.value) goTo(fBarangay.value); else clearSearch();
+    onFilterChange();
+  });
+  fFrom.addEventListener('change', onFilterChange);
+  fTo.addEventListener('change', onFilterChange);
+  document.querySelectorAll('.mf-chip').forEach(chip => chip.addEventListener('click', () => {
+    const months = Number(chip.dataset.months);
+    fFrom.value = months ? monthsBack(months) : '';
+    fTo.value = months ? newestDate : '';
+    onFilterChange();
+  }));
+  $('fReset').addEventListener('click', () => {
+    fFrom.value = ''; fTo.value = '';
+    if (fBarangay.value) { fBarangay.value = ''; clearSearch(); }
+    onFilterChange();
+  });
+
+  function fillFilters() {
+    const dates = all.map(i => String(i.date || '').slice(0, 10)).filter(Boolean).sort();
+    oldestDate = dates[0] || '';
+    newestDate = dates[dates.length - 1] || '';
+    [fFrom, fTo].forEach(input => { input.min = oldestDate; input.max = newestDate; });
+    $('fHint').textContent = newestDate ? `Records run ${fmtDate(oldestDate)} – ${fmtDate(newestDate)}` : '';
+
+    const names = [...new Set(all.map(i => i.barangay).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    fBarangay.insertAdjacentHTML('beforeend', names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+    syncFilterUi();
+  }
+
+  /* Layers, counts and popups are all drawn here, in one place, from the filtered set. */
   function apply() {
-    const data = all;
+    const data = shownData();
     const fatal = data.filter(i => i.sev === 'Fatal').length;
     const injury = data.filter(i => i.sev === 'Injury').length;
-    $('shown').textContent = `${num(data.length)} incident${data.length === 1 ? '' : 's'}`;
-    $('mapSummary').textContent = `${num(data.length)} incident${data.length === 1 ? '' : 's'} shown · ${num(fatal)} fatal · ${num(injury)} injury`;
+    $('shown').textContent = `${num(data.length)} accident${data.length === 1 ? '' : 's'}`;
+    $('mapSummary').textContent = `${num(data.length)} accident${data.length === 1 ? '' : 's'} shown · ${num(fatal)} fatal · ${num(injury)} injury`;
 
     // The permanent name label never changes; the click popup carries the barangay's
     // incident count. The fill colour stays the fixed per-barangay tint the RIMAS console
@@ -94,27 +177,22 @@ if (requireAuth()) {
       boundaries.eachLayer(layer => {
         const name = (layer.feature.properties || {}).brgy_name;
         const value = counts[name] || 0;
-        layer.setPopupContent(`<b>${name}</b><br>${num(value)} incident${value === 1 ? '' : 's'}`);
+        layer.setPopupContent(`<b>${name}</b><br>${num(value)} accident${value === 1 ? '' : 's'}`);
       });
     }
 
     if (mapRef) {
-      const newest = [...data].sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
+      // Every accident on record, oldest drawn first so the newest sit on top.
+      const oldestFirst = [...data].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 
       if (markerLayer) mapRef.removeLayer(markerLayer);
-      markerLayer = plotIncidents(mapRef, newest, 400);
+      markerLayer = plotIncidents(mapRef, oldestFirst);
       if (!layersOn.markers) mapRef.removeLayer(markerLayer);
-      $('pinNote').textContent = layersOn.markers
-        ? (data.length > 400 ? 'Showing the 400 most recent pins' : `${num(data.length)} pins`)
-        : '';
+      $('pinNote').textContent = layersOn.markers ? pinNoteText(data) : '';
 
       if (heatLayer) mapRef.removeLayer(heatLayer);
       heatLayer = plotHeat(mapRef, data);
       if (!layersOn.heatmap) mapRef.removeLayer(heatLayer);
-
-      if (hotspotLayer) mapRef.removeLayer(hotspotLayer);
-      hotspotLayer = plotHotspots(mapRef, hotspotsAll);
-      if (!layersOn.hotspots) mapRef.removeLayer(hotspotLayer);
     }
 
     // A barangay may be focused by the search bar; show its share of the total.
@@ -124,36 +202,25 @@ if (requireAuth()) {
   function toggleLayer(key, btn) {
     layersOn[key] = !layersOn[key];
     btn.classList.toggle('active', layersOn[key]);
-    const layer = { boundary: boundaries, markers: markerLayer, heatmap: heatLayer, hotspots: hotspotLayer }[key];
+    const layer = { boundary: boundaries, markers: markerLayer, heatmap: heatLayer }[key];
     if (mapRef && layer) { if (layersOn[key]) mapRef.addLayer(layer); else mapRef.removeLayer(layer); }
-    if (key === 'markers') {
-      const count = all.length;
-      $('pinNote').textContent = layersOn.markers
-        ? (count > 400 ? 'Showing the 400 most recent pins' : `${num(count)} pins`)
-        : '';
-    }
+    if (key === 'markers') $('pinNote').textContent = layersOn.markers ? pinNoteText(shownData()) : '';
+  }
+
+  function pinNoteText(list) {
+    const mapped = list.filter(i => Number.isFinite(i.lat) && Number.isFinite(i.lng)).length;
+    return mapped === list.length
+      ? `Showing ${num(mapped)} pins`
+      : `Showing ${num(mapped)} pins (${num(list.length - mapped)} have no location)`;
   }
 
   document.querySelectorAll('.map-layer-btn').forEach(btn => btn.onclick = () => toggleLayer(btn.dataset.layer, btn));
   $('zoomIn').onclick = () => mapRef && mapRef.zoomIn();
   $('zoomOut').onclick = () => mapRef && mapRef.zoomOut();
 
-  /* ---------------- Barangay search ----------------
-     Type any part of a barangay name, pick it from the list (mouse or arrow
-     keys) or just press Enter, and the map flies to that barangay and outlines
-     it. Nothing here touches the filters — it only moves the view — so the
-     incident counts on screen stay exactly as the filter bar left them. */
-  const searchBox   = $('brgySearch');
-  const searchInput = $('brgyQ');
-  const suggestList = $('brgySuggest');
-  const searchMsg   = $('brgyMsg');
-  const clearBtn    = $('brgyClear');
-
-  const MAX_SUGGESTIONS = 8;
-  let suggestions = [], activeIndex = -1;
-
-  searchInput.disabled = true;
-  searchInput.placeholder = 'Loading barangays…';
+  /* ---------------- Barangay focus ----------------
+     Picking a barangay in the filter flies the map to it and outlines it. */
+  const searchMsg = $('brgyMsg');
 
   function setMessage(text, kind) {
     searchMsg.textContent = text || '';
@@ -162,127 +229,35 @@ if (requireAuth()) {
 
   function showFocusMessage(name, data) {
     const count = data.filter(i => i.barangay === name).length;
-    setMessage(`Showing ${name} — ${num(count)} recorded incident${count === 1 ? '' : 's'}.`, 'ok');
-  }
-
-  function closeSuggestions() {
-    suggestions = []; activeIndex = -1;
-    suggestList.innerHTML = '';
-    suggestList.hidden = true;
-    searchInput.setAttribute('aria-expanded', 'false');
-    searchInput.removeAttribute('aria-activedescendant');
-  }
-
-  /* Bolds the typed run inside the suggestion so partial matches are obvious. */
-  function markMatch(name, query) {
-    const q = query.trim();
-    const at = q ? name.toLowerCase().indexOf(q.toLowerCase()) : -1;
-    if (at < 0) return esc(name);
-    return esc(name.slice(0, at)) + '<b>' + esc(name.slice(at, at + q.length)) + '</b>' + esc(name.slice(at + q.length));
-  }
-
-  function openSuggestions(names, query) {
-    suggestions = names; activeIndex = -1;
-    suggestList.innerHTML = names.map((name, i) =>
-      `<li class="brgy-opt" id="brgyOpt${i}" role="option" aria-selected="false" data-name="${esc(name)}">` +
-      `${markMatch(name, query)}</li>`).join('');
-    suggestList.hidden = names.length === 0;
-    searchInput.setAttribute('aria-expanded', String(names.length > 0));
-  }
-
-  function setActive(index) {
-    const items = [...suggestList.children];
-    if (!items.length) return;
-    activeIndex = (index + items.length) % items.length;
-    items.forEach((li, i) => {
-      const on = i === activeIndex;
-      li.classList.toggle('active', on);
-      li.setAttribute('aria-selected', String(on));
-      if (on) li.scrollIntoView({ block: 'nearest' });
-    });
-    searchInput.setAttribute('aria-activedescendant', items[activeIndex].id);
-  }
-
-  function runSuggest() {
-    const text = searchInput.value;
-    clearBtn.hidden = !text;
-    if (!text.trim()) { closeSuggestions(); setMessage(''); return; }
-    const matches = matchBarangays(geoRef, text);
-    openSuggestions(matches.slice(0, MAX_SUGGESTIONS), text);
-    setMessage(matches.length ? '' : `No barangay in Mandaluyong City matches “${text.trim()}”.`, 'error');
+    setMessage(`Showing ${name} — ${num(count)} accident${count === 1 ? '' : 's'} in the selected range.`, 'ok');
   }
 
   /* Moves the map to `name` and highlights it. */
   function goTo(name) {
-    if (!mapRef || !geoRef) { setMessage('The map is still loading — please try again in a moment.', 'error'); return; }
+    if (!mapRef || !geoRef) return; // the loader focuses it once the map is ready
     const layer = focusBarangay(mapRef, geoRef, name, focusLayer);
-    if (!layer) { setMessage(`No barangay named “${name}” was found in Mandaluyong City.`, 'error'); return; }
+    if (!layer) { setMessage(`No barangay named “${name}” was found on the map.`, 'error'); return; }
     focusLayer = layer;
     focusName = name;
-    searchInput.value = name;
-    clearBtn.hidden = false;
-    closeSuggestions();
-    showFocusMessage(name, all);
+    showFocusMessage(name, shownData());
   }
 
-  /* Enter, or the search icon: use the highlighted suggestion when there is
-     one, otherwise the best match for whatever was typed. */
-  function submitSearch() {
-    const text = searchInput.value.trim();
-    if (!text) { clearSearch(); return; }
-    const best = activeIndex >= 0 ? suggestions[activeIndex] : matchBarangays(geoRef, text)[0];
-    if (!best) {
-      closeSuggestions();
-      setMessage(`No barangay named “${text}” was found in Mandaluyong City.`, 'error');
-      return;
-    }
-    goTo(best);
-  }
-
+  /* Drops the outline and, if the view had moved, returns to the whole city. */
   function clearSearch() {
-    searchInput.value = '';
-    clearBtn.hidden = true;
-    closeSuggestions();
     setMessage('');
     const wasFocused = !!focusLayer;
     if (focusLayer && mapRef) mapRef.removeLayer(focusLayer);
     focusLayer = null; focusName = '';
-    // Only pull back to the whole city if the search had actually moved the view.
     if (wasFocused && mapRef && cityBoundsRef) mapRef.flyToBounds(cityBoundsRef, { padding: [10, 10], duration: 0.8 });
   }
 
-  searchInput.addEventListener('input', runSuggest);
-  searchInput.addEventListener('focus', () => { if (searchInput.value.trim() && suggestList.hidden) runSuggest(); });
-  searchInput.addEventListener('keydown', e => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (suggestList.hidden) { runSuggest(); if (suggestList.hidden) return; }
-      setActive(e.key === 'ArrowDown' ? activeIndex + 1 : activeIndex - 1);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      submitSearch();
-    } else if (e.key === 'Escape') {
-      if (suggestList.hidden) clearSearch(); else closeSuggestions();
-    }
-  });
-  // mousedown, not click: the list must not close on blur before the pick lands.
-  suggestList.addEventListener('mousedown', e => {
-    const option = e.target.closest('.brgy-opt');
-    if (!option) return;
-    e.preventDefault();
-    goTo(option.dataset.name);
-  });
-  searchBox.querySelector('.gi').addEventListener('click', () => { searchInput.focus(); submitSearch(); });
-  clearBtn.onclick = clearSearch;
-  document.addEventListener('click', e => { if (!searchBox.contains(e.target)) closeSuggestions(); });
-
   (async () => {
     try {
-      [all, hotspotsAll] = await Promise.all([API.incidents(), API.hotspots()]);
+      all = await API.incidents();
+      fillFilters();
     } catch (error) {
       $('shown').textContent = 'Server offline';
       $('mapSummary').textContent = error.message;
-      searchInput.disabled = true;
       return;
     }
 
@@ -290,14 +265,13 @@ if (requireAuth()) {
       const created = await createMandaMap('map', { zoomControl: false });
       mapRef = created.map; boundaries = created.boundaries;
       geoRef = created.geo; cityBoundsRef = created.cityBounds;
-      searchInput.disabled = false;
-      searchInput.placeholder = 'Find a barangay — type a name to zoom to it…';
     } catch (error) {
       document.getElementById('map').innerHTML = `<div class="empty is-error" style="padding:200px 20px">${esc(error.message)}</div>`;
-      searchInput.disabled = true;
-      setMessage('The barangay boundaries could not be loaded, so search is unavailable.', 'error');
+      setMessage('The barangay boundaries could not be loaded.', 'error');
     }
     apply();
+    // A barangay chosen while the map was still loading gets focused now.
+    if (fBarangay.value) goTo(fBarangay.value);
   })();
 }
 </script>

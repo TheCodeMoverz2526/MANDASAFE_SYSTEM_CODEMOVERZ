@@ -71,6 +71,7 @@ const API = {
     summary:     () => apiGet('/api/summary'),
     incidents:   () => apiGet('/api/incidents'),
     hotspots:    () => apiGet('/api/hotspots'),
+    barangayHotspots: () => apiGet('/api/hotspots/barangays'),
     predictions: () => apiGet('/api/predictions'),
     stats:       () => apiGet('/api/stats'),
     me:          () => apiGet('/api/auth/me'),
@@ -101,7 +102,25 @@ function ensureServed() {
 function requireAuth() {
     if (!ensureServed()) return false;
     if (!currentUser() || !authToken()) { location.replace('login.html'); return false; }
+    stayGuarded();
     return true;
+}
+
+/* Once signed out, a protected page must not come back until the person signs in again:
+   - the Back button can restore this page from the browser's memory without running any
+     of its scripts again, so the check is repeated whenever the page is shown;
+   - signing out in another tab clears the shared storage, which every open tab hears. */
+function stayGuarded() {
+    const bounce = () => {
+        if (currentUser() && authToken()) return;
+        document.documentElement.style.visibility = 'hidden';
+        location.replace('login.html');
+    };
+    window.addEventListener('pageshow', bounce);
+    window.addEventListener('storage', event => {
+        if (event.key === null || event.key === TOKEN_KEY || event.key === SESSION_KEY) bounce();
+    });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) bounce(); });
 }
 
 async function logout() {
@@ -110,7 +129,8 @@ async function logout() {
     } catch { /* signing out locally is enough */ }
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
-    location.href = 'login.html';
+    // replace, not href: the signed-in page is taken out of the history, so Back can't reach it.
+    location.replace('login.html');
 }
 
 /* Shows a message inside a card body while data loads / when it fails. */

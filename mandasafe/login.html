@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+    <link rel="icon" href="assets/logo-192.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign in | MandaSafe</title>
@@ -21,35 +22,30 @@
         <div class="auth-split">
             <section class="auth-left">
                 <div class="auth-brand">
-                    <div class="auth-brand-icon"><i class="fas fa-map-marked-alt"></i></div>
+                    <img class="auth-brand-icon" src="assets/logo-192.png" alt="MandaSafe logo">
                     <div class="auth-brand-name">Mandaluyong RIMAS</div>
                 </div>
                 <div class="auth-left-content">
-                    <h2>Road Incident Mapping &amp; Analytics System</h2>
+                    <h2>Road Accident Mapping &amp; Analytics System</h2>
                     <p>A centralized platform for monitoring, hotspot identification, and safety planning for
                         Mandaluyong TPMO.</p>
                     <div class="auth-features">
                         <div class="auth-feature">
                             <div class="auth-feature-icon"><i class="fas fa-clipboard-list"></i></div>
-                            <div class="auth-feature-text"><strong>Incident Management</strong>Record and manage road
+                            <div class="auth-feature-text"><strong>Accident Management</strong>Record and manage road
                                 accident reports in real-time.</div>
                         </div>
                         <div class="auth-feature">
                             <div class="auth-feature-icon"><i class="fas fa-map-marked-alt"></i></div>
-                            <div class="auth-feature-text"><strong>GIS Mapping</strong>Visualize incidents on
+                            <div class="auth-feature-text"><strong>GIS Mapping</strong>Visualize accidents on
                                 interactive geographic maps.</div>
-                        </div>
-                        <div class="auth-feature">
-                            <div class="auth-feature-icon"><i class="fas fa-shield-alt"></i></div>
-                            <div class="auth-feature-text"><strong>Protected Access</strong>Every account action is
-                                confirmed with a verification code.</div>
                         </div>
                     </div>
                 </div>
                 <div class="auth-left-footer">© 2025 Mandaluyong City TPMO · All rights reserved</div>
             </section>
             <section class="auth-right">
-                <div class="auth-logo-wrap">M</div>
+                <img class="auth-logo-wrap" src="assets/logo-192.png" alt="MandaSafe logo">
 
                 <div class="auth-panel active" id="signInPanel">
                     <h1 class="auth-welcome-title">Sign in to MandaSafe</h1>
@@ -68,8 +64,7 @@
                                         class="fas fa-eye"></i></button></div>
                         </div>
                         <div class="auth-error" id="loginError" role="alert"></div>
-                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-lock"></i> Continue
-                            to verification</button>
+                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-lock"></i> Sign In</button>
                     </form>
                     <div class="auth-links"><button type="button" onclick="showPanel('createPanel')">Create an
                             account</button><span>·</span><button type="button"
@@ -80,7 +75,7 @@
                     <button type="button" class="auth-back" onclick="showPanel('signInPanel')"><i
                             class="fas fa-arrow-left"></i> Back to sign in</button>
                     <h1 class="auth-welcome-title">Create your account</h1>
-                    <p class="auth-welcome-sub">Create an account, then confirm your email or mobile number.</p>
+                    <p class="auth-welcome-sub">Create your MandaSafe account to get started.</p>
                     <form onsubmit="event.preventDefault(); beginRegistration();">
                         <div class="form-group"><label class="form-label" for="createName">Full name</label><input
                                 type="text" class="form-input" id="createName" placeholder="Juan Dela Cruz"
@@ -98,7 +93,7 @@
                         </div>
                         <div class="form-group"><label class="form-label" for="createPassword">Password</label>
                             <div class="password-wrap"><input type="password" class="form-input" id="createPassword"
-                                    placeholder="At least 8 characters" minlength="8" autocomplete="new-password"
+                                    placeholder="Min. 8 characters" minlength="8" autocomplete="new-password"
                                     required><button type="button" class="password-toggle"
                                     onclick="togglePassword('createPassword', this)" aria-label="Show password"><i
                                         class="fas fa-eye"></i></button></div>
@@ -128,11 +123,12 @@
                     <button type="button" class="auth-back" onclick="showPanel('signInPanel')"><i
                             class="fas fa-arrow-left"></i> Back to sign in</button>
                     <h1 class="auth-welcome-title">Forgot password?</h1>
-                    <p class="auth-welcome-sub">Enter the email address or mobile number registered to your account.</p>
+                    <p class="auth-welcome-sub">Enter the email address registered to your account and we will
+                        email you a verification code.</p>
                     <form onsubmit="event.preventDefault(); beginPasswordReset();">
-                        <div class="form-group"><label class="form-label" for="resetIdentifier">Email address or phone
-                                number</label><input type="text" class="form-input" id="resetIdentifier"
-                                placeholder="name@example.com or +63 912 345 6789" autocomplete="username" required>
+                        <div class="form-group"><label class="form-label" for="resetEmail">Email address</label><input
+                                type="email" class="form-input" id="resetEmail" placeholder="name@example.com"
+                                autocomplete="email" required>
                         </div>
                         <div class="auth-error" id="forgotError" role="alert"></div>
                         <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-paper-plane"></i>
@@ -140,26 +136,9 @@
                     </form>
                 </div>
 
-                <div class="auth-panel" id="channelPanel">
-                    <button type="button" class="auth-back" onclick="cancelVerification()"><i
-                            class="fas fa-arrow-left"></i> Cancel</button>
-                    <h1 class="auth-welcome-title">Choose verification method</h1>
-                    <p class="auth-welcome-sub" id="channelDescription">Select where we should send your six-digit
-                        verification code.</p>
-                    <div class="channel-options">
-                        <button type="button" class="channel-option" id="emailChannel" onclick="sendOtp('email')"><i
-                                class="fas fa-envelope"></i><span><strong>Email code</strong><small
-                                    id="emailDestination">—</small></span><i class="fas fa-chevron-right"></i></button>
-                        <button type="button" class="channel-option" id="smsChannel" onclick="sendOtp('sms')"><i
-                                class="fas fa-comment-sms"></i><span><strong>SMS code</strong><small
-                                    id="smsDestination">—</small></span><i class="fas fa-chevron-right"></i></button>
-                    </div>
-                    <div class="auth-error" id="channelError" role="alert"></div>
-                </div>
-
                 <div class="auth-panel" id="otpPanel">
-                    <button type="button" class="auth-back" onclick="showPanel('channelPanel')"><i
-                            class="fas fa-arrow-left"></i> Change method</button>
+                    <button type="button" class="auth-back" id="otpBack" onclick="leaveOtpPanel()"><i
+                            class="fas fa-arrow-left"></i> Change email</button>
                     <h1 class="auth-welcome-title" id="otpTitle">Enter verification code</h1>
                     <p class="auth-welcome-sub" id="otpDescription">We sent a six-digit code.</p>
                     <form onsubmit="event.preventDefault(); verifyOtp();">
@@ -170,13 +149,38 @@
                                 aria-label="Digit 4"><input inputmode="numeric" maxlength="1"
                                 aria-label="Digit 5"><input inputmode="numeric" maxlength="1" aria-label="Digit 6">
                         </div>
+                        <div class="demo-otp" id="demoOtp" hidden></div>
                         <div class="auth-error" id="otpError" role="alert"></div>
                         <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-check"></i> Verify
                             code</button>
                     </form>
                     <div class="resend-row"><span id="resendTimer">Resend code in 00:30</span><button type="button"
                             id="resendButton" onclick="resendOtp()" disabled>Resend code</button></div>
-                    <div class="demo-otp" id="demoOtp" hidden></div>
+                </div>
+
+                <div class="auth-panel" id="totpPanel">
+                    <button type="button" class="auth-back" onclick="cancelVerification()"><i
+                            class="fas fa-arrow-left"></i> Cancel</button>
+                    <h1 class="auth-welcome-title" id="totpTitle">Enter authenticator code</h1>
+                    <p class="auth-welcome-sub" id="totpDescription">Open your authenticator app and enter the
+                        six-digit code shown for MandaSafe.</p>
+                    <div class="totp-setup" id="totpSetup" hidden>
+                        <div class="totp-qr" id="totpQr" aria-label="QR code for your authenticator app"></div>
+                        <div class="totp-key"><span>Can't scan? Enter this key in the app:</span><code
+                                id="totpSecret"></code></div>
+                    </div>
+                    <form onsubmit="event.preventDefault(); verifyTotp();">
+                        <div class="otp-inputs" id="totpInputs" aria-label="Six digit authenticator code"><input
+                                inputmode="numeric" maxlength="1" aria-label="Digit 1"><input inputmode="numeric"
+                                maxlength="1" aria-label="Digit 2"><input inputmode="numeric" maxlength="1"
+                                aria-label="Digit 3"><input inputmode="numeric" maxlength="1"
+                                aria-label="Digit 4"><input inputmode="numeric" maxlength="1"
+                                aria-label="Digit 5"><input inputmode="numeric" maxlength="1" aria-label="Digit 6">
+                        </div>
+                        <div class="auth-error" id="totpError" role="alert"></div>
+                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-shield-alt"></i>
+                            Verify and sign in</button>
+                    </form>
                 </div>
 
                 <div class="auth-panel" id="newPasswordPanel">
@@ -185,7 +189,7 @@
                     <form onsubmit="event.preventDefault(); finishPasswordReset();">
                         <div class="form-group"><label class="form-label" for="newPassword">New password</label>
                             <div class="password-wrap"><input type="password" class="form-input" id="newPassword"
-                                    placeholder="At least 8 characters" minlength="8" autocomplete="new-password"
+                                    placeholder="Min. 8 characters" minlength="8" autocomplete="new-password"
                                     required><button type="button" class="password-toggle"
                                     onclick="togglePassword('newPassword', this)" aria-label="Show password"><i
                                         class="fas fa-eye"></i></button></div>
@@ -204,22 +208,160 @@
                     </form>
                 </div>
 
-                <div class="auth-secure-note"><i class="fas fa-shield-alt"></i> Protected with email or SMS verification
-                </div>
                 <div class="auth-footer-org">Mandaluyong City Traffic Planning &amp; Management Office</div>
             </section>
         </div>
     </main>
     <div class="privacy-modal" id="privacyPolicy" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
-        <div class="privacy-modal-card"><button class="modal-close" onclick="closePrivacyPolicy()"><i
-                    class="fas fa-times"></i></button>
-            <h2 id="privacyTitle">Privacy Policy</h2>
-            <p>RIMAS collects your name, contact details, and account credentials only to provide secure system access
-                and account recovery. Your information must be protected and processed in accordance with the Data
-                Privacy Act of 2012.</p><button class="btn btn-primary" onclick="closePrivacyPolicy()">I
-                understand</button>
+        <div class="privacy-modal-card privacy-doc">
+            <div class="privacy-head">
+                <div>
+                    <h2 id="privacyTitle">Privacy Policy</h2>
+                    <p class="privacy-meta">MandaSafe — Mandaluyong Road Accident Mapping &amp; Analytics System ·
+                        Effective September 25, 2026</p>
+                </div>
+                <button class="modal-close" type="button" onclick="closePrivacyPolicy()" aria-label="Close"><i
+                        class="fas fa-times"></i></button>
+            </div>
+
+            <div class="privacy-body" tabindex="0">
+                <p>The Traffic Planning and Management Office (TPMO) of the City Government of Mandaluyong operates
+                    MandaSafe. We respect your privacy and process personal data in accordance with the
+                    <b>Data Privacy Act of 2012 (Republic Act No. 10173)</b>, its Implementing Rules and Regulations,
+                    and the issuances of the National Privacy Commission (NPC). This policy explains what we collect,
+                    why, how we protect it, and the rights you have over it.</p>
+
+                <nav class="privacy-toc" aria-label="Contents">
+                    <a href="#pp-collect">1. Information we collect</a>
+                    <a href="#pp-use">2. How we use it</a>
+                    <a href="#pp-basis">3. Legal basis</a>
+                    <a href="#pp-share">4. Sharing and disclosure</a>
+                    <a href="#pp-storage">5. Browser storage</a>
+                    <a href="#pp-security">6. How we protect it</a>
+                    <a href="#pp-retention">7. How long we keep it</a>
+                    <a href="#pp-rights">8. Your rights</a>
+                    <a href="#pp-changes">9. Changes to this policy</a>
+                    <a href="#pp-contact">10. Contact us</a>
+                </nav>
+
+                <h3 id="pp-collect">1. Information we collect</h3>
+                <p><b>Account information you give us.</b> When you create an account: your full name, email
+                    address, mobile number and the password you choose. You can update your name, email and mobile
+                    number later from <i>My Account</i>.</p>
+                <p><b>Verification information.</b> When you reset your password, we send a one-time code
+                    to the email address registered to your account. Administrator accounts also use an
+                    authenticator app; for these we keep a secret key that links the account to that app.</p>
+                <p><b>Account activity.</b> When your account was created, when you last signed in, and the
+                    sign-in session your browser is using.</p>
+                <p><b>Technical information.</b> The IP address a request comes from. We use it to limit
+                    repeated sign-in, sign-up and code requests, which protects accounts from being guessed.</p>
+                <p><b>Road accident records.</b> The accident data shown in MandaSafe is recorded by TPMO personnel:
+                    date, time, barangay, road, location, accident type, severity and status. These records
+                    <b>do not contain the names or contact details</b> of anyone involved in an accident. Residents
+                    can view them; only authorized TPMO administrators can create, change or delete them.</p>
+
+                <h3 id="pp-use">2. How we use it</h3>
+                <ul>
+                    <li>To create your account and confirm that the email address or mobile number belongs to you.</li>
+                    <li>To sign you in, keep you signed in, and let you recover your account if you forget your
+                        password.</li>
+                    <li>To give residents and TPMO personnel the correct level of access — residents can view,
+                        administrators can manage records and accounts.</li>
+                    <li>To protect the system against misuse, such as repeated guessing of passwords or codes.</li>
+                    <li>To produce the maps, hotspot analysis, safety index and forecasts, which are computed from
+                        accident records, not from personal account data.</li>
+                </ul>
+                <p>We do not use your personal data for advertising or marketing, and we do not sell it.</p>
+
+                <h3 id="pp-basis">3. Legal basis</h3>
+                <p>We process your account data on the basis of your <b>consent</b>, which you give when you create
+                    an account, and as necessary to provide the service you asked for. Accident records are processed
+                    in the performance of the City's mandate over traffic management and public road safety.</p>
+
+                <h3 id="pp-share">4. Sharing and disclosure</h3>
+                <p>We share personal data only with service providers that help us deliver the service, and only as
+                    much as they need:</p>
+                <ul>
+                    <li><b>Email delivery</b> (Resend) — your email address and the verification code, to send the
+                        code to you.</li>
+                    <li><b>SMS delivery</b> (Vocotext or Twilio) — your mobile number and the verification message,
+                        to send the code to you.</li>
+                    <li><b>Map, font and icon services</b> — when you open MandaSafe your browser loads map tiles from
+                        OpenStreetMap and fonts and icons from Google Fonts and Cloudflare (cdnjs). Like any website
+                        request, these services receive your IP address. They do not receive your account details.</li>
+                </ul>
+                <p>We may also disclose information when required by law, by a lawful order of a court or
+                    government authority, or when necessary to protect life, health or safety.</p>
+
+                <h3 id="pp-storage">5. Browser storage</h3>
+                <p>MandaSafe does not use advertising or tracking cookies. It keeps two small items in your browser's
+                    local storage: your sign-in session (so you stay signed in between pages) and whether you
+                    collapsed the side menu. Signing out removes the session from your browser and ends it on our
+                    server.</p>
+
+                <h3 id="pp-security">6. How we protect it</h3>
+                <ul>
+                    <li>Passwords are stored only as secure one-way hashes; no one at TPMO can read your password.</li>
+                    <li>Verification codes are stored as hashes, expire after 30 seconds, and allow a limited number of
+                        attempts.</li>
+                    <li>Sign-up details are held encrypted until the code is confirmed; administrator authenticator
+                        keys are stored encrypted.</li>
+                    <li>Administrator accounts need both a password and an authenticator-app code to sign in.</li>
+                    <li>Sign-in sessions expire after 12 hours, and changing your password ends all your
+                        sessions.</li>
+                    <li>Access to records and accounts is limited by role.</li>
+                </ul>
+                <p>No system is completely secure. If a personal data breach occurs that is likely to put you at
+                    risk, we will notify you and the NPC as the law requires.</p>
+
+                <h3 id="pp-retention">7. How long we keep it</h3>
+                <ul>
+                    <li><b>Account data</b> — for as long as your account exists. You may ask us to delete it.</li>
+                    <li><b>Unfinished sign-ups and verification requests</b> — deleted automatically, generally
+                        within about an hour after they expire.</li>
+                    <li><b>Sign-in sessions</b> — until you sign out or 12 hours pass, whichever comes first.</li>
+                    <li><b>Accident records</b> — kept as official TPMO records under the City's records-retention
+                        rules.</li>
+                </ul>
+
+                <h3 id="pp-rights">8. Your rights</h3>
+                <p>Under the Data Privacy Act, you have the right to:</p>
+                <ul>
+                    <li><b>Be informed</b> that your personal data is being processed, and how;</li>
+                    <li><b>Access</b> the personal data we hold about you;</li>
+                    <li><b>Correct</b> inaccurate or outdated data — you can update most of it yourself in
+                        <i>My Account</i>;</li>
+                    <li><b>Object</b> to processing, or <b>withdraw your consent</b>;</li>
+                    <li>Have your data <b>erased or blocked</b>, for example by closing your account;</li>
+                    <li><b>Data portability</b> — to get a copy of your data in a commonly used format;</li>
+                    <li><b>Claim damages</b> for harm caused by inaccurate, incomplete, unlawfully obtained or misused
+                        personal data; and</li>
+                    <li><b>File a complaint</b> with the National Privacy Commission (privacy.gov.ph).</li>
+                </ul>
+                <p>Withdrawing consent or closing your account means you will no longer be able to sign in to
+                    MandaSafe.</p>
+
+                <h3 id="pp-changes">9. Changes to this policy</h3>
+                <p>We may update this policy when the system or the law changes. The effective date at the top will
+                    change, and significant changes will be announced in MandaSafe before they take effect.</p>
+
+                <h3 id="pp-contact">10. Contact us</h3>
+                <p>For privacy questions, requests, or to exercise your rights, contact the Data Protection Officer
+                    through the TPMO:</p>
+                <p class="privacy-contact">
+                    <b>Traffic Planning and Management Office — Data Privacy</b><br>
+                    Mandaluyong City Hall, Maysilo Circle, Plainview, Mandaluyong City<br>
+                    Telephone: 533-1111 · Monday to Friday, 8:00 AM – 5:00 PM</p>
+            </div>
+
+            <div class="privacy-foot">
+                <button class="btn btn-secondary" type="button" onclick="closePrivacyPolicy()">Close</button>
+                <button class="btn btn-primary" type="button" onclick="agreePrivacyPolicy()"><i
+                        class="fas fa-check"></i> I Agree</button>
+            </div>
         </div>
     </div>
+    <script src="vendor/qrcode/qrcode.js"></script>
     <script src="login.js"></script>
 </body>
 

@@ -87,7 +87,7 @@ async function createMandaMap(elId, options = {}) {
             // never has to be redrawn just because the filters changed.
             layer.bindTooltip(name, { className: 'brgy-tooltip', permanent: true, direction: 'center', opacity: .92 });
             if (value !== null) {
-                layer.bindPopup(`<b>${name}</b><br>${value.toLocaleString()} incident${value === 1 ? '' : 's'}`);
+                layer.bindPopup(`<b>${name}</b><br>${value.toLocaleString()} accident${value === 1 ? '' : 's'}`);
             }
             layer.on({
                 mouseover: e => e.target.setStyle({ weight: 3, color: '#f97316' }),
@@ -103,15 +103,25 @@ async function createMandaMap(elId, options = {}) {
     return { map, geo, boundaries, cityBounds };
 }
 
-/* Individual incident pins, capped so the browser stays responsive. */
-function plotIncidents(map, list, limit = 400) {
+/* Thousands of shapes as separate SVG elements make the map crawl; drawn onto one canvas per
+   map they stay smooth even with every accident on record. */
+function canvasFor(map) {
+    if (!map._msCanvas) map._msCanvas = L.canvas({ padding: 0.5 });
+    return map._msCanvas;
+}
+
+/* Individual accident pins — every one on record unless a limit is passed. The popup text is
+   built only when a pin is clicked, not up front for thousands of pins. */
+function plotIncidents(map, list, limit = Infinity) {
     const layer = L.layerGroup().addTo(map);
+    const renderer = canvasFor(map);
     list.filter(i => Number.isFinite(i.lat) && Number.isFinite(i.lng)).slice(0, limit).forEach(i => {
         const meta = sevMeta(i.sev);
         L.circleMarker([i.lat, i.lng], {
+            renderer,
             radius: i.sev === 'Fatal' ? 8 : i.sev === 'Injury' ? 7 : 5,
             color: '#fff', weight: 1.5, fillColor: meta.color, fillOpacity: 0.9
-        }).addTo(layer).bindPopup(
+        }).addTo(layer).bindPopup(() =>
             `<b>${esc(i.id)}</b><span>${esc(i.barangay)}${i.road && i.road !== 'Unknown' ? ' • ' + esc(i.road) : ''}</span>` +
             `<div style="margin-top:6px"><span class="tag ${meta.tag}">${esc(i.sev)}</span> ` +
             `<span class="tag ${statusTag(i.status)}">${esc(i.status)}</span></div>` +
@@ -125,11 +135,12 @@ function plotIncidents(map, list, limit = 400) {
    built from plain circles rather than a raster layer so it needs no extra library. */
 function plotHeat(map, list) {
     const layer = L.layerGroup().addTo(map);
+    const renderer = canvasFor(map);
     list.filter(i => Number.isFinite(i.lat) && Number.isFinite(i.lng)).forEach(i => {
         const radius = i.sev === 'Fatal' ? 260 : i.sev === 'Injury' ? 200 : 150;
         const fillOpacity = i.sev === 'Fatal' ? 0.22 : 0.16;
         const color = sevMeta(i.sev).color;
-        L.circle([i.lat, i.lng], { radius, color, fillColor: color, fillOpacity, weight: 0, interactive: false }).addTo(layer);
+        L.circle([i.lat, i.lng], { renderer, radius, color, fillColor: color, fillOpacity, weight: 0, interactive: false }).addTo(layer);
     });
     return layer;
 }
@@ -151,8 +162,35 @@ function plotHotspots(map, spots) {
         L.circleMarker([s.lat, s.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#b91c1c', fillOpacity: 1 })
             .addTo(layer)
             .bindPopup(`<b>${esc(s.barangay)}</b><span>${esc(s.road)}</span>` +
-                `<div style="margin-top:6px;font-size:12px">${num(s.incidentCount)} incidents nearby` +
+                `<div style="margin-top:6px;font-size:12px">${num(s.incidentCount)} accidents nearby` +
                 `<br>Intensity ${Math.round((s.intensity || 0) * 100)}%</div>`);
+    });
+    return layer;
+}
+
+/* One spot per barangay from /api/hotspots/barangays, at the barangay's own densest accident
+   location. Intensities are steep (the top barangay dwarfs the rest), so the glow grows with
+   the square root of intensity and never drops below a floor — every barangay stays visible. */
+function plotBarangaySpots(map, ranking) {
+    const layer = L.layerGroup().addTo(map);
+    const rings = [
+        { r: 520, o: 0.10, c: '#f97316' },
+        { r: 360, o: 0.15, c: '#fb923c' },
+        { r: 230, o: 0.22, c: '#f59e0b' },
+        { r: 130, o: 0.30, c: '#ef4444' }
+    ];
+    ranking.forEach((s, n) => {
+        if (s.lat == null || s.lng == null) return;
+        const weight = Math.max(0.3, Math.sqrt(s.intensity || 0));
+        rings.forEach(g => L.circle([s.lat, s.lng], {
+            radius: g.r * weight, stroke: false, fillColor: g.c, fillOpacity: g.o, interactive: false
+        }).addTo(layer));
+        const pct = (s.intensity || 0) * 100;
+        L.circleMarker([s.lat, s.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#b91c1c', fillOpacity: 1 })
+            .addTo(layer)
+            .bindPopup(`<b>#${n + 1} ${esc(s.barangay)}</b>` +
+                `<div style="margin-top:6px;font-size:12px">${num(s.incidentCount)} accidents` +
+                `<br>Intensity ${pct >= 1 ? Math.round(pct) + '%' : pct > 0 ? '&lt;1%' : '0%'}</div>`);
     });
     return layer;
 }

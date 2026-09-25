@@ -11,7 +11,9 @@ use Throwable;
  * hardcoded or mock prediction values are used anywhere in this class. Port of prediction.js.
  *
  * Two signals feed the final risk score:
- *  - a linear forecast of incident frequency per barangay/road (trend + volume), and
+ *  - a forecast of next month's incident count per barangay/road: a scikit-learn Random
+ *    Forest regressor (ml/forecast_forest.py) trained on every group's monthly history, or a
+ *    straight-line trend when there is too little history or Python is unavailable, and
  *  - a scikit-learn Random Forest classifier (ml/severity_forest.py), trained on logged
  *    incidents, that estimates how likely a severe outcome (Fatal/Injury) is for that
  *    location, from barangay/road/type/time features.
@@ -67,6 +69,52 @@ class PredictionService
             'trained' => (bool) ($response['trained'] ?? false),
             'oobAccuracy' => $response['oobAccuracy'] ?? null,
             'probabilities' => $probabilities,
+        ];
+    }
+
+    /**
+     * Next-month counts from the Random Forest regressor in ml/forecast_forest.py, trained on
+     * every group's monthly history at once. Falls back to the straight-line forecast (an
+     * untrained result) when Python is unavailable or there is too little history.
+     *
+     * @param  array<string, array<string, int>>  $histories  group key => [month => count]
+     * @return array{trained: bool, forecastMonth: ?string, oobR2: ?float, backtest: ?array, predicted: array<string, ?float>}
+     */
+    private static function forecastWithForest(array $histories, bool &$degraded = false): array
+    {
+        $untrained = ['trained' => false, 'forecastMonth' => null, 'oobR2' => null, 'backtest' => null, 'predicted' => []];
+
+        try {
+            $response = MlBridge::run('forecast_forest.py', [
+                'groups' => array_map(
+                    fn ($key, $history) => [
+                        'key' => $key,
+                        'history' => array_map(fn ($month, $count) => ['month' => $month, 'count' => $count], array_keys($history), array_values($history)),
+                    ],
+                    array_keys($histories),
+                    array_values($histories)
+                ),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('forecast_forest.py unavailable, falling back to the linear forecast', [
+                'error' => $e->getMessage(),
+            ]);
+            $degraded = true;
+
+            return $untrained;
+        }
+
+        $predicted = [];
+        foreach ($response['results'] ?? [] as $result) {
+            $predicted[$result['key']] = $result['predicted'];
+        }
+
+        return [
+            'trained' => (bool) ($response['trained'] ?? false),
+            'forecastMonth' => $response['forecastMonth'] ?? null,
+            'oobR2' => $response['oobR2'] ?? null,
+            'backtest' => $response['backtest'] ?? null,
+            'predicted' => $predicted,
         ];
     }
 
@@ -158,6 +206,10 @@ class PredictionService
 
         $severity = self::scoreGroupSeverity($incidents, array_map(fn ($g) => $g['incidents'], $groups), $degraded);
 
+        $forecastDegraded = false;
+        $forest = self::forecastWithForest(array_map(fn ($g) => $g['history'], $groups), $forecastDegraded);
+        $degraded = $degraded || $forecastDegraded;
+
         $results = [];
         foreach ($groups as $key => $group) {
             $history = $group['history'];
@@ -165,13 +217,22 @@ class PredictionService
             $months = array_keys($history);
             $counts = array_values($history);
 
-            $forecast = self::linearForecast($counts);
-            $predictedNextMonth = $forecast['value'];
-            $slope = $forecast['slope'];
-            $trend = $slope > 0.15 ? 'up' : ($slope < -0.15 ? 'down' : 'stable');
-
             $recentWindow = array_slice($counts, -3);
             $recentAvg = $recentWindow === [] ? 0 : array_sum($recentWindow) / count($recentWindow);
+
+            $forestValue = $forest['trained'] ? ($forest['predicted'][$key] ?? null) : null;
+
+            if ($forestValue !== null) {
+                // The forest's forecast, and whether it sits above or below the recent level.
+                $predictedNextMonth = (int) self::jsRound($forestValue);
+                $change = $recentAvg > 0 ? ($forestValue - $recentAvg) / $recentAvg : ($forestValue > 0 ? 1 : 0);
+                $trend = $change > 0.10 ? 'up' : ($change < -0.10 ? 'down' : 'stable');
+            } else {
+                $forecast = self::linearForecast($counts);
+                $predictedNextMonth = $forecast['value'];
+                $slope = $forecast['slope'];
+                $trend = $slope > 0.15 ? 'up' : ($slope < -0.15 ? 'down' : 'stable');
+            }
             $frequencyScore = $recentAvg * 0.55 + $predictedNextMonth * 0.45;
 
             // The forest's severe-outcome probability nudges the frequency score up to +30% or
@@ -198,6 +259,10 @@ class PredictionService
                 'severeProbability' => $severeProbability === null ? null : self::jsRound($severeProbability * 100) / 100,
                 'mlModel' => $severity['trained'] ? 'random-forest' : 'heuristic',
                 'mlAccuracy' => $severity['trained'] ? self::jsRound($severity['oobAccuracy'] * 100) / 100 : null,
+                // Which model produced predictedNextMonth: the Python forest, or the straight line.
+                'forecastModel' => $forestValue !== null ? 'random-forest' : 'linear',
+                'forecastMonth' => $forest['forecastMonth'],
+                'forecastBacktest' => $forestValue !== null ? $forest['backtest'] : null,
                 'sources' => array_keys($group['sources']),
             ];
         }

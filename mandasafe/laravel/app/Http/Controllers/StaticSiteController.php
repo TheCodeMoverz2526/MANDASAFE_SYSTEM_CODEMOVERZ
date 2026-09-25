@@ -35,6 +35,30 @@ class StaticSiteController extends Controller
 
     private const TEXT_TYPES = ['css', 'html', 'js', 'json', 'geojson', 'svg', 'csv', 'txt'];
 
+    /*
+     * Only what the pages actually load is public. The folder above this app also holds the old
+     * Node server, its data files (data/store.json has account password hashes and session
+     * tokens), the ML scripts and older copies of the project — none of which may be served.
+     * Anything not matched here is a 404, so a new file is private until it is listed.
+     */
+    private const PUBLIC_DIRECTORIES = ['assets', 'css', 'js', 'vendor'];
+    private const PUBLIC_ROOT_FILES = ['script.js', 'login.js', 'styles.css'];
+    private const PUBLIC_DATA_FILES = ['data/mandaluyong-barangays.geojson'];
+
+    private static function isPublic(string $path): bool
+    {
+        if (in_array($path, self::PUBLIC_ROOT_FILES, true) || in_array($path, self::PUBLIC_DATA_FILES, true)) {
+            return true;
+        }
+        // The pages themselves: .html files directly in the site root.
+        if (! str_contains($path, '/') && str_ends_with(strtolower($path), '.html')) {
+            return true;
+        }
+        $first = strtok($path, '/');
+
+        return str_contains($path, '/') && in_array($first, self::PUBLIC_DIRECTORIES, true);
+    }
+
     public function __invoke(Request $request)
     {
         // An unmatched /api/... path is a client mistake, not a missing page.
@@ -59,6 +83,10 @@ class StaticSiteController extends Controller
             return response('Forbidden', 403);
         }
 
+        if (! self::isPublic($requested) || str_contains($requested, '..')) {
+            return response('Not found', 404);
+        }
+
         $filePath = realpath($root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $requested));
 
         if ($filePath === false || ! is_file($filePath)) {
@@ -74,9 +102,24 @@ class StaticSiteController extends Controller
             $contentType .= '; charset=utf-8';
         }
 
+        // Online as a demo: every page carries a notice bar so it is never taken for an
+        // official City website.
+        $notice = trim((string) config('mandasafe.demo_notice'));
+        if ($extension === 'html' && $notice !== '') {
+            $html = (string) file_get_contents($filePath);
+            $bar = '<div role="note" style="position:sticky;top:0;z-index:100000;background:#fef3c7;color:#92400e;'
+                . 'border-bottom:1px solid #fcd34d;font:600 12.5px/1.4 system-ui,sans-serif;text-align:center;padding:7px 12px">'
+                . e($notice) . '</div>';
+            $html = preg_replace('/<body\b[^>]*>/i', '$0' . $bar, $html, 1) ?? $html;
+
+            return response($html, 200, ['Content-Type' => $contentType, 'Cache-Control' => 'no-store']);
+        }
+
         return new BinaryFileResponse($filePath, 200, [
             'Content-Type' => $contentType,
-            'Cache-Control' => 'no-cache',
+            // Pages are never kept, so Back after signing out can't show a signed-in page
+            // from the browser's memory; it reloads, and the page's sign-in check runs.
+            'Cache-Control' => $extension === 'html' ? 'no-store' : 'no-cache',
         ]);
     }
 }

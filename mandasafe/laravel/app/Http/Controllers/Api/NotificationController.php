@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Services\NotificationService;
+use Illuminate\Http\Request;
 
 /**
  * The RIMAS console's notification bell and Notifications page. Administrator-only —
@@ -18,6 +19,12 @@ class NotificationController extends ApiController
     public function index()
     {
         return response()->json($this->notifications->list());
+    }
+
+    /** GET /api/notifications/poll?after={seq} — the console's live check, every few seconds. */
+    public function poll(Request $request)
+    {
+        return response()->json($this->notifications->changesSince((int) $request->query('after', 0)));
     }
 
     /** PUT /api/notifications/{id}/read */

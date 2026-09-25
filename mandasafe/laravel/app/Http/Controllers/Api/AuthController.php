@@ -7,15 +7,14 @@ use App\Services\VerificationService;
 use Illuminate\Http\Request;
 
 /**
- * Signing in, signing up and resetting a password. All three go through the same three
- * steps, because all three end with something worth protecting:
+ * Signing in, signing up and resetting a password. Signing up creates the account at once;
+ * a password reset goes through three steps:
  *
- *   1. POST /api/auth/login | /register | /contact   states the intent and proves what can be
- *      proved now (the password, the sign-up details, that the account exists). Answers with
- *      a challenge id and the masked contacts — never with a session.
- *   2. POST /api/auth/otp/send      sends the code to the chosen channel.
- *   3. POST /api/auth/otp/verify    checks the code and only then issues the session, creates
- *      the account, or unlocks POST /api/auth/reset-password.
+ *   1. POST /api/auth/contact       proves the account exists. Answers with a challenge id
+ *      and the masked email — never with a session.
+ *   2. POST /api/auth/otp/send      emails the code.
+ *   3. POST /api/auth/otp/verify    checks the code and only then unlocks
+ *      POST /api/auth/reset-password.
  *
  * The code is never returned to the browser and never compared there.
  */
@@ -71,27 +70,23 @@ class AuthController extends ApiController
         }, 401);
     }
 
-    /**
-     * POST /api/auth/register — step one of signing up. The details are validated now; the
-     * account is written only once the code is accepted, so every account has a verified
-     * email address or contact number behind it.
-     */
+    /** POST /api/auth/register — creates a resident account straight away, no verification code. */
     public function register(Request $request)
     {
         return $this->attempt(function () use ($request) {
             $body = $this->body($request);
             $this->requireFields($body, ['name', 'email', 'phone', 'password']);
 
-            return $this->verification->startRegistration($body, (string) $request->ip());
+            return $this->verification->register($body, (string) $request->ip());
         }, 400);
     }
 
-    /** POST /api/auth/contact — step one of "Forgot password?". */
+    /** POST /api/auth/contact — step one of "Forgot password?": the registered email address. */
     public function contact(Request $request)
     {
         return $this->attempt(function () use ($request) {
             $body = $this->body($request);
-            $this->requireFields($body, ['identifier']);
+            $this->requireFields($body, ['email']);
 
             return $this->verification->startReset($body, (string) $request->ip());
         }, 404);
@@ -116,6 +111,17 @@ class AuthController extends ApiController
             $this->requireFields($body, ['challengeId', 'code']);
 
             return $this->verification->verify($body, (string) $request->ip());
+        }, 400);
+    }
+
+    /** POST /api/auth/totp/verify — an administrator's authenticator code, after the password. */
+    public function verifyTotp(Request $request)
+    {
+        return $this->attempt(function () use ($request) {
+            $body = $this->body($request);
+            $this->requireFields($body, ['challengeId', 'code']);
+
+            return $this->verification->verifyTotp($body, (string) $request->ip());
         }, 400);
     }
 

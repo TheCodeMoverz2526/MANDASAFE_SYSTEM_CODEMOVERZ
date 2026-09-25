@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard — MandaSafe</title>
-<link rel="icon" href="assets/seal.svg">
+<link rel="icon" href="assets/logo-192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -11,7 +11,7 @@
 <main class="main">
   <div class="page-head">
     <div><h1>Dashboard</h1>
-      <p>Road incident overview for Mandaluyong City, recorded by the Traffic Planning and Management Office.</p></div>
+      <p>Road accident overview for Mandaluyong City, recorded by the Traffic Planning and Management Office.</p></div>
     <div class="spacer"></div>
     <div class="head-tools">
       <span class="pill"><span class="live"></span> <span id="coverage">Loading…</span></span>
@@ -21,9 +21,9 @@
 
   <div class="grid g-4" style="margin-bottom:18px">
     <div class="card stat"><span class="ic ic-blue" data-i="car"></span>
-      <div><h3 id="s-total">—</h3><div class="lbl">Recorded Incidents</div><div class="delta" id="s-range"></div></div></div>
+      <div><h3 id="s-total">—</h3><div class="lbl">Recorded Accidents</div><div class="delta" id="s-range"></div></div></div>
     <div class="card stat"><span class="ic ic-orange" data-i="alert"></span>
-      <div><h3 id="s-active">—</h3><div class="lbl">Active Cases</div><div class="delta"><a href="incident-map.html" style="color:#1d4ed8">View on map</a></div></div></div>
+      <div><h3 id="s-active">—</h3><div class="lbl">Latest Month</div><div class="delta" id="s-latest"></div></div></div>
     <div class="card stat"><span class="ic ic-red" data-i="fire"></span>
       <div><h3 id="s-high">—</h3><div class="lbl">High-Risk Locations</div><div class="delta"><a href="hotspots.html" style="color:#1d4ed8">See hotspots</a></div></div></div>
     <div class="card stat"><span class="ic ic-purple" data-i="pin"></span>
@@ -32,11 +32,11 @@
 
   <div class="grid g-main" style="margin-bottom:18px">
     <div class="card">
-      <div class="card-head"><h2>Incident Map by Barangay</h2><a class="link" href="incident-map.html">Full map →</a></div>
+      <div class="card-head"><h2>Accident Map by Barangay</h2><a class="link" href="incident-map.html">Full map →</a></div>
       <div class="card-body" style="padding:16px"><div id="map" class="map"></div></div>
-      <div class="choro"><span>Fewer incidents</span>
+      <div class="choro"><span>Fewer accidents</span>
         <span class="ramp"><i style="background:#dbeafe"></i><i style="background:#bfdbfe"></i><i style="background:#fde68a"></i><i style="background:#fdba74"></i><i style="background:#f87171"></i><i style="background:#dc2626"></i></span>
-        <span>More incidents</span></div>
+        <span>More accidents</span></div>
       <div class="src">Boundaries: 27 barangay polygons of Mandaluyong City. Hover a barangay for its total.</div>
     </div>
 
@@ -47,11 +47,17 @@
   </div>
 
   <div class="grid g-main">
-    <div class="card">
-      <div class="card-head"><h2>Incidents per Month</h2></div>
+    <div class="card card-fill">
+      <div class="card-head"><h2>Accidents per Month</h2></div>
       <div class="card-body">
         <div class="spark" id="trend"></div>
         <div class="spark-axis" id="trendAxis"></div>
+        <div class="chart-note">
+          <p><b>How to read this chart:</b> each bar is one month, oldest on the left and newest on the right.
+            A taller bar means more accidents were recorded that month. The busiest month fills the full
+            height and every other bar is scaled against it. Hover over a bar to see its exact count.</p>
+          <p id="trendSummary"></p>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -79,7 +85,14 @@ if (requireAuth()) {
     }
 
     countUp(document.getElementById('s-total'), summary.totalIncidents);
-    countUp(document.getElementById('s-active'), summary.activeIncidents);
+    // The newest month on record, against the month before it.
+    const latest = summary.latestMonth, previous = summary.previousMonth;
+    countUp(document.getElementById('s-active'), latest ? latest.count : 0);
+    if (latest) {
+      const change = previous && previous.count ? Math.round((latest.count - previous.count) / previous.count * 100) : null;
+      document.getElementById('s-latest').textContent = fmtMonth(latest.month) +
+        (change === null ? '' : ` · ${change > 0 ? '+' : ''}${change}% vs ${fmtMonth(previous.month)}`);
+    }
     countUp(document.getElementById('s-high'), summary.highRiskLocations);
     countUp(document.getElementById('s-brgy'), summary.barangayCount);
     document.getElementById('s-range').textContent = `${fmtDate(summary.range.from)} – ${fmtDate(summary.range.to)}`;
@@ -101,6 +114,18 @@ if (requireAuth()) {
       `<i style="height:${(m.count / maxMonth) * 100}%" title="${fmtMonth(m.month)}: ${num(m.count)}"></i>`).join('');
     document.getElementById('trendAxis').innerHTML =
       `<span>${fmtMonth(months[0]?.month)}</span><span>peak ${num(maxMonth)}</span><span>${fmtMonth(months[months.length-1]?.month)}</span>`;
+
+    // A plain-language summary of the same bars, worked out from the data.
+    if (months.length) {
+      const busiest = months.reduce((a, b) => (b.count > a.count ? b : a));
+      const quietest = months.reduce((a, b) => (b.count < a.count ? b : a));
+      const average = Math.round(months.reduce((sum, m) => sum + m.count, 0) / months.length);
+      document.getElementById('trendSummary').innerHTML =
+        `<b>What it shows:</b> from ${fmtMonth(months[0].month)} to ${fmtMonth(months[months.length - 1].month)} ` +
+        `there were about <b>${num(average)}</b> accidents a month. The busiest month was ` +
+        `<b>${fmtMonth(busiest.month)}</b> (${num(busiest.count)}) and the quietest was ` +
+        `<b>${fmtMonth(quietest.month)}</b> (${num(quietest.count)}).`;
+    }
 
     const top = summary.byBarangay.slice(0, 8);
     const maxB = Math.max(1, ...top.map(b => b.count));

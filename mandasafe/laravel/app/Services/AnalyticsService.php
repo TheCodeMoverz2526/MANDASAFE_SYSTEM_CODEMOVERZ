@@ -87,7 +87,22 @@ class AnalyticsService
      */
     public function hotspots(): array
     {
-        return $this->rememberUnlessDegraded('hotspots', function (&$degraded) {
+        return $this->densityAnalysis()['peaks'];
+    }
+
+    /**
+     * Every barangay ranked on the same density surface as the hotspot peaks (see
+     * barangay_ranking in ml/hotspots.py), so the list covers the whole city, not just peaks.
+     */
+    public function barangayHotspots(): array
+    {
+        return $this->densityAnalysis()['barangays'];
+    }
+
+    /** One KDE run gives both the peaks and the per-barangay ranking; it is cached as a pair. */
+    private function densityAnalysis(): array
+    {
+        return $this->rememberUnlessDegraded('density', function (&$degraded) {
             $records = [];
             foreach ($this->incidents() as $incident) {
                 $point = GeoService::resolveIncidentPoint($incident);
@@ -102,7 +117,18 @@ class AnalyticsService
                 ];
             }
 
-            return KdeService::findHotspots($records, GeoService::mandaluyongBounds(), [], $degraded);
+            $result = KdeService::findHotspots($records, GeoService::mandaluyongBounds(), [
+                'withBarangays' => true,
+                // So each barangay's map spot is placed inside its own boundary.
+                'boundaries' => GeoService::barangayPolygons(),
+                'centroids' => GeoService::barangayCentroids(),
+            ], $degraded);
+
+            // An empty/failed run comes back as a bare list rather than the pair.
+            return [
+                'peaks' => $result['peaks'] ?? (array_is_list($result) ? $result : []),
+                'barangays' => $result['barangays'] ?? [],
+            ];
         });
     }
 
@@ -169,10 +195,28 @@ class AnalyticsService
             arsort($byType);
             arsort($bySeverity);
 
+            // Every month from the first record to the last, including months with none —
+            // skipping empty months would make a trend line jump straight over a gap.
             $monthList = [];
-            foreach ($byMonth as $month => $count) {
-                $monthList[] = ['month' => (string) $month, 'count' => $count];
+            foreach (SafetyIndexService::monthRange($incidents) as $month) {
+                $monthList[] = ['month' => $month, 'count' => $byMonth[$month] ?? 0];
             }
+
+            // Hour of day (0-23) and weekday (Mon..Sun), from each record's own date and time.
+            $byHour = array_fill(0, 24, 0);
+            $byWeekday = array_fill(0, 7, 0);
+            foreach ($incidents as $incident) {
+                if (preg_match('/^(\d{1,2}):\d{2}/', (string) ($incident['time'] ?? ''), $t) && (int) $t[1] < 24) {
+                    $byHour[(int) $t[1]]++;
+                }
+                $stamp = strtotime(substr((string) ($incident['date'] ?? ''), 0, 10));
+                if ($stamp !== false) {
+                    $byWeekday[(int) date('N', $stamp) - 1]++;
+                }
+            }
+
+            $latest = end($monthList) ?: null;
+            $previous = count($monthList) > 1 ? $monthList[count($monthList) - 2] : null;
 
             $typeList = [];
             foreach ($byType as $type => $count) {
@@ -191,6 +235,15 @@ class AnalyticsService
                 'byMonth' => $monthList,
                 'byType' => $typeList,
                 'bySeverity' => $severityList,
+                'byHour' => $byHour,
+                'byWeekday' => $byWeekday,
+                'latestMonth' => $latest,
+                'previousMonth' => $previous,
+                // Whether these fields actually carry information: a column where every
+                // record has the same value is not being recorded, and pages say so.
+                'severityTracked' => count($bySeverity) > 1,
+                'statusTracked' => ($stats['resolvedIncidents'] ?? 0) > 0,
+                'safety' => SafetyIndexService::compute($incidents),
                 'topPredictions' => array_slice($predictions, 0, 6),
                 'recent' => array_slice($recent, 0, 20),
             ];

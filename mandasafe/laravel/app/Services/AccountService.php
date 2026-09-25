@@ -249,13 +249,14 @@ class AccountService
         return ['email' => $account->email, 'phone' => $account->phone, 'name' => $account->name];
     }
 
-    public function resetPassword($identifier, $password): array
+    /** Password recovery is by registered email only, so the account is matched on that alone. */
+    public function resetPassword($email, $password): array
     {
         if (strlen((string) $password) < 8) {
             throw new RimasException('Password must be at least 8 characters.');
         }
 
-        $account = $this->findAccount($identifier);
+        $account = Account::where('email', Account::normaliseEmail($email))->first();
         if (! $account) {
             throw new RimasException('Account not found.');
         }
@@ -264,7 +265,10 @@ class AccountService
         $account->updated_at_iso = self::isoNow();
         $account->save();
 
-        return $account->toApi();
+        $api = $account->toApi();
+        $this->notifications->notifyPasswordChanged($api);
+
+        return $api;
     }
 
     public function listAccounts(): array

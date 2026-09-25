@@ -29,7 +29,7 @@ class PredictionInputController extends ApiController
     private function assertCount($value): int
     {
         if (! is_numeric($value) || (float) $value < 0) {
-            throw new RimasException('Incident count must be a non-negative number.');
+            throw new RimasException('Accident count must be a non-negative number.');
         }
 
         return (int) $value;

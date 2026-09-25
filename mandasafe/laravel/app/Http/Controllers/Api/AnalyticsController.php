@@ -33,6 +33,12 @@ class AnalyticsController extends ApiController
         return response()->json($this->analytics->summary());
     }
 
+    /** GET /api/hotspots/barangays — every barangay ranked by accident density. */
+    public function barangayHotspots()
+    {
+        return response()->json($this->analytics->barangayHotspots());
+    }
+
     /** GET /api/hotspots */
     public function hotspots()
     {
