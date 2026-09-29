@@ -440,7 +440,7 @@ function openEditModal(idx) {
     document.getElementById('addIncidentModal').classList.add('open');
 }
 function resetSeverityUI(type) {
-    const colors = { fatal: '#dc2626', injury: '#ea580c', minor: '#ca8a04', damage: '#16a34a' };
+    const colors = { fatal: '#dc2626', injury: '#eab308', minor: '#16a34a', damage: '#16a34a' };
     document.querySelectorAll('#sevOptionsWrap .sev-option').forEach(o => {
         o.className = 'sev-option';
         const c = o.querySelector('.fa-check'); if (c) c.remove();
@@ -509,7 +509,7 @@ function selectSeverity(el, type) {
     document.querySelectorAll('#sevOptionsWrap .sev-option').forEach(o => { o.className = 'sev-option'; const c = o.querySelector('.fa-check'); if (c) c.remove(); });
     el.classList.add('selected-' + type);
     const check = document.createElement('i'); check.className = 'fas fa-check'; check.style.marginLeft = 'auto';
-    const colors = { fatal: '#dc2626', injury: '#ea580c', minor: '#ca8a04', damage: '#16a34a' };
+    const colors = { fatal: '#dc2626', injury: '#eab308', minor: '#16a34a', damage: '#16a34a' };
     check.style.color = colors[type]; el.appendChild(check);
 }
 function openUserModal() { document.getElementById('addUserModal').classList.add('open'); }
@@ -715,7 +715,7 @@ function getIncidentPoint(record) {
     };
 }
 function getSeverityColor(sev) {
-    return { Fatal: '#dc2626', Injury: '#f59e0b', Minor: '#fbbf24', Damage: '#3b82f6' }[sev] || '#64748b';
+    return { Fatal: '#dc2626', Injury: '#eab308', Minor: '#16a34a', Damage: '#16a34a' }[sev] || '#64748b';
 }
 function buildIncidentTooltip(record) {
     return `<strong>${escapeMapHtml(record.id)}</strong><br>${escapeMapHtml(record.road)}<br>${escapeMapHtml(record.barangay)}<br>${escapeMapHtml(record.sev)} · ${escapeMapHtml(record.type)}`;
@@ -992,7 +992,7 @@ async function initAnalyticsCharts() {
     await loadIncidentsFromServer();
 
     const monthly = buildMonthlySeries(incidents);
-    safeChart('analyticsTimeChart', { type: 'line', data: { labels: monthly.labels, datasets: [{ label: 'Incidents', data: monthly.totals, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.12)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#1a56db', pointBorderColor: 'white', pointBorderWidth: 2 }, { label: 'Injuries', data: monthly.injuries, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.1)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#f59e0b', pointBorderColor: 'white', pointBorderWidth: 2 }] }, options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } }, scales: { y: { grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
+    safeChart('analyticsTimeChart', { type: 'line', data: { labels: monthly.labels, datasets: [{ label: 'Incidents', data: monthly.totals, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.12)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#1a56db', pointBorderColor: 'white', pointBorderWidth: 2 }, { label: 'Injuries', data: monthly.injuries, borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,.1)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#f59e0b', pointBorderColor: 'white', pointBorderWidth: 2 }] }, options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } }, scales: { y: { grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
 
     const topBarangays = topGroupCounts(incidents, 'barangay', 6);
     safeChart('barangayChart', { type: 'bar', data: { labels: topBarangays.map(([b]) => b), datasets: [{ data: topBarangays.map(([, c]) => c), backgroundColor: ['#1a56db', '#3b82f6', '#f59e0b', '#22c55e', '#94a3b8', '#f87171'], borderRadius: 5 }] }, options: { ...chartDefaults, indexAxis: 'y', scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
@@ -1136,7 +1136,7 @@ async function initSafetyCharts() {
 
 function initDashCharts() {
     safeChart('dashTrendChart', { type: 'line', data: { labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], datasets: [{ label: 'Incidents', data: [88, 95, 102, 140, 118, 130, 145, 120, 138, 152, 128, 135], borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.1)', fill: true, tension: .4, pointRadius: 3, borderWidth: 2 }, { label: 'Injuries', data: [40, 44, 52, 65, 56, 62, 70, 58, 64, 72, 60, 66], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,.06)', fill: true, tension: .4, pointRadius: 3, borderWidth: 2 }] }, options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } }, scales: { y: { grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
-    safeChart('dashSevDonut', { type: 'doughnut', data: { labels: ['Fatal', 'Injury', 'Minor', 'Damage'], datasets: [{ data: [45, 320, 685, 200], backgroundColor: ['#dc2626', '#f59e0b', '#fbbf24', '#3b82f6'], borderWidth: 3, borderColor: 'white', hoverOffset: 4 }] }, options: { ...chartDefaults, cutout: '72%' } });
+    safeChart('dashSevDonut', { type: 'doughnut', data: { labels: ['Fatal', 'Injury', 'Minor'], datasets: [{ data: [45, 320, 885], backgroundColor: ['#dc2626', '#eab308', '#16a34a'], borderWidth: 3, borderColor: 'white', hoverOffset: 4 }] }, options: { ...chartDefaults, cutout: '72%' } });
 }
 
 function renderDashRecent() {
@@ -1739,7 +1739,7 @@ function exportPDF(data, filename) {
     const boxes = [
         { label: 'Total Records', val: total, color: [26, 86, 219] },
         { label: 'Fatal', val: fatal, color: [220, 38, 38] },
-        { label: 'Injury', val: injury, color: [234, 88, 12] },
+        { label: 'Injury', val: injury, color: [234, 179, 8] },
         { label: 'Minor / Damage', val: minor + rows.filter(r => r.sev === 'Damage').length, color: [22, 163, 74] },
     ];
     boxes.forEach((b, i) => {
@@ -1755,7 +1755,7 @@ function exportPDF(data, filename) {
     const headers = cols.map(c => COL_HEADERS[c] || c);
     const tableRows = rows.map(r => cols.map(c => r[c] || ''));
 
-    const sevColors = { Fatal: [220, 38, 38], Injury: [234, 88, 12], Minor: [202, 138, 4], Damage: [22, 163, 74] };
+    const sevColors = { Fatal: [220, 38, 38], Injury: [234, 179, 8], Minor: [22, 163, 74], Damage: [22, 163, 74] };
 
     doc.autoTable({
         head: [headers],
