@@ -20,8 +20,12 @@
     <div class="card">
       <div class="card-head"><h2>Density Heatmap</h2></div>
       <div class="card-body" style="padding:16px"><div id="map" class="map" style="height:470px"></div></div>
-      <div class="heat-scale"><span>Low density</span><span class="heat-bar"></span><span>High density</span></div>
-      <div class="src">Peaks come from a Gaussian KDE over every mapped accident, weighted by severity.</div>
+      <div class="heat-scale" id="levels" style="flex-wrap:wrap;gap:16px">
+        <span class="lg"><i style="background:#dc2626"></i>High</span>
+        <span class="lg"><i style="background:#eab308"></i>Moderate</span>
+        <span class="lg"><i style="background:#16a34a"></i>Low</span>
+      </div>
+      <div class="src" id="levelNote">Peaks come from a Gaussian KDE over every mapped accident, weighted by severity.</div>
     </div>
 
     <div class="card">
@@ -60,22 +64,35 @@ if (requireAuth()) {
       .filter(b => !ranked.has(b.barangay))
       .map(b => ({ barangay: b.barangay, intensity: 0, incidentCount: b.count || 0 })));
 
+    // Red / yellow / green from each barangay's accident count against the city's average
+    // and median barangay — see riskLevels() in map.js.
+    const risk = riskLevels(Object.fromEntries(rows.map(r => [r.barangay, r.incidentCount || 0])));
+    const levelOf = s => risk.forCount(s.incidentCount);
+    const levelKey = s => levelOf(s).key;
+
+    if (rows.length) {
+      fillRiskLegend(document.getElementById('levels'), risk);
+      document.getElementById('levelNote').textContent =
+        `Colors compare each barangay's accident count with the city: red is above the average barangay (${num(Math.round(risk.average))}), ` +
+        `yellow is above the median barangay (${num(risk.median)}), green is at or below it. Glow size follows the KDE intensity.`;
+    }
+
     document.getElementById('listCount').textContent = rows.length ? `${rows.length} barangays` : '';
     // Small but real intensities read "<1%", not "0%", which would suggest no accidents at all.
     const pct = v => { const p = v * 100; return p >= 1 ? `${Math.round(p)}%` : p > 0 ? '<1%' : '0%'; };
     document.getElementById('list').innerHTML = rows.map((s, n) => `
       <div class="hot-item">
-        <span class="rank r${n + 1}">${n + 1}</span>
+        <span class="rank lv-${levelKey(s)}">${n + 1}</span>
         <div><div class="n">${esc(s.barangay)}</div>
-          <div class="m"><span class="tag ${s.intensity >= 0.7 ? 't-high' : s.intensity >= 0.4 ? 't-med' : 't-low'}">
-            ${pct(s.intensity)} intensity</span></div></div>
+          <div class="m"><span class="tag ${levelOf(s).tag}">${levelOf(s).label} risk</span>
+            <span style="font-size:11.5px;color:var(--muted)">${pct(s.intensity)} intensity</span></div></div>
         <span class="cnt">${num(s.incidentCount)} accidents</span>
       </div>`).join('') || '<div class="empty">No hotspots yet — no mapped accidents in the database.</div>';
 
     try {
       const { map } = await createMandaMap('map');
       // A spot in every barangay; fall back to the city-wide peaks if the ranking is empty.
-      if (ranking.length) plotBarangaySpots(map, ranking); else plotHotspots(map, spots);
+      if (ranking.length) plotBarangaySpots(map, ranking, levelOf); else plotHotspots(map, spots);
     } catch (error) {
       document.getElementById('map').innerHTML = `<div class="empty is-error" style="padding:180px 20px">${esc(error.message)}</div>`;
     }

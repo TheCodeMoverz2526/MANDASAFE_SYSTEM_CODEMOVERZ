@@ -110,6 +110,40 @@ function canvasFor(map) {
     return map._msCanvas;
 }
 
+/* Map-pin marker (teardrop with a white hole, black outline) drawn on the shared canvas, so
+   thousands of pins stay as fast as plain circles. `radius` is the head's radius; the tip sits
+   exactly on the accident's location and the head floats above it. */
+const PIN_TIP = 1.47;   // tip distance below the head's centre, in head radii
+const PIN_HOLE = 0.5;   // white hole radius, in head radii
+const MsPin = L.CircleMarker.extend({
+    _updatePath() { this._renderer._updateMsPin(this); },
+    _updateBounds() {
+        const r = this._radius, w = this._clickTolerance() + this.options.weight;
+        this._pxBounds = new L.Bounds(
+            this._point.subtract([r + w, r * (1 + PIN_TIP) + w]),
+            this._point.add([r + w, w]));
+    },
+    _containsPoint(p) { return this._pxBounds.contains(p); }
+});
+L.Canvas.include({
+    _updateMsPin(layer) {
+        if (!this._drawing || layer._empty()) return;
+        const ctx = this._ctx, o = layer.options, r = layer._radius;
+        const tip = layer._point, cx = tip.x, cy = tip.y - r * PIN_TIP;
+        const a = Math.acos(1 / PIN_TIP); // where the sides meet the head as tangents
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI / 2 + a, Math.PI * 2.5 - a);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.closePath();
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = o.fillOpacity; ctx.fillStyle = o.fillColor; ctx.fill();
+        ctx.globalAlpha = 1; ctx.lineWidth = o.weight; ctx.strokeStyle = o.color; ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * PIN_HOLE, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke();
+    }
+});
+
 /* Individual accident pins — every one on record unless a limit is passed. The popup text is
    built only when a pin is clicked, not up front for thousands of pins. */
 function plotIncidents(map, list, limit = Infinity) {
@@ -117,10 +151,10 @@ function plotIncidents(map, list, limit = Infinity) {
     const renderer = canvasFor(map);
     list.filter(i => Number.isFinite(i.lat) && Number.isFinite(i.lng)).slice(0, limit).forEach(i => {
         const meta = sevMeta(i.sev);
-        L.circleMarker([i.lat, i.lng], {
+        new MsPin([i.lat, i.lng], {
             renderer,
-            radius: i.sev === 'Fatal' ? 8 : i.sev === 'Injury' ? 7 : 5,
-            color: '#fff', weight: 1.5, fillColor: meta.color, fillOpacity: 0.9
+            radius: i.sev === 'Fatal' ? 8 : i.sev === 'Injury' ? 7 : 6,
+            color: '#000', weight: 1.2, fillColor: '#dc2626', fillOpacity: 1
         }).addTo(layer).bindPopup(() =>
             `<b>${esc(i.id)}</b><span>${esc(i.barangay)}${i.road && i.road !== 'Unknown' ? ' • ' + esc(i.road) : ''}</span>` +
             `<div style="margin-top:6px"><span class="tag ${meta.tag}">${esc(i.sev)}</span> ` +
@@ -131,15 +165,47 @@ function plotIncidents(map, list, limit = Infinity) {
     return layer;
 }
 
+/* Barangay risk level from accident counts, measured against the city's own numbers:
+   more than the average barangay is High (red), more than the median barangay is Moderate
+   (yellow), the rest Low (green). Counts are heavily skewed — one barangay can hold a third
+   of all accidents — so the cutoffs follow the data rather than fixed percentages.
+   `counts` is { barangay: accidents } and should list every barangay, zeros included. */
+const RISK_LEVELS = {
+    high:   { key: 'high',   label: 'High',     tag: 't-high', color: '#dc2626' },
+    medium: { key: 'medium', label: 'Moderate', tag: 't-med',  color: '#eab308' },
+    low:    { key: 'low',    label: 'Low',      tag: 't-low',  color: '#16a34a' }
+};
+function riskLevels(counts) {
+    const values = Object.values(counts).map(v => v || 0).sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    const average = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const median = !values.length ? 0 : values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+    const forCount = c => RISK_LEVELS[(c || 0) > average ? 'high' : (c || 0) > median ? 'medium' : 'low'];
+    const tally = { high: 0, medium: 0, low: 0 };
+    values.forEach(v => tally[forCount(v).key]++);
+    return { average, median, tally, forCount, forBarangay: name => forCount(counts[name]) };
+}
+
+/* Fills a legend of three `.lg` spans (High, Moderate, Low) with the live cutoffs. */
+function fillRiskLegend(el, risk) {
+    const [high, medium, low] = el.querySelectorAll('.lg');
+    const avg = Math.floor(risk.average), med = Math.floor(risk.median);
+    high.lastChild.textContent = `High — over ${num(avg)} accidents (${risk.tally.high})`;
+    medium.lastChild.textContent = `Moderate — ${num(med + 1)}–${num(avg)} (${risk.tally.medium})`;
+    low.lastChild.textContent = `Low — ${num(med)} or fewer (${risk.tally.low})`;
+}
+
 /* Soft severity-weighted glow per incident — the same "heatmap" the admin console draws,
-   built from plain circles rather than a raster layer so it needs no extra library. */
-function plotHeat(map, list) {
+   built from plain circles rather than a raster layer so it needs no extra library.
+   levelOf(incident), when given, returns a RISK_LEVELS entry and tints the glow by the
+   barangay's risk level; without it each glow keeps its severity colour. */
+function plotHeat(map, list, levelOf) {
     const layer = L.layerGroup().addTo(map);
     const renderer = canvasFor(map);
     list.filter(i => Number.isFinite(i.lat) && Number.isFinite(i.lng)).forEach(i => {
         const radius = i.sev === 'Fatal' ? 260 : i.sev === 'Injury' ? 200 : 150;
         const fillOpacity = i.sev === 'Fatal' ? 0.22 : 0.16;
-        const color = sevMeta(i.sev).color;
+        const color = levelOf ? levelOf(i).color : sevMeta(i.sev).color;
         L.circle([i.lat, i.lng], { renderer, radius, color, fillColor: color, fillOpacity, weight: 0, interactive: false }).addTo(layer);
     });
     return layer;
@@ -170,8 +236,10 @@ function plotHotspots(map, spots) {
 
 /* One spot per barangay from /api/hotspots/barangays, at the barangay's own densest accident
    location. Intensities are steep (the top barangay dwarfs the rest), so the glow grows with
-   the square root of intensity and never drops below a floor — every barangay stays visible. */
-function plotBarangaySpots(map, ranking) {
+   the square root of intensity and never drops below a floor — every barangay stays visible.
+   levelOf(s), when given, returns a RISK_LEVELS entry so each spot is tinted by its risk level;
+   without it every spot keeps the original orange-red glow. */
+function plotBarangaySpots(map, ranking, levelOf) {
     const layer = L.layerGroup().addTo(map);
     const rings = [
         { r: 520, o: 0.10, c: '#f97316' },
@@ -181,14 +249,16 @@ function plotBarangaySpots(map, ranking) {
     ];
     ranking.forEach((s, n) => {
         if (s.lat == null || s.lng == null) return;
+        const level = levelOf ? levelOf(s) : null;
         const weight = Math.max(0.3, Math.sqrt(s.intensity || 0));
         rings.forEach(g => L.circle([s.lat, s.lng], {
-            radius: g.r * weight, stroke: false, fillColor: g.c, fillOpacity: g.o, interactive: false
+            radius: g.r * weight, stroke: false, fillColor: level ? level.color : g.c, fillOpacity: g.o, interactive: false
         }).addTo(layer));
         const pct = (s.intensity || 0) * 100;
-        L.circleMarker([s.lat, s.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#b91c1c', fillOpacity: 1 })
+        L.circleMarker([s.lat, s.lng], { radius: 6, color: '#fff', weight: 2, fillColor: level ? level.color : '#b91c1c', fillOpacity: 1 })
             .addTo(layer)
             .bindPopup(`<b>#${n + 1} ${esc(s.barangay)}</b>` +
+                (level ? `<div style="margin-top:6px"><span class="tag ${level.tag}">${esc(level.label)} risk</span></div>` : '') +
                 `<div style="margin-top:6px;font-size:12px">${num(s.incidentCount)} accidents` +
                 `<br>Intensity ${pct >= 1 ? Math.round(pct) + '%' : pct > 0 ? '&lt;1%' : '0%'}</div>`);
     });

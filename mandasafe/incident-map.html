@@ -50,11 +50,14 @@
     <div class="card-body" style="padding:16px"><div id="map" class="map map-lg"></div></div>
 
     <div class="map-legend">
-      <span class="lg"><i style="background:#dc2626"></i>Fatal</span>
-      <span class="lg"><i style="background:#f97316"></i>Injury</span>
-      <span class="lg"><i style="background:#f59e0b"></i>Minor</span>
-      <span class="lg"><i style="background:#3b82f6"></i>Damage</span>
+      <span class="lg"><i class="lg-pin"><svg viewBox="0 0 24 24"><path d="M12 19.3 6.88 13.77A7 7 0 1 1 17.12 13.77Z" fill="#dc2626" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="9" r="3.5" fill="#fff" stroke="#000" stroke-width="1.2"/></svg></i>Accident <small style="font-weight:500;color:var(--muted)">— larger pin = more severe</small></span>
       <span class="link" id="pinNote"></span>
+    </div>
+    <div class="map-legend" id="heatLegend" hidden>
+      <span class="lg"><i style="background:#dc2626"></i>High</span>
+      <span class="lg"><i style="background:#eab308"></i>Moderate</span>
+      <span class="lg"><i style="background:#16a34a"></i>Low</span>
+      <span class="link">Heatmap: barangay accidents vs. the city average and median</span>
     </div>
     <div class="src">Choose a barangay or a date range above to narrow what the map shows — the counts, pins and heatmap all follow the filters. Choosing a barangay also zooms to it; click any barangay to see how many accidents fall inside it.</div>
   </div>
@@ -88,8 +91,9 @@ if (requireAuth()) {
   const fBarangay = $('fBarangay'), fFrom = $('fFrom'), fTo = $('fTo');
   let newestDate = '', oldestDate = '';
 
-  function shownData() {
-    const brgy = fBarangay.value, from = fFrom.value, to = fTo.value;
+  // ignoreBarangay: only the date range applies — used to rank a barangay against the whole city.
+  function shownData(ignoreBarangay) {
+    const brgy = ignoreBarangay ? '' : fBarangay.value, from = fFrom.value, to = fTo.value;
     return all.filter(i => {
       if (brgy && i.barangay !== brgy) return false;
       const d = String(i.date || '').slice(0, 10);
@@ -190,8 +194,15 @@ if (requireAuth()) {
       if (!layersOn.markers) mapRef.removeLayer(markerLayer);
       $('pinNote').textContent = layersOn.markers ? pinNoteText(data) : '';
 
+      // Heatmap colour is the barangay's risk level (red / yellow / green) for the chosen dates,
+      // ranked against every barangay in the city even while one barangay is picked.
+      const cityCounts = Object.fromEntries((geoRef ? barangayNames(geoRef) : []).map(n => [n, 0]));
+      shownData(true).forEach(i => { cityCounts[i.barangay] = (cityCounts[i.barangay] || 0) + 1; });
+      const risk = riskLevels(cityCounts);
+      fillRiskLegend($('heatLegend'), risk);
+
       if (heatLayer) mapRef.removeLayer(heatLayer);
-      heatLayer = plotHeat(mapRef, data);
+      heatLayer = plotHeat(mapRef, data, i => risk.forBarangay(i.barangay));
       if (!layersOn.heatmap) mapRef.removeLayer(heatLayer);
     }
 
@@ -204,6 +215,7 @@ if (requireAuth()) {
     btn.classList.toggle('active', layersOn[key]);
     const layer = { boundary: boundaries, markers: markerLayer, heatmap: heatLayer }[key];
     if (mapRef && layer) { if (layersOn[key]) mapRef.addLayer(layer); else mapRef.removeLayer(layer); }
+    if (key === 'heatmap') $('heatLegend').hidden = !layersOn.heatmap;
     if (key === 'markers') $('pinNote').textContent = layersOn.markers ? pinNoteText(shownData()) : '';
   }
 

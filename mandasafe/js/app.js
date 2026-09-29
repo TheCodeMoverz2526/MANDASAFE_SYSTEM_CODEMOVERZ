@@ -57,9 +57,9 @@ function icon(name,cls){
    These match what the RIMAS console stores: Fatal, Injury, Minor, Damage. */
 const SEVERITY = {
     Fatal:  { color: '#dc2626', tag: 't-high',  icon: 'alert' },
-    Injury: { color: '#f97316', tag: 't-med',   icon: 'car' },
-    Minor:  { color: '#f59e0b', tag: 't-low',   icon: 'car' },
-    Damage: { color: '#3b82f6', tag: 't-review', icon: 'cone' }
+    Injury: { color: '#eab308', tag: 't-med',   icon: 'car' },
+    Minor:  { color: '#16a34a', tag: 't-low',   icon: 'car' },
+    Damage: { color: '#16a34a', tag: 't-review', icon: 'cone' }
 };
 function sevMeta(sev) { return SEVERITY[sev] || { color: '#8b5cf6', tag: 't-review', icon: 'dots' }; }
 
