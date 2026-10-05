@@ -66,7 +66,9 @@ function sevMeta(sev) { return SEVERITY[sev] || { color: '#8b5cf6', tag: 't-revi
 const STATUS_TAG = { active: 't-process', resolved: 't-resolved', pending: 't-review' };
 function statusTag(status) { return STATUS_TAG[status] || 't-review'; }
 
-const RISK_TAG = { high: 't-high', medium: 't-med', low: 't-resolved' };
+// Red / yellow / green, the same three levels the maps colour by.
+const RISK_TAG = { high: 't-high', medium: 't-med', low: 't-low' };
+const RISK_LABEL = { high: 'High', medium: 'Moderate', low: 'Low' };
 
 /* ---------------- Shell ---------------- */
 const NAV = [

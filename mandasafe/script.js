@@ -3,21 +3,11 @@ const SESSION_KEY = 'rimasCurrentUser';
 
 function applyDashboardUser(acc) {
     const avatar = document.getElementById('avatarBtn');
-    const name = document.getElementById('profileName');
-    const email = document.getElementById('profileEmail');
-    const badge = document.getElementById('profileRoleBadge');
-    const adminLink = document.getElementById('adminPanelLink');
     if (avatar) avatar.textContent = acc.avatar;
     const chipName = document.getElementById('chipName');
     const chipRole = document.getElementById('chipRole');
     if (chipName) chipName.textContent = acc.name;
     if (chipRole) chipRole.textContent = acc.role === 'admin' ? 'Administrator' : 'Resident';
-    if (name) name.textContent = acc.name;
-    if (email) email.textContent = acc.email;
-    if (badge) badge.innerHTML = acc.role === 'admin'
-        ? '<span class="admin-badge"><i class="fas fa-shield-alt"></i> Administrator</span>'
-        : '<span class="user-badge"><i class="fas fa-user"></i> User</span>';
-    if (adminLink) adminLink.style.display = acc.role === 'admin' ? 'flex' : 'none';
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = acc.role === 'admin' ? 'flex' : 'none');
     const welcome = document.getElementById('dashWelcome');
     if (welcome) welcome.textContent = `Welcome, ${acc.name.split(' ')[0]} 👋`;
@@ -81,14 +71,7 @@ window.addEventListener('storage', event => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) signedOutBounce(); });
 
-function toggleProfileDropdown() {
-    document.getElementById('profileDropdown').classList.toggle('open');
-}
-
 document.addEventListener('click', (e) => {
-    const dd = document.getElementById('profileDropdown');
-    const btn = document.getElementById('accountChip');
-    if (dd && !dd.contains(e.target) && btn && !btn.contains(e.target)) dd.classList.remove('open');
     const srd = document.getElementById('searchResultsDropdown');
     const search = document.getElementById('globalSearch');
     if (srd && !srd.contains(e.target) && search && !search.contains(e.target)) srd.classList.remove('open');
@@ -113,7 +96,9 @@ async function apiRequest(path, options = {}) {
             }
         });
     } catch (error) {
-        throw new Error('Cannot reach the RIMAS server. Is start-mandasafe.bat running?');
+        throw new Error(['localhost', '127.0.0.1'].includes(location.hostname)
+            ? 'Cannot reach the RIMAS server. Is start-mandasafe.bat running?'
+            : 'The server is not responding right now. Please check your connection and try again in a moment.');
     }
     let data = null;
     try { data = await response.json(); } catch { /* no body */ }
@@ -132,6 +117,7 @@ const api = {
     getIncidents: () => apiRequest('/api/incidents'),
     createIncident: (body) => apiRequest('/api/incidents', { method: 'POST', body: JSON.stringify(body) }),
     bulkCreateIncidents: (records) => apiRequest('/api/incidents/bulk', { method: 'POST', body: JSON.stringify({ records }) }),
+    bulkDeleteIncidents: (ids) => apiRequest('/api/incidents/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
     updateIncident: (id, body) => apiRequest(`/api/incidents/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deleteIncident: (id) => apiRequest(`/api/incidents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getPredictionInputs: () => apiRequest('/api/prediction-inputs'),
@@ -139,11 +125,12 @@ const api = {
     updatePredictionInput: (id, body) => apiRequest(`/api/prediction-inputs/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deletePredictionInput: (id) => apiRequest(`/api/prediction-inputs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getPredictions: () => apiRequest('/api/predictions'),
+    getProneAreas: () => apiRequest('/api/prone-areas'),
+    getSeverity: () => apiRequest('/api/severity'),
     // Server-computed figures shared with the resident pages: monthly/hourly counts, the
     // Safety Index, and which fields are actually recorded.
     getSummary: () => apiRequest('/api/summary'),
     getStats: () => apiRequest('/api/stats'),
-    getHotspots: () => apiRequest('/api/hotspots'),
     getMe: () => apiRequest('/api/auth/me'),
     logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
     getAccounts: () => apiRequest('/api/accounts'),
@@ -170,29 +157,15 @@ async function loadIncidentsFromServer() {
         incidents = [];
         showToast('⚠️ ' + error.message);
     }
-    filteredIncidents = incidents.slice();
     populateIncidentFilterOptions();
+    filteredIncidents = filterIncidentRecords();
     renderTable();
+    syncIncidentSelection();
     updateHomeStats();
     renderDashRecent();
     if (document.getElementById('page-home')?.classList.contains('active')) initDashCharts();
     if (mandaluyongMapReady) renderMandaluyongMapLayers();
     return incidents;
-}
-
-// KDE (Kernel Density Estimation) hotspots, recomputed server-side from all incident
-// locations whenever this is called — cached here so the map can redraw on filter changes
-// without re-fetching.
-let hotspotsCache = [];
-async function loadHotspotsFromServer() {
-    try {
-        hotspotsCache = await api.getHotspots();
-    } catch (error) {
-        console.error('Failed to load hotspots from server:', error);
-        hotspotsCache = [];
-    }
-    if (mandaluyongMapReady) renderMandaluyongMapLayers();
-    return hotspotsCache;
 }
 
 // ===== ADMIN: PREDICTION DATA MANAGEMENT =====
@@ -309,47 +282,136 @@ function populateIncidentFilterOptions() {
     fill('fltRoad', distinct('road'));
     fill('fltVehicle', distinct('type'));
     fill('mapFltType', distinct('type'));
+    syncMapFilterOptions();
 }
 
-/* "Latest N months" counts back from the newest record, not from today, so the choice
-   always has records in it even when the data stops some time ago. */
-function latestMonthsCutoff(months) {
-    const newest = incidents.reduce((max, r) => (String(r.date || '') > max ? String(r.date) : max), '');
-    if (!newest) return '';
-    const [y, m] = newest.slice(0, 7).split('-').map(Number);
-    const start = new Date(y, m - months, 1);
-    return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-01`;
+/* The records filters as they stand in the bar — the table, the count and the row selection
+   all read these. */
+function incidentFilterValues() {
+    const value = id => document.getElementById(id)?.value || '';
+    return {
+        from: value('fltDateFrom'),
+        to: value('fltDateTo'),
+        barangay: value('fltBarangay') || 'all',
+        road: value('fltRoad') || 'all',
+        sev: value('fltSeverity') || 'all',
+        type: value('fltVehicle') || 'all'
+    };
+}
+function filterIncidentRecords() {
+    const f = incidentFilterValues();
+    return incidents.filter(r => {
+        const d = String(r.date || '').slice(0, 10);
+        if (f.barangay !== 'all' && r.barangay !== f.barangay) return false;
+        if (f.road !== 'all' && r.road !== f.road) return false;
+        if (f.sev !== 'all' && r.sev !== f.sev) return false;
+        if (f.type !== 'all' && r.type !== f.type) return false;
+        // ISO dates compare correctly as strings; one date alone means "from" or "up to" it.
+        if (f.from && d < f.from) return false;
+        if (f.to && d > f.to) return false;
+        return true;
+    });
+}
+/* ---- Row selection: tick rows (or "select all" for everything the filter lists), then
+   "Delete selected". Only rows in the current filtered list can stay selected, so a filter
+   change never leaves hidden rows queued for deletion. */
+const selectedIncidentIds = new Set();
+
+function syncIncidentSelection() {
+    const visible = new Set(filteredIncidents.map(r => r.id));
+    [...selectedIncidentIds].forEach(id => { if (!visible.has(id)) selectedIncidentIds.delete(id); });
+
+    const count = selectedIncidentIds.size;
+    const btn = document.getElementById('bulkDeleteBtn');
+    if (btn) {
+        btn.style.display = count ? '' : 'none';
+        document.getElementById('bulkDeleteLabel').textContent = `Delete ${count.toLocaleString()} selected`;
+    }
+    const clearBtn = document.getElementById('clearSelectionBtn');
+    if (clearBtn) clearBtn.style.display = count ? '' : 'none';
+
+    const all = document.getElementById('selectAllIncidents');
+    if (all) {
+        all.checked = count > 0 && count === filteredIncidents.length;
+        all.indeterminate = count > 0 && count < filteredIncidents.length;
+        all.disabled = !filteredIncidents.length;
+    }
+    document.querySelectorAll('#incidentTableBody .row-select').forEach(box => {
+        box.checked = selectedIncidentIds.has(box.dataset.id);
+        box.closest('tr').classList.toggle('row-selected', box.checked);
+    });
+}
+function toggleIncidentSelection(box) {
+    if (box.checked) selectedIncidentIds.add(box.dataset.id); else selectedIncidentIds.delete(box.dataset.id);
+    syncIncidentSelection();
+}
+function toggleSelectAllIncidents(checked) {
+    filteredIncidents.forEach(r => { if (checked) selectedIncidentIds.add(r.id); else selectedIncidentIds.delete(r.id); });
+    syncIncidentSelection();
+}
+function clearIncidentSelection() {
+    selectedIncidentIds.clear();
+    syncIncidentSelection();
 }
 
 function applyIncidentFilters() {
-    const dr = document.getElementById('fltDateRange').value;
-    const brgy = document.getElementById('fltBarangay').value;
-    const road = document.getElementById('fltRoad').value;
-    const sev = document.getElementById('fltSeverity').value;
-    const type = document.getElementById('fltVehicle').value;
-    const from = dr === 'all' ? '' : latestMonthsCutoff(Number(dr));
-
-    filteredIncidents = incidents.filter(r => {
-        if (brgy !== 'all' && r.barangay !== brgy) return false;
-        if (road !== 'all' && r.road !== road) return false;
-        if (sev !== 'all' && r.sev !== sev) return false;
-        if (type !== 'all' && r.type !== type) return false;
-        if (from && String(r.date || '') < from) return false;
-        return true;
-    });
+    // Keep the range the right way round.
+    const fromInput = document.getElementById('fltDateFrom');
+    const toInput = document.getElementById('fltDateTo');
+    if (fromInput.value && toInput.value && fromInput.value > toInput.value) [fromInput.value, toInput.value] = [toInput.value, fromInput.value];
+    filteredIncidents = filterIncidentRecords();
     renderTable();
+    syncIncidentSelection();
     showToast(`🔍 Filter applied — ${filteredIncidents.length} result${filteredIncidents.length !== 1 ? 's' : ''}`);
 }
 
 function resetIncidentFilters() {
-    document.getElementById('fltDateRange').value = 'all';
-    document.getElementById('fltBarangay').value = 'all';
-    document.getElementById('fltRoad').value = 'all';
-    document.getElementById('fltSeverity').value = 'all';
-    document.getElementById('fltVehicle').value = 'all';
+    ['fltBarangay','fltRoad', 'fltSeverity', 'fltVehicle'].forEach(id => { document.getElementById(id).value = 'all'; });
+    document.getElementById('fltDateFrom').value = '';
+    document.getElementById('fltDateTo').value = '';
     filteredIncidents = incidents.slice();
     renderTable();
+    syncIncidentSelection();
     showToast('↺ Filters reset');
+}
+
+function askDeleteSelected() {
+    const targets = filteredIncidents.filter(r => selectedIncidentIds.has(r.id));
+    if (!targets.length) return;
+    const count = targets.length.toLocaleString();
+    const sample = targets.slice(0, 3).map(r => `${r.id} (${r.date})`).join(', ');
+    openConfirmModal({
+        title: `Delete ${count} selected accident${targets.length === 1 ? '' : 's'}?`,
+        message: `This permanently deletes ${targets.length === 1 ? sample : `${sample}${targets.length > 3 ? ` and ${(targets.length - 3).toLocaleString()} more` : ''}`}. This cannot be undone.`,
+        icon: 'fas fa-trash',
+        danger: true,
+        confirmLabel: `Delete ${count}`,
+        onConfirm: () => deleteSelectedIncidents(targets)
+    });
+}
+
+async function deleteSelectedIncidents(targets) {
+    const btn = document.getElementById('bulkDeleteBtn');
+    if (btn) btn.disabled = true;
+    try {
+        const result = await api.bulkDeleteIncidents(targets.map(r => r.id));
+        const gone = new Set(targets.map(r => r.id));
+        incidents = incidents.filter(r => !gone.has(r.id));
+        gone.forEach(id => selectedIncidentIds.delete(id));
+        populateIncidentFilterOptions();
+        filteredIncidents = filterIncidentRecords();
+        renderTable();
+        syncIncidentSelection();
+        updateHomeStats();
+        renderDashRecent();
+        if (mandaluyongMapReady) renderMandaluyongMapLayers();
+        refreshPredictionViews();
+        showToast(`🗑️ ${result.deletedCount.toLocaleString()} accident${result.deletedCount === 1 ? '' : 's'} deleted.`);
+    } catch (error) {
+        showToast('❌ ' + error.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 /* ===== ACCIDENT RECORDS TABLE — one scrolling list =====
@@ -371,11 +433,13 @@ function sizeIncidentScroll() {
 
 function incidentRowHtml(r) {
     const realIdx = tableIndexOf.get(r);
+    const selected = selectedIncidentIds.has(r.id);
     return `
-                <tr>
-                    <td><span class="incident-id" onclick="openDetailModal(${realIdx})">${r.id}</span></td>
-                    <td>${r.date}</td><td>${r.time}</td><td>${r.loc}</td><td>${r.barangay}</td><td>${r.road}</td>
-                    <td>${getSevBadge(r.sev)}</td><td style="font-size:12px;">${r.type}</td>
+                <tr${selected ? ' class="row-selected"' : ''}>
+                    <td><input type="checkbox" class="row-select" data-id="${escapeMapHtml(r.id)}" ${selected ? 'checked' : ''} onchange="toggleIncidentSelection(this)" aria-label="Select ${escapeMapHtml(r.id)}"></td>
+                    <td><span class="incident-id" onclick="openDetailModal(${realIdx})">${escapeMapHtml(r.id ?? '')}</span></td>
+                    <td style="white-space:nowrap;">${escapeMapHtml(r.date ?? '')}</td><td style="white-space:nowrap;">${escapeMapHtml(r.time ?? '')}</td><td>${escapeMapHtml(r.loc ?? '')}</td><td>${escapeMapHtml(r.barangay ?? '')}</td><td>${escapeMapHtml(r.road ?? '')}</td>
+                    <td>${getSevBadge(r.sev)}</td><td style="font-size:12px;">${escapeMapHtml(r.type ?? '')}</td>
                     <td><div style="display:flex;gap:4px;">
                         <button class="btn btn-secondary btn-sm" onclick="openDetailModal(${realIdx})"><i class="fas fa-eye"></i></button>
                         ${isAdmin() ? `<button class="btn btn-secondary btn-sm" onclick="openEditModal(${realIdx})"><i class="fas fa-edit"></i></button>
@@ -418,7 +482,7 @@ function renderTable(keepPosition = false) {
 
     const rows = filteredIncidents.slice(0, keepCount);
     tbody.innerHTML = rows.map(incidentRowHtml).join('')
-        || `<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px;">No accidents match your filters.</td></tr>`;
+        || `<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:24px;">No accidents match your filters.</td></tr>`;
     tableRendered = rows.length;
     if (box) box.scrollTop = keepTop;
     updateTableCountLabel();
@@ -444,7 +508,7 @@ window.addEventListener('resize', () => {
 
 function getSevBadge(sev) {
     const map = { 'Fatal': 'sev-fatal', 'Injury': 'sev-injury', 'Minor': 'sev-minor', 'Damage': 'sev-damage' };
-    return `<span class="sev ${map[sev] || 'sev-damage'}"><span class="sev-dot"></span>${sev}</span>`;
+    return `<span class="sev ${map[sev] || 'sev-damage'}"><span class="sev-dot"></span>${escapeMapHtml(sev ?? '')}</span>`;
 }
 
 // ===== GLOBAL SEARCH =====
@@ -464,7 +528,7 @@ function handleGlobalSearch(q) {
     } else {
         dd.innerHTML = results.map(r => {
             const idx = incidents.indexOf(r);
-            return `<div class="search-result-item" onclick="jumpToIncident(${idx})"><strong>${r.id}</strong> — ${r.road}, ${r.barangay} <span style="float:right;">${getSevBadge(r.sev)}</span></div>`;
+            return `<div class="search-result-item" onclick="jumpToIncident(${idx})"><strong>${escapeMapHtml(r.id ?? '')}</strong> — ${escapeMapHtml(r.road ?? '')}, ${escapeMapHtml(r.barangay ?? '')} <span style="float:right;">${getSevBadge(r.sev)}</span></div>`;
         }).join('');
     }
     dd.classList.add('open');
@@ -495,7 +559,7 @@ function showPage(page) {
     if (page === 'notifications') renderNotifications();
     if (page === 'settings') populateSettings();
     if (page === 'predictdata') loadPredictionAdminPage();
-    if (page === 'map') { setTimeout(initMandaluyongMap, 0); loadIncidentsFromServer(); loadHotspotsFromServer(); }
+    if (page === 'map') { setTimeout(initMandaluyongMap, 0); loadIncidentsFromServer(); }
 }
 
 // ===== MODALS =====
@@ -582,9 +646,10 @@ async function saveIncident() {
             incidents.unshift(created);
             showToast('✅ Accident saved successfully!');
         }
-        filteredIncidents = incidents.slice();
+        filteredIncidents = filterIncidentRecords();
             closeModal();
         renderTable();
+        syncIncidentSelection();
         updateHomeStats();
         renderDashRecent();
         if (mandaluyongMapReady) renderMandaluyongMapLayers();
@@ -684,8 +749,9 @@ async function confirmDelete() {
     try {
         await api.deleteIncident(record.id);
         incidents.splice(idx, 1);
-        filteredIncidents = incidents.slice();
+        filteredIncidents = filterIncidentRecords();
         renderTable();
+        syncIncidentSelection();
         updateHomeStats();
         renderDashRecent();
         if (mandaluyongMapReady) renderMandaluyongMapLayers();
@@ -709,13 +775,34 @@ async function populateReportBarangaySelect() {
     reportBarangaySelectPopulated = true;
 }
 
+/* The Reports page parameters, and the rows/preview they produced last (what Download uses). */
+let lastReport = null;
+function readReportFilters() {
+    return {
+        from: document.getElementById('reportDateFrom')?.value || '',
+        to: document.getElementById('reportDateTo')?.value || '',
+        barangay: document.getElementById('reportBarangaySelect')?.value || 'all'
+    };
+}
+function sameReportFilters(a, b) { return a.from === b.from && a.to === b.to && a.barangay === b.barangay; }
+function validReportFilters(f) {
+    if (f.from && f.to && f.from > f.to) {
+        showToast('⚠️ The start date is after the end date — fix the date range first.');
+        return false;
+    }
+    return true;
+}
+function reportScopeText(f) {
+    const rangeText = f.from && f.to ? `${f.from} to ${f.to}` : f.from ? `From ${f.from}` : f.to ? `Through ${f.to}` : 'All dates on record';
+    return `${f.barangay === 'all' ? 'All Barangays' : f.barangay} · ${rangeText}`;
+}
+
 async function generateReport() {
     await populateReportBarangaySelect();
+    const filters = readReportFilters();
+    if (!validReportFilters(filters)) return false;
     await loadIncidentsFromServer();
-
-    const from = document.getElementById('reportDateFrom')?.value || '';
-    const to = document.getElementById('reportDateTo')?.value || '';
-    const barangay = document.getElementById('reportBarangaySelect')?.value || 'all';
+    const { from, to, barangay } = filters;
 
     const filtered = incidents.filter(record => {
         if (barangay !== 'all' && record.barangay !== barangay) return false;
@@ -748,13 +835,12 @@ async function generateReport() {
     if (highRiskEl) highRiskEl.textContent = highRiskRoads.toLocaleString();
 
     const subtitle = document.getElementById('reportSubtitle');
-    if (subtitle) {
-        const rangeText = from && to ? `${from} to ${to}` : from ? `From ${from}` : to ? `Through ${to}` : 'All dates on record';
-        subtitle.textContent = `Mandaluyong City, ${barangay === 'all' ? 'All Barangays' : barangay} · ${rangeText}`;
-    }
+    if (subtitle) subtitle.textContent = `Mandaluyong City, ${reportScopeText(filters)}`;
 
     initReportChart(filtered);
+    lastReport = { filters, rows: filtered };
     showToast(total ? `📄 Report generated — ${total} accident${total !== 1 ? 's' : ''} in range` : '📄 Report generated — no accidents match these filters');
+    return true;
 }
 function openDetailModal(idx) {
     const r = incidents[idx];
@@ -777,24 +863,24 @@ function editFromDetail() {
 }
 
 // ===== MANDALUYONG LEAFLET GIS MAP =====
-// Layer groups are intentionally separate so incident markers, heatmaps, and hotspot analysis
-// can be introduced without changing the barangay-boundary module.
+// Mirrors the resident Accident Map (incident-map.html + js/map.js): the same boundary file,
+// the same city mask, the same drop pins and the same risk-level heatmap, so both sides of
+// the system read one set of records the same way. Layer groups stay separate so markers
+// and heatmap can be toggled without redrawing the barangay boundaries.
 let mandaluyongMap;
 let mandaluyongMapLayers = {};
 let mandaluyongBarangayLayers = new Map();
 let mandaluyongBarangayCentroids = new Map();
 let mandaluyongBoundaryGeoJson;
+let mandaluyongCityBounds = null;
+let mandaluyongFocusLayer = null;
 let mandaluyongMapReady = false;
-const MANDALUYONG_GEOJSON_URLS = ['data/mandaluyong-barangays.geojson', './data/mandaluyong-barangays.geojson', '/data/mandaluyong-barangays.geojson', 'mandaluyong-barangays.geojson', 'http://localhost:5500/api/barangays'];
+const MANDALUYONG_GEOJSON_URLS = ['data/mandaluyong-barangays.geojson', './data/mandaluyong-barangays.geojson', '/data/mandaluyong-barangays.geojson', 'mandaluyong-barangays.geojson', '/api/barangays'];
 const MANDALUYONG_PALETTE = ['#1a56db', '#0f766e', '#7c3aed', '#c2410c', '#be185d', '#047857', '#0369a1', '#6d28d9', '#b45309'];
-const INCIDENT_ROAD_OFFSETS = {
-    'shaw blvd': [0.0012, -0.0001],
-    edsa: [0.0002, 0.0011],
-    'boni ave': [-0.0009, 0.0007],
-    'ortigas ave': [0.0007, -0.0011],
-    'san francisco st': [-0.0008, -0.0007],
-    'san joaquin st': [-0.001, 0.0004],
-};
+const MAP_WORLD_RING = [[-90, -180], [-90, 180], [90, 180], [90, -180]];
+const MAP_SEVERITY_ORDER = ['Fatal', 'Injury', 'Minor', 'Damage'];
+const MAP_SEVERITY_LABEL = { Damage: 'Damage Only' };
+const MAP_FOCUS_STYLE = { color: '#ea580c', weight: 4, opacity: 1, fillColor: '#f97316', fillOpacity: 0.25, interactive: false };
 
 function escapeMapHtml(value) { return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]); }
 function barangayStyle(index) {
@@ -808,11 +894,6 @@ function toDateInputValue(value) {
 function toTimeInputValue(value) {
     const parsed = new Date(`2000-01-01 ${value}`);
     return Number.isNaN(parsed.getTime()) ? '' : parsed.toTimeString().slice(0, 5);
-}
-function barangayPopup(feature) {
-    const name = escapeMapHtml(feature.properties.brgy_name);
-    const code = escapeMapHtml(feature.properties.psgc_10d);
-    return `<div class="barangay-popup"><div class="barangay-popup-title">${name}</div><div class="barangay-popup-meta">PSGC: ${code}<br>Total accidents: <strong>—</strong><br>Fatal: <strong>—</strong> · Injuries: <strong>—</strong></div></div>`;
 }
 function getFeatureCentroid(feature) {
     const coords = feature.geometry?.coordinates || [];
@@ -833,130 +914,264 @@ function getFeatureCentroid(feature) {
 function normalizeText(value) {
     return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
+/* The accident's recorded coordinates, or null. Records without a location are left off the
+   map and counted in the pin note rather than placed at a guessed spot. */
 function getIncidentPoint(record) {
-    const savedLat = Number.parseFloat(record.lat);
-    const savedLng = Number.parseFloat(record.lng);
-    if (Number.isFinite(savedLat) && Number.isFinite(savedLng)) return { lat: savedLat, lng: savedLng };
-    const centroid = mandaluyongBarangayCentroids.get(record.barangay) || mandaluyongBarangayCentroids.get('Plainview');
-    if (!centroid) return null;
-    const roadKey = Object.keys(INCIDENT_ROAD_OFFSETS).find(key => normalizeText(record.road).includes(key));
-    const offset = roadKey ? INCIDENT_ROAD_OFFSETS[roadKey] : [0, 0];
-    const sevOffset = record.sev === 'Fatal' ? [0.0007, 0.0007] : record.sev === 'Injury' ? [0.00035, -0.00045] : record.sev === 'Minor' ? [-0.00025, 0.0003] : [0, 0];
-    const hashSeed = Array.from(normalizeText(record.id)).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    const jitter = ((hashSeed % 7) - 3) / 10000;
+    const lat = Number.parseFloat(record.lat);
+    const lng = Number.parseFloat(record.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+function mapNum(value) { return Number(value || 0).toLocaleString(); }
+
+/* Every outer ring of every barangay as Leaflet [lat, lng] pairs — the mask holes and the
+   city outline, exactly as js/map.js builds them. */
+function mapOuterRings(geo) {
+    const rings = [];
+    (geo.features || []).forEach(feature => {
+        const g = feature.geometry || {};
+        if (g.type === 'Polygon') rings.push(g.coordinates[0]);
+        if (g.type === 'MultiPolygon') g.coordinates.forEach(poly => rings.push(poly[0]));
+    });
+    return rings.map(ring => ring.map(([lng, lat]) => [lat, lng]));
+}
+
+/* The same canvas drop pin the resident map draws: a teardrop with a white hole whose tip
+   sits exactly on the accident's location, so thousands of pins stay smooth. */
+const MAP_PIN_TIP = 1.47;
+const MAP_PIN_HOLE = 0.5;
+const MapPin = L.CircleMarker.extend({
+    _updatePath() { this._renderer._updateMapPin(this); },
+    _updateBounds() {
+        const r = this._radius, w = this._clickTolerance() + this.options.weight;
+        this._pxBounds = new L.Bounds(
+            this._point.subtract([r + w, r * (1 + MAP_PIN_TIP) + w]),
+            this._point.add([r + w, w]));
+    },
+    _containsPoint(p) { return this._pxBounds.contains(p); }
+});
+L.Canvas.include({
+    _updateMapPin(layer) {
+        if (!this._drawing || layer._empty()) return;
+        const ctx = this._ctx, o = layer.options, r = layer._radius;
+        const tip = layer._point, cx = tip.x, cy = tip.y - r * MAP_PIN_TIP;
+        const a = Math.acos(1 / MAP_PIN_TIP);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI / 2 + a, Math.PI * 2.5 - a);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.closePath();
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = o.fillOpacity; ctx.fillStyle = o.fillColor; ctx.fill();
+        ctx.globalAlpha = 1; ctx.lineWidth = o.weight; ctx.strokeStyle = o.color; ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * MAP_PIN_HOLE, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke();
+    }
+});
+function mapCanvas() {
+    if (!mandaluyongMap._msCanvas) mandaluyongMap._msCanvas = L.canvas({ padding: 0.5 });
+    return mandaluyongMap._msCanvas;
+}
+
+/* Barangay risk level from accident counts, measured against the city's own numbers — more
+   than the average barangay is High, more than the median is Moderate, the rest Low. Same
+   rule as riskLevels() in js/map.js. `counts` lists every barangay, zeros included. */
+const MAP_RISK_LEVELS = {
+    high: { key: 'high', label: 'High', color: '#dc2626' },
+    medium: { key: 'medium', label: 'Moderate', color: '#eab308' },
+    low: { key: 'low', label: 'Low', color: '#16a34a' }
+};
+function mapRiskLevels(counts) {
+    const values = Object.values(counts).map(v => v || 0).sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    const average = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const median = !values.length ? 0 : values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+    const forCount = c => MAP_RISK_LEVELS[(c || 0) > average ? 'high' : (c || 0) > median ? 'medium' : 'low'];
+    const tally = { high: 0, medium: 0, low: 0 };
+    values.forEach(v => tally[forCount(v).key]++);
+    return { average, median, tally, forBarangay: name => forCount(counts[name]) };
+}
+function fillMapRiskLegend(risk) {
+    const legend = document.getElementById('mapHeatLegend');
+    if (!legend) return;
+    const [high, medium, low] = legend.querySelectorAll('.legend-item span');
+    const avg = Math.floor(risk.average), med = Math.floor(risk.median);
+    high.textContent = `High — over ${mapNum(avg)} accidents (${risk.tally.high})`;
+    medium.textContent = `Moderate — ${mapNum(med + 1)}–${mapNum(avg)} (${risk.tally.medium})`;
+    low.textContent = `Low — ${mapNum(med)} or fewer (${risk.tally.low})`;
+}
+
+/* ---- Filters ----
+   Dates are ISO strings (YYYY-MM-DD), so plain string comparison orders them correctly and
+   no time zone can shift a record across a day boundary. ignoreBarangay applies every other
+   filter — used to rank a barangay against the whole city. */
+const MAP_NO_FILTERS = { barangay: 'all', type: 'all', sev: 'all', from: '', to: '' };
+// What the map draws: the filters as of the last "Apply Filter", not whatever is currently
+// half-chosen in the sidebar, so a background data reload never applies them early.
+let appliedMapFilters = { ...MAP_NO_FILTERS };
+function mapFilterValues() {
+    return appliedMapFilters;
+}
+function mapFilterInputs() {
+    const value = id => document.getElementById(id)?.value || '';
     return {
-        lat: centroid[0] + offset[0] + sevOffset[0] + jitter,
-        lng: centroid[1] + offset[1] + sevOffset[1] - jitter
+        barangay: value('mapFltBarangay') || 'all',
+        type: value('mapFltType') || 'all',
+        sev: value('mapFltSev') || 'all',
+        from: value('mapDateFrom'),
+        to: value('mapDateTo')
     };
 }
-function getSeverityColor(sev) {
-    return { Fatal: '#dc2626', Injury: '#eab308', Minor: '#16a34a', Damage: '#16a34a' }[sev] || '#64748b';
+function mapFilteredIncidents(ignoreBarangay) {
+    const f = mapFilterValues();
+    return incidents.filter(record => {
+        if (!ignoreBarangay && f.barangay !== 'all' && record.barangay !== f.barangay) return false;
+        if (f.type !== 'all' && record.type !== f.type) return false;
+        if (f.sev !== 'all' && record.sev !== f.sev) return false;
+        const d = String(record.date || '').slice(0, 10);
+        if (f.from && (!d || d < f.from)) return false;
+        if (f.to && (!d || d > f.to)) return false;
+        return true;
+    });
 }
-function buildIncidentTooltip(record) {
-    return `<strong>${escapeMapHtml(record.id)}</strong><br>${escapeMapHtml(record.road)}<br>${escapeMapHtml(record.barangay)}<br>${escapeMapHtml(record.sev)} · ${escapeMapHtml(record.type)}`;
+function mapDateRange() {
+    const dates = incidents.map(r => String(r.date || '').slice(0, 10)).filter(Boolean).sort();
+    return { oldest: dates[0] || '', newest: dates[dates.length - 1] || '' };
 }
+/* Called whenever the records reload: the date bounds and the severity list come from the
+   data itself, so every option matches something on the map. */
+function syncMapFilterOptions() {
+    const range = mapDateRange();
+    ['mapDateFrom', 'mapDateTo'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) { input.min = range.oldest; input.max = range.newest; }
+    });
+
+    const sevSelect = document.getElementById('mapFltSev');
+    if (sevSelect) {
+        const present = new Set(incidents.map(r => r.sev).filter(Boolean));
+        const values = [...MAP_SEVERITY_ORDER.filter(s => present.has(s)), ...[...present].filter(s => !MAP_SEVERITY_ORDER.includes(s)).sort()];
+        const current = sevSelect.value;
+        sevSelect.innerHTML = '<option value="all">All Severities</option>'
+            + values.map(v => `<option value="${escapeMapHtml(v)}">${escapeMapHtml(MAP_SEVERITY_LABEL[v] || v)}</option>`).join('');
+        sevSelect.value = values.includes(current) ? current : 'all';
+    }
+}
+/* "Apply Filter": takes the sidebar's choices, flies to a newly picked barangay (or back to
+   the city when it is cleared), then redraws counts, pins, heatmap and popups. */
+function applyMapFilters() {
+    const fromInput = document.getElementById('mapDateFrom');
+    const toInput = document.getElementById('mapDateTo');
+    // Keep the range the right way round.
+    if (fromInput.value && toInput.value && fromInput.value > toInput.value) [fromInput.value, toInput.value] = [toInput.value, fromInput.value];
+
+    const next = mapFilterInputs();
+    if (next.barangay !== appliedMapFilters.barangay) {
+        if (next.barangay !== 'all') focusMapBarangay(next.barangay); else clearMapBarangayFocus();
+    }
+    appliedMapFilters = next;
+    renderMandaluyongMapLayers();
+    applyMapLayers();
+    showToast(next.barangay === 'all' ? '🔍 Map filters applied' : `🔍 Showing ${next.barangay}`);
+}
+
+/* Flies to one barangay and outlines it in its own layer, so the outline survives hover
+   restyles and stays visible with Barangay Boundaries switched off. */
+function focusMapBarangay(name) {
+    if (!mandaluyongMap) return;
+    const layer = mandaluyongBarangayLayers.get(name);
+    if (mandaluyongFocusLayer) mandaluyongMap.removeLayer(mandaluyongFocusLayer);
+    mandaluyongFocusLayer = null;
+    if (!layer) return;
+    mandaluyongFocusLayer = L.geoJSON(layer.feature, { style: () => MAP_FOCUS_STYLE, interactive: false }).addTo(mandaluyongMap);
+    mandaluyongFocusLayer.bringToFront();
+    mandaluyongMap.flyToBounds(mandaluyongFocusLayer.getBounds(), { padding: [40, 40], maxZoom: 17, duration: 0.9 });
+}
+function clearMapBarangayFocus() {
+    const wasFocused = !!mandaluyongFocusLayer;
+    if (mandaluyongFocusLayer && mandaluyongMap) mandaluyongMap.removeLayer(mandaluyongFocusLayer);
+    mandaluyongFocusLayer = null;
+    if (wasFocused && mandaluyongMap && mandaluyongCityBounds) mandaluyongMap.flyToBounds(mandaluyongCityBounds, { padding: [10, 10], duration: 0.8 });
+}
+
+function incidentPopupHtml(record) {
+    return `<div style="font-family:inherit"><strong>${escapeMapHtml(record.id)}</strong><br>${escapeMapHtml(record.barangay)}${record.road && record.road !== 'Unknown' ? ' · ' + escapeMapHtml(record.road) : ''}`
+        + `<div style="margin-top:6px">${getSevBadge(record.sev)}</div>`
+        + `<div style="margin-top:6px;font-size:11.5px;color:#64748b">${escapeMapHtml(record.type)}<br>${escapeMapHtml(record.date)} · ${escapeMapHtml(record.time)}</div></div>`;
+}
+
+/* Counts, pins, heatmap and popups are all drawn here from the filtered set. The view is
+   not refitted — only picking or clearing a barangay moves the map. */
 function renderMandaluyongMapLayers() {
     if (!mandaluyongMap || !mandaluyongMapLayers.barangays) return;
     mandaluyongMapLayers.incidents.clearLayers();
     mandaluyongMapLayers.heatmap.clearLayers();
-    mandaluyongMapLayers.hotspots.clearLayers();
-    if (mandaluyongBoundaryGeoJson) {
-        const bounds = mandaluyongBoundaryGeoJson.getBounds();
-        mandaluyongMap.fitBounds(bounds, { padding: [16, 16] });
-    }
 
-    const selectedBarangay = document.getElementById('mapFltBarangay')?.value || 'all';
-    const selectedType = document.getElementById('mapFltType')?.value || 'all';
-    const selectedSev = document.getElementById('mapFltSev')?.value || 'all';
-    const normalizedSev = selectedSev === 'Damage Only' ? 'Damage' : selectedSev;
-    const from = document.getElementById('mapDateFrom')?.value || '';
-    const to = document.getElementById('mapDateTo')?.value || '';
+    const filters = mapFilterValues();
+    const visibleIncidents = mapFilteredIncidents();
+    const renderer = mapCanvas();
 
-    const visibleIncidents = incidents.filter(record => {
-        if (selectedBarangay !== 'all' && record.barangay !== selectedBarangay) return false;
-        if (selectedType !== 'all' && record.type !== selectedType) return false;
-        if (normalizedSev !== 'all' && record.sev !== normalizedSev) return false;
-        if (from || to) {
-            const parsed = new Date(record.date);
-            if (Number.isNaN(parsed.getTime())) return false;
-            if (from && parsed < new Date(from + 'T00:00:00')) return false;
-            if (to && parsed > new Date(to + 'T23:59:59')) return false;
-        }
-        return true;
+    // Every accident with a recorded location, oldest drawn first so the newest sit on top.
+    const oldestFirst = [...visibleIncidents].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+    const stats = new Map();
+    oldestFirst.forEach(record => {
+        const s = stats.get(record.barangay) || { total: 0, fatal: 0, injury: 0 };
+        s.total++;
+        if (record.sev === 'Fatal') s.fatal++;
+        if (record.sev === 'Injury') s.injury++;
+        stats.set(record.barangay, s);
+
+        const point = getIncidentPoint(record);
+        if (!point) return;
+        new MapPin([point.lat, point.lng], {
+            renderer,
+            radius: record.sev === 'Fatal' ? 8 : record.sev === 'Injury' ? 7 : 6,
+            color: '#000', weight: 1.2, fillColor: '#dc2626', fillOpacity: 1
+        }).bindPopup(() => incidentPopupHtml(record), { maxWidth: 260 })
+            .on('click', () => selectIncident(record.id, record.road, record.barangay, record.type, record.sev, 1, record))
+            .addTo(mandaluyongMapLayers.incidents);
     });
 
-    const severityCounts = new Map();
-    const roadCounts = new Map();
+    // Heatmap colour is the barangay's risk level for the chosen filters, ranked against
+    // every barangay in the city even while one barangay is picked.
+    const cityCounts = Object.fromEntries([...mandaluyongBarangayLayers.keys()].map(name => [name, 0]));
+    mapFilteredIncidents(true).forEach(record => { cityCounts[record.barangay] = (cityCounts[record.barangay] || 0) + 1; });
+    const risk = mapRiskLevels(cityCounts);
+    fillMapRiskLegend(risk);
     visibleIncidents.forEach(record => {
         const point = getIncidentPoint(record);
         if (!point) return;
-        severityCounts.set(record.barangay, (severityCounts.get(record.barangay) || 0) + 1);
-        roadCounts.set(record.road, (roadCounts.get(record.road) || 0) + 1);
-
-        const marker = L.circleMarker([point.lat, point.lng], {
-            radius: record.sev === 'Fatal' ? 10 : record.sev === 'Injury' ? 8 : 6,
-            color: '#ffffff',
-            weight: 2,
-            fillColor: getSeverityColor(record.sev),
-            fillOpacity: 0.9
-        }).bindPopup(`<div style="font-family:inherit"><strong>${escapeMapHtml(record.id)}</strong><br>${escapeMapHtml(record.date)} · ${escapeMapHtml(record.time)}<br>${escapeMapHtml(record.road)}<br>${escapeMapHtml(record.barangay)}<br><strong>${escapeMapHtml(record.sev)}</strong> · ${escapeMapHtml(record.type)}</div>`, { maxWidth: 260 });
-        marker.bindTooltip(buildIncidentTooltip(record), { sticky: true, direction: 'top', className: 'incident-tooltip' });
-        marker.on('click', () => selectIncident(record.id, record.road, record.barangay, record.type, record.sev, roadCounts.get(record.road) || 1, record));
-        marker.addTo(mandaluyongMapLayers.incidents);
-
-        const heat = L.circle([point.lat, point.lng], {
+        const color = risk.forBarangay(record.barangay).color;
+        L.circle([point.lat, point.lng], {
+            renderer,
             radius: record.sev === 'Fatal' ? 260 : record.sev === 'Injury' ? 200 : 150,
-            color: getSeverityColor(record.sev),
-            fillColor: getSeverityColor(record.sev),
+            color, fillColor: color,
             fillOpacity: record.sev === 'Fatal' ? 0.22 : 0.16,
-            weight: 0
-        });
-        heat.addTo(mandaluyongMapLayers.heatmap);
+            weight: 0, interactive: false
+        }).addTo(mandaluyongMapLayers.heatmap);
     });
 
-    // Hotspot markers come from the server's KDE (Kernel Density Estimation) surface over all
-    // incident locations, not a simple per-road count — so a marker here means "a real spatial
-    // density peak," including density contributed by nearby incidents on other roads.
-    const visibleHotspots = selectedBarangay === 'all' ? hotspotsCache : hotspotsCache.filter(h => h.barangay === selectedBarangay);
-    visibleHotspots.forEach(h => {
-        const size = 22 + Math.round(h.intensity * 22);
-        const hotspot = L.divIcon({
-            className: 'map-hotspot-icon',
-            html: `<div style="width:${size + 14}px;height:${size + 14}px;border-radius:50%;background:rgba(220,38,38,.18);border:2px solid rgba(220,38,38,.85);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(220,38,38,.22);"><div style="width:${size}px;height:${size}px;border-radius:50%;background:#dc2626;color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">${h.incidentCount}</div></div>`,
-            iconSize: [size + 14, size + 14],
-            iconAnchor: [(size + 14) / 2, (size + 14) / 2]
-        });
-        L.marker([h.lat, h.lng], { icon: hotspot }).bindPopup(`<strong>${escapeMapHtml(h.road)}</strong><br>${escapeMapHtml(h.barangay)}<br>KDE density: ${Math.round(h.intensity * 100)}% of peak<br>${h.incidentCount} nearby accident${h.incidentCount === 1 ? '' : 's'} · ${h.fatalCount} fatal`).addTo(mandaluyongMapLayers.hotspots);
-    });
-
+    const fatal = visibleIncidents.filter(record => record.sev === 'Fatal').length;
+    const injury = visibleIncidents.filter(record => record.sev === 'Injury').length;
     const summary = document.getElementById('mapResultSummary');
-    if (summary) {
-        const fatal = visibleIncidents.filter(record => record.sev === 'Fatal').length;
-        const injury = visibleIncidents.filter(record => record.sev === 'Injury').length;
-        summary.textContent = `${visibleIncidents.length} accident${visibleIncidents.length === 1 ? '' : 's'} shown · ${fatal} fatal · ${injury} injury`;
-    }
+    if (summary) summary.textContent = `${mapNum(visibleIncidents.length)} accident${visibleIncidents.length === 1 ? '' : 's'} shown · ${mapNum(fatal)} fatal · ${mapNum(injury)} injury`;
+
     mandaluyongBarangayLayers.forEach((layer, barangay) => {
-        const total = severityCounts.get(barangay) || 0;
-        const fatal = visibleIncidents.filter(record => record.barangay === barangay && record.sev === 'Fatal').length;
-        layer.bindPopup(`<div class="barangay-popup"><div class="barangay-popup-title">${escapeMapHtml(barangay)}</div><div class="barangay-popup-meta">Visible accidents: <strong>${total}</strong><br>Fatal: <strong>${fatal}</strong></div></div>`, { className: 'barangay-popup', maxWidth: 250 });
+        const s = stats.get(barangay) || { total: 0, fatal: 0, injury: 0 };
+        const level = risk.forBarangay(barangay);
+        layer.setPopupContent(`<div class="barangay-popup-title">${escapeMapHtml(barangay)}</div><div class="barangay-popup-meta">Accidents: <strong>${mapNum(s.total)}</strong><br>Fatal: <strong>${mapNum(s.fatal)}</strong> · Injury: <strong>${mapNum(s.injury)}</strong><br>Risk level: <strong style="color:${level.color}">${level.label}</strong></div>`);
     });
 
-    mandaluyongMapLayers.incidents.eachLayer(layer => mandaluyongMap.hasLayer(mandaluyongMapLayers.incidents) || mandaluyongMapLayers.incidents.removeLayer(layer));
-    mandaluyongMapLayers.heatmap.eachLayer(layer => mandaluyongMap.hasLayer(mandaluyongMapLayers.heatmap) || mandaluyongMapLayers.heatmap.removeLayer(layer));
-    mandaluyongMapLayers.hotspots.eachLayer(layer => mandaluyongMap.hasLayer(mandaluyongMapLayers.hotspots) || mandaluyongMapLayers.hotspots.removeLayer(layer));
+    const focusMsg = document.getElementById('mapFocusMsg');
+    if (focusMsg) {
+        const s = stats.get(filters.barangay);
+        focusMsg.textContent = filters.barangay === 'all' ? '' : `Showing ${filters.barangay} — ${mapNum(s ? s.total : 0)} accident${s && s.total === 1 ? '' : 's'} in the selected filters.`;
+    }
 }
 async function initMandaluyongMap() {
     if (mandaluyongMapReady || !window.L) return;
     const container = document.getElementById('mandaluyongLeafletMap');
     if (!container || container.offsetParent === null) return;
     mandaluyongMapReady = true;
-    mandaluyongMap = L.map(container, { zoomControl: false, preferCanvas: true, attributionControl: true });
-    L.control.zoom({ position: 'bottomright' }).addTo(mandaluyongMap);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(mandaluyongMap);
-    mandaluyongMapLayers = { barangays: L.layerGroup().addTo(mandaluyongMap), incidents: L.layerGroup(), heatmap: L.layerGroup(), hotspots: L.layerGroup() };
     try {
         let boundaries;
         let lastError;
@@ -970,40 +1185,61 @@ async function initMandaluyongMap() {
             } catch (error) { lastError = error; }
         }
         if (!boundaries) throw new Error(`Boundary data could not be loaded. ${lastError?.message || ''}`.trim());
-        if (!Array.isArray(boundaries.features) || boundaries.features.length !== 27) throw new Error('Expected 27 Mandaluyong barangay boundaries.');
+
+        const rings = mapOuterRings(boundaries);
+        mandaluyongCityBounds = L.latLngBounds(rings.flat());
+        mandaluyongMap = L.map(container, {
+            zoomControl: false,
+            preferCanvas: true,
+            attributionControl: true,
+            minZoom: 12,
+            maxZoom: 18,
+            maxBounds: mandaluyongCityBounds.pad(0.25),
+            maxBoundsViscosity: 0.9
+        }).fitBounds(mandaluyongCityBounds, { padding: [10, 10] });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Mandaluyong City TPMO'
+        }).addTo(mandaluyongMap);
+
+        // Dim everything outside the city: one polygon with every barangay as a hole.
+        L.polygon([MAP_WORLD_RING, ...rings], { stroke: false, fillColor: '#0b2f6d', fillOpacity: 0.35, interactive: false }).addTo(mandaluyongMap);
+
+        mandaluyongMapLayers = { barangays: L.layerGroup().addTo(mandaluyongMap), incidents: L.layerGroup(), heatmap: L.layerGroup() };
         const geoJsonLayer = L.geoJSON(boundaries, {
             style: (feature) => barangayStyle(Number(feature.properties.psgc_10d.slice(-2)) - 1),
             onEachFeature: (feature, layer) => {
                 const name = feature.properties.brgy_name;
-                const baseStyle = barangayStyle(Number(feature.properties.psgc_10d.slice(-2)) - 1);
                 mandaluyongBarangayLayers.set(name, layer);
                 const centroid = getFeatureCentroid(feature);
                 if (centroid) mandaluyongBarangayCentroids.set(name, centroid);
-                layer.bindTooltip(name, { className: 'barangay-tooltip', permanent: true, sticky: true, direction: 'center', opacity: .92 });
-                layer.bindPopup(barangayPopup(feature), { className: 'barangay-popup', maxWidth: 250 });
+                layer.bindTooltip(name, { className: 'barangay-tooltip', permanent: true, direction: 'center', opacity: .92 });
+                layer.bindPopup(`<div class="barangay-popup-title">${escapeMapHtml(name)}</div>`, { className: 'barangay-popup', maxWidth: 250 });
                 layer.on({
-                    mouseover: () => layer.setStyle({ weight: 3, fillOpacity: .42, color: '#0f1e3c' }),
-                    mouseout: () => layer.setStyle(baseStyle),
-                    click: () => layer.openPopup()
+                    mouseover: e => e.target.setStyle({ weight: 3, color: '#f97316' }),
+                    mouseout: e => geoJsonLayer.resetStyle(e.target)
                 });
             }
         }).addTo(mandaluyongMapLayers.barangays);
         mandaluyongBoundaryGeoJson = geoJsonLayer;
-        const bounds = geoJsonLayer.getBounds();
-        mandaluyongMap.fitBounds(bounds, { padding: [16, 16] });
-        mandaluyongMap.setMinZoom(mandaluyongMap.getZoom());
-        mandaluyongMap.setMaxBounds(bounds.pad(.05));
+
+        // City outline drawn on top so the municipal border stays readable.
+        L.polygon(rings, { color: '#0b2f6d', weight: 3, opacity: 0.9, fill: false, interactive: false }).addTo(mandaluyongMap);
+
         populateMapBarangayFilter(boundaries.features);
+        syncMapFilterOptions();
         renderMandaluyongMapLayers();
+        syncMapLayerPending(); // layer buttons clicked while the map was loading show as pending
         setTimeout(() => mandaluyongMap.invalidateSize(), 0);
     } catch (error) {
-        container.innerHTML = `<div class="map-load-error"><i class="fas fa-triangle-exclamation"></i><strong>Map data unavailable</strong><span>Start the RIMAS server with <code>start-mandasafe.bat</code>, then reload the page.</span><button type="button" class="map-retry-btn" onclick="location.reload()">Retry map</button></div>`;
+        container.innerHTML = `<div class="map-load-error"><i class="fas fa-triangle-exclamation"></i><strong>Map data unavailable</strong><span>${['localhost', '127.0.0.1'].includes(location.hostname) ? 'Start the RIMAS server with <code>start-mandasafe.bat</code>, then reload the page.' : 'The map boundaries could not be loaded. Check your connection, then try again.'}</span><button type="button" class="map-retry-btn" onclick="location.reload()">Retry map</button></div>`;
         console.error('Mandaluyong GIS map:', error);
     }
 }
 function populateMapBarangayFilter(features) {
     const select = document.getElementById('mapFltBarangay'); if (!select) return;
-    select.innerHTML = '<option value="all">All Barangays</option>' + features.map(feature => `<option value="${escapeMapHtml(feature.properties.brgy_name)}">${escapeMapHtml(feature.properties.brgy_name)}</option>`).sort().join('');
+    const names = features.map(feature => feature.properties.brgy_name).sort((a, b) => a.localeCompare(b));
+    select.innerHTML = '<option value="all">All Barangays</option>' + names.map(name => `<option value="${escapeMapHtml(name)}">${escapeMapHtml(name)}</option>`).join('');
 }
 function selectIncident(id, road, barangay, type, sev, count, record = null) {
     document.getElementById('mapInfoPanel').classList.add('open');
@@ -1038,25 +1274,44 @@ function closeInfoPanel() {
 function mapZoom(dir) {
     if (mandaluyongMap) dir > 0 ? mandaluyongMap.zoomIn() : mandaluyongMap.zoomOut();
 }
+/* Layer buttons only mark a choice; "Apply Filter" switches the map. A button whose choice
+   differs from what the map shows gets a dashed outline until then. */
+const MAP_LAYER_BUTTONS = { boundary: 'layerBoundary', incidents: 'layerIncidents', heatmap: 'layerHeatmap' };
+const MAP_DEFAULT_LAYERS = { boundary: true, incidents: false, heatmap: false };
+
+function mapLayerGroup(layer) {
+    return mandaluyongMapLayers[layer === 'boundary' ? 'barangays' : layer];
+}
+function mapLayerShown(layer) {
+    const group = mapLayerGroup(layer);
+    return !!(mandaluyongMap && group && mandaluyongMap.hasLayer(group));
+}
+function syncMapLayerPending() {
+    Object.entries(MAP_LAYER_BUTTONS).forEach(([layer, id]) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.toggle('is-pending', mandaluyongMap ? btn.classList.contains('active') !== mapLayerShown(layer) : false);
+    });
+}
 function toggleMapLayer(layer, btn) {
     btn.classList.toggle('active');
-    const layerName = layer === 'boundary' ? 'barangays' : layer;
-    const targetLayer = mandaluyongMapLayers[layerName];
-    if (!mandaluyongMap || !targetLayer) return;
-    if (mandaluyongMap.hasLayer(targetLayer)) mandaluyongMap.removeLayer(targetLayer);
-    else mandaluyongMap.addLayer(targetLayer);
+    syncMapLayerPending();
 }
-function applyMapFilters() {
-    renderMandaluyongMapLayers();
-    const selectedBarangay = document.getElementById('mapFltBarangay').value;
-    if (selectedBarangay !== 'all') {
-        const barangayLayer = mandaluyongBarangayLayers.get(selectedBarangay);
-        if (barangayLayer) {
-            mandaluyongMap.fitBounds(barangayLayer.getBounds(), { padding: [30, 30], maxZoom: 16 });
-            barangayLayer.openPopup();
-        }
-    }
-    showToast(selectedBarangay === 'all' ? '🔍 Map filters applied' : `🔍 Showing ${selectedBarangay}`);
+function applyMapLayers() {
+    if (!mandaluyongMap) return;
+    Object.entries(MAP_LAYER_BUTTONS).forEach(([layer, id]) => {
+        const group = mapLayerGroup(layer);
+        const want = document.getElementById(id)?.classList.contains('active');
+        if (!group) return;
+        if (want && !mandaluyongMap.hasLayer(group)) mandaluyongMap.addLayer(group);
+        if (!want && mandaluyongMap.hasLayer(group)) mandaluyongMap.removeLayer(group);
+    });
+    document.getElementById('mapHeatLegend').hidden = !mapLayerShown('heatmap');
+    syncMapLayerPending();
+}
+function resetMapLayerButtons() {
+    Object.entries(MAP_LAYER_BUTTONS).forEach(([layer, id]) => {
+        document.getElementById(id)?.classList.toggle('active', MAP_DEFAULT_LAYERS[layer]);
+    });
 }
 function resetMapFilters() {
     document.getElementById('mapDateFrom').value = '';
@@ -1064,9 +1319,12 @@ function resetMapFilters() {
     document.getElementById('mapFltType').value = 'all';
     document.getElementById('mapFltSev').value = 'all';
     document.getElementById('mapFltBarangay').value = 'all';
-    if (mandaluyongBoundaryGeoJson) mandaluyongMap.fitBounds(mandaluyongBoundaryGeoJson.getBounds(), { padding: [16, 16] });
+    if (appliedMapFilters.barangay !== 'all') clearMapBarangayFocus();
+    appliedMapFilters = { ...MAP_NO_FILTERS };
+    resetMapLayerButtons();
     renderMandaluyongMapLayers();
-    showToast('↺ Map filters reset');
+    applyMapLayers();
+    showToast('↺ Map filters cleared');
 }
 
 // ===== TOAST =====
@@ -1140,6 +1398,15 @@ function topGroupCounts(list, key, limit) {
     list.forEach(record => { const value = record[key] || 'Unknown'; counts.set(value, (counts.get(value) || 0) + 1); });
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
 }
+/* Share of `total`, to one decimal place — the percentage distribution the analytics charts show. */
+function sharePercent(count, total) { return total ? Math.round(count / total * 1000) / 10 : 0; }
+/* Bar-chart tooltip that reads "142 accidents (18.4% of 772)". */
+function shareTooltip(total) {
+    return { callbacks: { label: ctx => ` ${ctx.raw.toLocaleString()} accidents (${sharePercent(ctx.raw, total)}% of ${total.toLocaleString()})` } };
+}
+/* Risk-level palette shared by every chart: red = high, yellow = moderate, green = low (same as the map). */
+const RISK_COLORS = { high: '#dc2626', medium: '#eab308', moderate: '#eab308', low: '#16a34a' };
+const RISK_LABELS = { high: 'High', medium: 'Moderate', moderate: 'Moderate', low: 'Low' };
 function buildDayPeriodMatrix(list) {
     const matrix = { Morning: new Array(7).fill(0), Afternoon: new Array(7).fill(0), Evening: new Array(7).fill(0), Night: new Array(7).fill(0) };
     list.forEach(record => {
@@ -1232,8 +1499,14 @@ function renderAnalyticsCharts(list, predictionFilter = {}) {
     const monthly = buildMonthlySeries(list);
     safeChart('analyticsTimeChart', { type: 'line', data: { labels: monthly.labels, datasets: [{ label: 'Accidents', data: monthly.totals, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.12)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#1a56db', pointBorderColor: 'white', pointBorderWidth: 2 }, { label: 'Injuries', data: monthly.injuries, borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,.1)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#f59e0b', pointBorderColor: 'white', pointBorderWidth: 2 }] }, options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } }, scales: { y: { grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
 
+    // Percentage distribution across barangays: each bar is labelled with its share of
+    // every accident in the current filter.
+    const total = list.length;
+    const shareBarOptions = { ...chartDefaults, indexAxis: 'y', plugins: { ...chartDefaults.plugins, tooltip: shareTooltip(total) }, scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } };
+    const shareLabel = ([name, count]) => `${name} (${sharePercent(count, total)}%)`;
+
     const topBarangays = topGroupCounts(list, 'barangay', 6);
-    safeChart('barangayChart', { type: 'bar', data: { labels: topBarangays.map(([b]) => b), datasets: [{ data: topBarangays.map(([, c]) => c), backgroundColor: ['#1a56db', '#3b82f6', '#f59e0b', '#22c55e', '#94a3b8', '#f87171'], borderRadius: 5 }] }, options: { ...chartDefaults, indexAxis: 'y', scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
+    safeChart('barangayChart', { type: 'bar', data: { labels: topBarangays.map(shareLabel), datasets: [{ data: topBarangays.map(([, c]) => c), backgroundColor: ['#1a56db', '#3b82f6', '#60a5fa', '#93c5fd', '#94a3b8', '#cbd5e1'], borderRadius: 5 }] }, options: shareBarOptions });
 
     const topTypes = topGroupCounts(list, 'type', 4);
     const otherCount = list.length - topTypes.reduce((a, [, c]) => a + c, 0);
@@ -1351,6 +1624,52 @@ async function initAnalyticsCharts() {
 
     populateAnalyticsFilterOptions();
     renderAnalyticsCharts(incidents, {});
+    renderSeverityClassification();
+}
+
+// ===== SEVERITY CLASSIFICATION (records by severity + the Random Forest severity classifier) =====
+const SEVERITY_BAR_COLORS = { Fatal: '#dc2626', Injury: '#eab308', Minor: '#16a34a', Damage: '#0ea5e9' };
+async function renderSeverityClassification() {
+    const dist = document.getElementById('sevDistribution');
+    const note = document.getElementById('sevModelNote');
+    const tag = document.getElementById('sevModelTag');
+    const list = document.getElementById('sevBarangays');
+    if (!dist) return;
+    let data;
+    try { data = await api.getSeverity(); }
+    catch (error) { dist.innerHTML = `<span style="color:#dc2626;">${escapeMapHtml(error.message)}</span>`; return; }
+
+    dist.innerHTML = data.distribution.map(d => `
+        <div class="sev-bar-row">
+            <span style="font-weight:600;">${escapeMapHtml(d.sev === 'Damage' ? 'Damage Only' : d.sev)}</span>
+            <div class="sev-bar-track"><div class="sev-bar-fill" style="width:${Math.max(1, d.percent)}%;background:${SEVERITY_BAR_COLORS[d.sev] || '#64748b'};"></div></div>
+            <span style="text-align:right;">${d.count.toLocaleString()} · <strong>${d.percent}%</strong></span>
+        </div>`).join('') || '<span style="color:var(--gray-400);">No accidents recorded yet.</span>';
+
+    const model = data.model || {};
+    if (model.trained) {
+        tag.textContent = 'Model: Random Forest (Python)';
+        const kde = (model.featureImportances || []).find(f => f.feature === 'KDE density at the location');
+        note.innerHTML = `<i class="fas fa-diagram-project" style="color:var(--blue);"></i> Trained on <b>${model.trainedOn.toLocaleString()}</b> records to tell ${model.classes.map(escapeMapHtml).join(' / ')} apart from barangay, road, accident type, time and the <b>KDE accident density</b> at the location. `
+            // Plain accuracy would mislead: always guessing the commonest severity scores higher.
+            // ROC AUC says how well it ranks serious accidents above damage-only ones.
+            + (model.severeRocAuc != null
+                ? `Checked on records each tree did not see, it ranks serious (injury/fatal) accidents above damage-only ones with ROC AUC <b>${model.severeRocAuc.toFixed(2)}</b> (0.5 = guessing, 1 = perfect)`
+                  + (model.balancedAccuracy != null ? `, balanced accuracy ${Math.round(model.balancedAccuracy * 100)}% (chance ${Math.round(100 / model.classes.length)}%)` : '')
+                  + `. It is a modest signal, so it only nudges each area's risk score (±30%) rather than deciding it.`
+                : `Out-of-bag accuracy (checked on records each tree did not see): <b>${Math.round(model.oobAccuracy * 100)}%</b>.`)
+            + (kde ? ` KDE density carries ${Math.round(kde.importance * 100)}% of the model's weight.` : '');
+    } else {
+        tag.textContent = 'Model: waiting for data';
+        note.innerHTML = `<i class="fas fa-triangle-exclamation" style="color:#d97706;"></i> ${escapeMapHtml(model.reason || 'The severity model has not been trained.')} `
+            + 'It trains automatically once records carry Fatal, Injury, Minor or Damage — encode the severity MTPMO reports on the <strong>Accident Records</strong> page or in the import file.';
+    }
+
+    const withSevere = data.byBarangay.filter(b => b.severePercent > 0).slice(0, 6);
+    list.innerHTML = withSevere.length
+        ? '<div class="form-label" style="margin:4px 0 8px;">Barangays with the highest share of fatal / injury accidents</div>'
+          + withSevere.map(b => `<div class="sev-bar-row"><span>${escapeMapHtml(b.barangay)}</span><div class="sev-bar-track"><div class="sev-bar-fill" style="width:${b.severePercent}%;background:#dc2626;"></div></div><span style="text-align:right;">${b.severePercent}% of ${b.total.toLocaleString()}</span></div>`).join('')
+        : '';
 }
 
 function initReportChart(list) {
@@ -1373,8 +1692,11 @@ function monthKeyLabel(key, long = false) {
 function safetyColor(score) { return score >= 75 ? '#16a34a' : score >= 50 ? '#f59e0b' : '#dc2626'; }
 function safetyPill(level) { return level === 'Good' ? 'risk-low' : level === 'Fair' ? 'risk-med' : 'risk-high'; }
 
-// ===== FORECAST (next-month predictions from the Python Random Forest) =====
-let forecastRows = [];
+// ===== FORECAST (Random Forest predictions; window, filters and explanations in js/forecast-core.js) =====
+let forecastModel = null;
+let forecastState = null;
+let forecastView = null;
+let forecastFilters = null;
 
 function forecastMonthLabel(key) {
     if (!key) return '—';
@@ -1391,123 +1713,308 @@ async function initForecastPage() {
         if (tableBody) tableBody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#dc2626;padding:24px;"><i class="fas fa-triangle-exclamation"></i> ${escapeMapHtml(error.message)}</td></tr>`;
         return;
     }
+    if (!window.ForecastCore) {
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#dc2626;padding:24px;">The forecast script (js/forecast-core.js) did not load.</td></tr>`;
+        return;
+    }
 
-    const first = predictions[0] || {};
-    const usingForest = predictions.length && predictions.every(p => p.forecastModel === 'random-forest');
+    // Re-created on every visit so the page reflects new records; the chosen dates and
+    // barangay are remembered per admin browser.
+    forecastModel = ForecastCore.create(predictions);
+    forecastState = forecastModel.restoreState('ms-admin-forecast-filter');
+    forecastFilters = ForecastCore.mountFilters(document.getElementById('fcFilters'), forecastModel, forecastState, renderForecastPage);
+    ForecastCore.bindRows(tableBody, forecastModel, () => forecastView, {
+        actions: [
+            { label: '⬇ Download PDF', onClick: exportForecastAreaPdf },
+            { label: '⬇ Download CSV', onClick: exportForecastAreaCsv }
+        ]
+    });
+    renderForecastPage();
+}
 
-    // The newest month any area has history for is "last month"; the forecast is the one after.
-    const lastMonth = predictions.reduce((latest, p) => {
-        const m = p.history && p.history.length ? p.history[p.history.length - 1].month : '';
-        return m > latest ? m : latest;
-    }, '');
-    const countIn = (p, month) => (p.history || []).find(h => h.month === month)?.count || 0;
+function renderForecastPage() {
+    const FC = ForecastCore;
+    const model = forecastModel;
+    const state = forecastState;
+    const v = model.view(state);
+    const t = v.text;
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 
-    forecastRows = predictions
-        .map(p => {
-            const last = countIn(p, lastMonth);
-            const change = last > 0 ? (p.predictedNextMonth - last) / last * 100 : null;
-            return { ...p, lastMonthCount: last, changePct: change };
-        })
-        .sort((a, b) => b.predictedNextMonth - a.predictedNextMonth);
+    // --- headings, stat cards, notes ---
+    set('fcSubtitle', t.subtitle);
+    forecastFilters.setHint(t.hint);
+    set('fcCityTitle', t.cityTitle);
+    set('fcBrgyTitle', t.brgyTitle);
+    set('fcTableTitle', `${t.tableTitle}${state.barangay ? '' : ' — All Areas'}`);
+    set('fcPredHead', t.predHead);
+    set('fcCompareHead', t.compareHead);
+    set('fcStatMonth', t.monthValue);
+    set('fcStatMonthLabel', t.monthLabel);
+    set('fcStatTotal', t.totalValue);
+    set('fcStatTotalLabel', t.totalLabel);
+    set('fcStatTotalDelta', t.delta.text);
+    const delta = document.getElementById('fcStatTotalDelta');
+    if (delta) delta.style.color = { up: '#dc2626', down: '#16a34a', muted: 'var(--gray-500)' }[t.delta.tone];
+    set('fcStatUp', t.upValue);
+    set('fcStatUpLabel', t.upLabel);
+    set('fcStatAccuracy', t.errValue);
+    set('fcStatAccuracyLabel', t.errLabel);
+    set('fcStatAccuracyNote', t.errNote);
+    set('fcModelTag', t.modelTag);
+    const note = document.getElementById('fcModelNote');
+    if (note) {
+        note.innerHTML = model.usingForest
+            ? `<i class="fas fa-diagram-project" style="color:var(--blue);"></i> ${escapeMapHtml(t.modelNote)}`
+            : `<i class="fas fa-triangle-exclamation" style="color:#d97706;"></i> ${escapeMapHtml(t.modelNote)}`;
+    }
 
-    // --- stat cards ---
-    const total = forecastRows.reduce((sum, p) => sum + p.predictedNextMonth, 0);
-    const lastTotal = forecastRows.reduce((sum, p) => sum + p.lastMonthCount, 0);
-    document.getElementById('fcStatMonth').textContent = forecastMonthLabel(first.forecastMonth);
-    document.getElementById('fcStatTotal').textContent = total.toLocaleString();
-    document.getElementById('fcStatUp').textContent = `${forecastRows.filter(p => p.trend === 'up').length} / ${forecastRows.length}`;
-    const bt = usingForest ? first.forecastBacktest : null;
-    document.getElementById('fcStatAccuracy').textContent = bt ? `±${bt.maeForest}` : '—';
-    document.getElementById('fcStatAccuracyLabel').textContent = bt
-        ? `Avg error per area (straight line: ±${bt.maeLinear})`
-        : 'Forecast error (not tested yet)';
-
-    document.getElementById('fcModelTag').textContent = usingForest ? 'Model: Random Forest (Python)' : 'Model: linear trend (heuristic)';
-    document.getElementById('fcModelNote').innerHTML = usingForest
-        ? `<i class="fas fa-diagram-project" style="color:var(--blue);"></i> Predictions for <b>${forecastMonthLabel(first.forecastMonth)}</b> come from a Random Forest (Python / scikit-learn) trained on every barangay's monthly history — the last three months, the 3-, 6- and 12-month averages and the time of year.`
-          + (bt ? ` Tested on ${forecastMonthLabel(bt.month)}, which it had not seen, it was off by <b>${bt.maeForest}</b> accidents per area on average; a straight-line trend was off by ${bt.maeLinear}.` : '')
-          + ` Last month the city recorded <b>${lastTotal.toLocaleString()}</b>; the forecast is <b>${total.toLocaleString()}</b>.`
-        : '<i class="fas fa-triangle-exclamation" style="color:#d97706;"></i> Not enough monthly history to train the forecast model yet — predictions use a straight-line trend per area.';
-
-    // --- table ---
-    const trendIcon = { up: '▲', down: '▼', stable: '■' };
-    const trendColor = { up: '#dc2626', down: '#16a34a', stable: '#64748b' };
+    // --- table (click a row for the explanation) ---
+    v.list = v.scoped.slice().sort((a, b) => b.predicted - a.predicted);
+    forecastView = v;
     const levelClass = { high: 'risk-high', medium: 'risk-med', low: 'risk-low' };
-    tableBody.innerHTML = forecastRows.map((p, n) => {
+    const tableBody = document.getElementById('fcTableBody');
+    tableBody.innerHTML = v.list.map((p, n) => {
         const change = p.changePct === null ? '—'
             : `<span style="color:${p.changePct > 0 ? '#dc2626' : p.changePct < 0 ? '#16a34a' : '#64748b'};font-weight:600;">${p.changePct > 0 ? '+' : ''}${p.changePct.toFixed(0)}%</span>`;
-        return `<tr>
+        return `<tr ${FC.rowAttrs(n)}>
             <td>${n + 1}</td>
             <td style="font-weight:600;">${escapeMapHtml(p.barangay)}</td>
             <td>${escapeMapHtml(p.road)}</td>
             <td>${p.totalIncidents.toLocaleString()}</td>
-            <td>${p.lastMonthCount.toLocaleString()}</td>
-            <td style="font-weight:700;">${p.predictedNextMonth.toLocaleString()}</td>
+            <td>${v.pastComplete ? Math.round(p.recorded).toLocaleString() : '<span style="color:var(--gray-400);">not recorded yet</span>'}</td>
+            <td style="font-weight:700;">${Math.round(p.predicted).toLocaleString()}${v.H > 1 ? `<div style="font-weight:500;font-size:10.5px;color:var(--gray-500);">${p.path.map(x => Math.round(x).toLocaleString()).join(' · ')}</div>` : ''}</td>
             <td>${change}</td>
-            <td style="color:${trendColor[p.trend]};font-weight:700;">${trendIcon[p.trend] || '■'} ${escapeMapHtml(p.trend)}</td>
+            <td style="color:${FC.TREND_COLOR[p.periodTrend]};font-weight:700;">${FC.TREND_ICON[p.periodTrend] || '■'} ${escapeMapHtml(p.periodTrend)}</td>
             <td>${p.riskScore.toFixed(1)} / 10</td>
-            <td><span class="risk-pill ${levelClass[p.riskLevel] || 'risk-low'}">${escapeMapHtml(p.riskLevel)}</span></td>
+            <td><span class="risk-pill ${levelClass[p.riskLevel] || 'risk-low'}">${escapeMapHtml(RISK_LABELS[p.riskLevel] || p.riskLevel)}</span></td>
         </tr>`;
     }).join('') || `<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:24px;">No forecasts yet. Record accidents on the <strong>Accident Records</strong> page to build the forecast.</td></tr>`;
+    if (v.list.length) set('fcModelTag', `${t.modelTag} · click a row for details`);
 
-    // --- city trend: every area's history summed per month, then next month's forecast ---
-    const byMonth = {};
-    forecastRows.forEach(p => (p.history || []).forEach(h => { byMonth[h.month] = (byMonth[h.month] || 0) + h.count; }));
-    const months = Object.keys(byMonth).sort().slice(-18);
-    const labels = months.map(m => forecastMonthLabel(m).replace(/ (\d{2})(\d{2})$/, " '$2"));
-    const actual = months.map(m => byMonth[m]);
-    if (first.forecastMonth) {
-        labels.push(forecastMonthLabel(first.forecastMonth).replace(/ (\d{2})(\d{2})$/, " '$2") + ' (forecast)');
-    }
-    // The forecast line starts at the last real month so the two lines join up.
-    const forecastLine = months.map((m, i) => (i === months.length - 1 ? actual[i] : null));
-    if (first.forecastMonth) { actual.push(null); forecastLine.push(total); }
-
+    // --- charts ---
+    const legend = { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } };
+    const c = model.cityTrend(v);
     safeChart('fcCityChart', {
         type: 'line',
         data: {
-            labels,
+            labels: c.labels,
             datasets: [
-                { label: 'Recorded', data: actual, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.12)', fill: true, tension: .35, pointRadius: 2 },
-                { label: 'Forecast', data: forecastLine, borderColor: '#7c3aed', borderDash: [6, 4], pointRadius: 5, pointBackgroundColor: '#7c3aed', fill: false, spanGaps: false }
+                { label: 'Recorded', data: c.actual, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.12)', fill: true, tension: .35, pointRadius: 2 },
+                { label: c.forecastLabel, data: c.forecast, borderColor: '#7c3aed', borderDash: [6, 4], pointRadius: c.pointSizes, pointBackgroundColor: '#7c3aed', fill: false, tension: .25 }
             ]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }, scales: { y: { beginAtZero: true } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend }, scales: { y: { beginAtZero: true }, x: { ticks: { maxRotation: 50, font: { size: 10 } } } } }
     });
 
+    // A chosen barangay stays highlighted and the rest are dimmed; clicking a bar picks it.
+    const b = model.byBarangay(v);
+    const dim = name => state.barangay && name !== state.barangay;
     safeChart('fcBarangayChart', {
         type: 'bar',
         data: {
-            labels: forecastRows.map(p => p.barangay),
+            labels: b.names,
             datasets: [
-                { label: `Last month (${forecastMonthLabel(lastMonth)})`, data: forecastRows.map(p => p.lastMonthCount), backgroundColor: 'rgba(148,163,184,.7)', borderRadius: 3 },
-                { label: `Predicted (${forecastMonthLabel(first.forecastMonth)})`, data: forecastRows.map(p => p.predictedNextMonth), backgroundColor: 'rgba(124,58,237,.8)', borderRadius: 3 }
+                ...(b.recorded ? [{ label: b.recordedLabel, data: b.recorded, backgroundColor: b.names.map(n => dim(n) ? 'rgba(148,163,184,.25)' : 'rgba(148,163,184,.7)'), borderRadius: 3 }] : []),
+                { label: b.predictedLabel, data: b.predicted, backgroundColor: b.names.map(n => dim(n) ? 'rgba(124,58,237,.2)' : 'rgba(124,58,237,.8)'), borderRadius: 3 }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            plugins: { legend },
+            onClick: (evt, items) => {
+                if (!items.length) return;
+                const name = b.names[items[0].index];
+                state.barangay = state.barangay === name ? '' : name;
+                forecastFilters.sync();
+                renderForecastPage();
+            },
             scales: { x: { ticks: { autoSkip: false, maxRotation: 70, minRotation: 50, font: { size: 9 } } }, y: { beginAtZero: true } }
         }
     });
 }
 
+/* Exports what the page shows: the selected dates and barangay, one column per month. */
 function exportForecastCsv() {
-    if (!forecastRows.length) { showToast('⚠️ Open the forecast first — nothing to export yet.'); return; }
-    const month = forecastRows[0].forecastMonth || '';
-    const header = ['Barangay', 'Road', 'Recorded', 'Last Month', `Predicted ${month}`, 'Change %', 'Trend', 'Risk Score', 'Level', 'Model'];
-    const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = [header.map(cell).join(',')].concat(forecastRows.map(p => [
-        p.barangay, p.road, p.totalIncidents, p.lastMonthCount, p.predictedNextMonth,
-        p.changePct === null ? '' : p.changePct.toFixed(1), p.trend, p.riskScore.toFixed(1), p.riskLevel,
+    const v = forecastView;
+    if (!v || !v.list || !v.list.length) { showToast('⚠️ Open the forecast first — nothing to export yet.'); return; }
+    const monthCols = v.months.map((m, j) => `${forecastMonthLabel(m)}${v.share[j] < 1 ? ` (${Math.round(v.share[j] * 100)}% of month)` : ''}`);
+    const header = ['Barangay', 'Road', 'Recorded (all time)', `${v.text.compareHead}${v.pastComplete ? ` (${v.compareName})` : ''}`,
+        `Predicted ${v.periodLabel}`, ...monthCols, 'Change %', 'Trend', 'Risk Score (next month)', 'Level', 'Model'];
+    const cell = val => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const r1 = x => Math.round(x * 10) / 10;
+    const lines = [header.map(cell).join(',')].concat(v.list.map(p => [
+        p.barangay, p.road, p.totalIncidents, v.pastComplete ? r1(p.recorded) : '', r1(p.predicted), ...p.path.map(r1),
+        p.changePct === null ? '' : p.changePct.toFixed(1), p.periodTrend, p.riskScore.toFixed(1), p.riskLevel,
         p.forecastModel === 'random-forest' ? 'Random Forest' : 'Linear trend'
     ].map(cell).join(',')));
-    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `RIMAS_Forecast_${month || today()}.csv`; a.click();
+    const st = v.state;
+    a.href = url; a.download = `RIMAS_Forecast_${st.from}_to_${st.to}${st.barangay ? '_' + st.barangay.replace(/[^\w-]+/g, '-') : ''}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast('📄 Forecast exported');
+}
+
+/* ----- one area's forecast report, from its detail dialog ----- */
+function forecastAreaFileName(p, v, ext) {
+    const slug = s => String(s || '').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '');
+    const road = p.road && p.road !== 'Unknown' && p.road !== 'All Roads' ? `_${slug(p.road)}` : '';
+    return `RIMAS_Forecast_${slug(p.barangay)}${road}_${v.state.from}_to_${v.state.to}.${ext}`;
+}
+
+/* The PDF is built from the open dialog itself (its summary, chart, month table and
+   explanations), so the download says exactly what the admin is looking at. */
+function exportForecastAreaPdf(p, v, dialog) {
+    if (!window.jspdf || !window.jspdf.jsPDF) { showToast('⚠️ The PDF library did not load — check the internet connection.'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = 210, M = 14, CW = W - M * 2;
+    const pageH = doc.internal.pageSize.height;
+    // The built-in PDF fonts only cover Latin-1, so swap the symbols the dialog uses.
+    const clean = text => String(text || '')
+        .replace(/[▲]/g, '').replace(/[▼]/g, '').replace(/[■]/g, '')
+        .replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[–—]/g, '-').replace(/→/g, '->').replace(/−/g, '-')
+        .replace(/[^\x09\x0A\x0D\x20-\xFF]/g, '').replace(/\s+/g, ' ').trim();
+    const q = sel => dialog.querySelector(sel);
+
+    // Header bar (same as the accident export)
+    doc.setFillColor(15, 30, 60);
+    doc.rect(0, 0, W, 22, 'F');
+    doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+    doc.text('Mandaluyong Road Accident Mapping & Analytics System', M, 10);
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.text('RIMAS - Accident Forecast Report', M, 16);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, W - M, 16, { align: 'right' });
+
+    let y = 32;
+    const ensure = h => { if (y + h > pageH - 14) { doc.addPage(); y = 18; } };
+
+    doc.setTextColor(15, 23, 42); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text(clean(q('#fcxTitle').textContent), M, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+    doc.text(clean(`${q('.fcx-sub').textContent} · Selected dates: ${v.state.from} to ${v.state.to}`), M, y);
+    y += 7;
+
+    // Summary boxes
+    const kpis = [...dialog.querySelectorAll('.fcx-kpi')];
+    const colors = [[26, 86, 219], [124, 58, 237], [100, 116, 139], [220, 38, 38]];
+    const trendRgb = { up: [220, 38, 38], down: [22, 163, 74], stable: [100, 116, 139] };
+    const boxW = (CW - 9) / 4;
+    kpis.forEach((k, i) => {
+        const x = M + i * (boxW + 3);
+        doc.setFillColor(...(i === 2 ? (trendRgb[p.periodTrend] || colors[2]) : colors[i] || colors[0]));
+        doc.roundedRect(x, y, boxW, 20, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+        doc.text(clean(k.querySelector('b').textContent), x + boxW / 2, y + 8, { align: 'center' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
+        doc.text(doc.splitTextToSize(clean(k.querySelector('span').textContent), boxW - 4).slice(0, 2), x + boxW / 2, y + 13, { align: 'center' });
+    });
+    y += 25;
+
+    // Chart, copied from the dialog's canvas
+    const canvas = q('.fcx-chart');
+    if (canvas && canvas.width && canvas.parentElement.style.display !== 'none') {
+        try {
+            const h = Math.min(70, CW * canvas.height / canvas.width);
+            doc.addImage(canvas.toDataURL('image/png'), 'PNG', M, y, CW, h);
+            y += h + 4;
+        } catch (e) { /* chart is optional */ }
+    }
+
+    // Sections: headings, paragraphs, bullet lists and the month-by-month table
+    dialog.querySelectorAll('.fcx-sec').forEach(sec => {
+        ensure(14);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
+        doc.text(clean(sec.querySelector('h4').textContent).toUpperCase(), M, y);
+        y += 5;
+        const table = sec.querySelector('table');
+        if (table) {
+            const cellText = c => clean(c.textContent);
+            doc.autoTable({
+                head: [[...table.querySelectorAll('thead th')].map(cellText)],
+                body: [...table.querySelectorAll('tbody tr')].map(tr => [...tr.children].map(cellText)),
+                startY: y,
+                margin: { left: M, right: M },
+                styles: { fontSize: 8, cellPadding: 2.2, lineColor: [226, 232, 240], lineWidth: 0.3 },
+                headStyles: { fillColor: [15, 30, 60], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } }
+            });
+            y = doc.lastAutoTable.finalY + 6;
+            return;
+        }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(51, 65, 85);
+        sec.querySelectorAll('p, li').forEach(el => {
+            const bullet = el.tagName === 'LI';
+            const lines = doc.splitTextToSize(clean(el.textContent), CW - (bullet ? 5 : 0));
+            lines.forEach((line, i) => {
+                ensure(5);
+                if (bullet && i === 0) doc.text('-', M + 1, y);
+                doc.text(line, M + (bullet ? 5 : 0), y);
+                y += 4.3;
+            });
+            y += 1.5;
+        });
+        y += 2;
+    });
+
+    const note = [...dialog.querySelectorAll('.fcx-body > .fcx-note')].map(n => clean(n.textContent)).join(' ');
+    if (note) {
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+        doc.splitTextToSize(note, CW).forEach(line => { ensure(4); doc.text(line, M, y); y += 3.8; });
+    }
+
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(148, 163, 184);
+        doc.text('Mandaluyong City TPMO - Confidential', M, pageH - 5);
+        doc.text(`Page ${i} of ${pageCount}`, W - M, pageH - 5, { align: 'right' });
+    }
+
+    doc.save(forecastAreaFileName(p, v, 'pdf'));
+    showToast('✅ Forecast report downloaded');
+}
+
+/* The same area's numbers as a spreadsheet: a summary block, then one row per month. */
+function exportForecastAreaCsv(p, v) {
+    const model = forecastModel;
+    const r1 = x => Math.round(x * 10) / 10;
+    const cell = val => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const isForest = p.forecastModel === 'random-forest';
+    const lines = [
+        ['Barangay', p.barangay], ['Road', p.road],
+        ['Selected dates', `${v.state.from} to ${v.state.to}`],
+        ['Model', isForest ? 'Random Forest' : 'Linear trend'],
+        ['Predicted accidents (selection)', r1(p.predicted)],
+        ['Per month (average)', r1(p.predicted / v.monthsCovered)],
+        ['Compared with', v.pastComplete ? `${v.compareName}: ${r1(p.recorded)}` : 'not recorded yet'],
+        ['Change %', p.changePct === null ? '' : p.changePct.toFixed(1)],
+        ['Trend', p.periodTrend],
+        ['Risk score (next month)', `${p.riskScore.toFixed(1)} / 10 (${p.riskLevel})`],
+        ['Recorded accidents (all time)', p.totalIncidents],
+        [],
+        ['Month', 'Days selected', 'Predicted (selection)', 'Full-month forecast', 'Same month last year', 'Months ahead', 'Typical error (per area)']
+    ];
+    v.months.forEach((m, j) => {
+        const full = model.pathOf(p)[v.S + j];
+        const prev = (() => { const [y, mo] = m.split('-').map(Number); return `${y - 1}-${String(mo).padStart(2, '0')}`; })();
+        const days = new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).getDate();
+        const err = isForest ? model.errorAt(v.S + j + 1) : null;
+        lines.push([
+            forecastMonthLabel(m), `${Math.round(v.share[j] * days)} of ${days}`, r1(full * v.share[j]), full,
+            prev <= model.lastMonth ? model.countIn(p, prev) : 'not recorded yet', v.S + j + 1,
+            err != null ? err : isForest ? 'not tested' : ''
+        ]);
+    });
+    const blob = new Blob(['﻿' + lines.map(l => l.map(cell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = forecastAreaFileName(p, v, 'csv'); a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('📄 Forecast data downloaded');
 }
 
 async function initHotspotCharts() {
@@ -1544,8 +2051,10 @@ async function initHotspotCharts() {
         const severityForest = predictions.length && predictions.every(p => p.mlModel === 'random-forest');
         const bt = first.forecastBacktest;
         const forecastLine = forecastForest
-            ? `<i class="fas fa-diagram-project" style="color:var(--blue);"></i> Next-month counts come from a Random Forest trained on every barangay's monthly history (Python / scikit-learn).`
-              + (bt ? ` Tested on ${escapeMapHtml(bt.month)}: off by ${bt.maeForest} accidents per area on average, vs ${bt.maeLinear} for a straight-line trend.` : '')
+            ? `<i class="fas fa-diagram-project" style="color:var(--blue);"></i> Next-month counts average a Random Forest trained on every barangay's monthly history (Python / scikit-learn) with each area's 3-month average.`
+              + (bt ? ` Tested on ${escapeMapHtml(bt.from && bt.from !== bt.month ? bt.from + ' to ' + bt.month : bt.month)}: off by ${bt.maeForest} accidents per area on average`
+                  + (bt.maeAverage3 != null ? `, vs ${bt.maeAverage3} for the 3-month average alone` : '')
+                  + ` and ${bt.maeLinear} for a straight-line trend.` : '')
             : '<i class="fas fa-triangle-exclamation" style="color:#d97706;"></i> Not enough monthly history to train the forecast model yet — using a straight-line trend.';
         const severityLine = severityForest
             ? ' Risk is also adjusted by a Random Forest severity model.'
@@ -1564,16 +2073,12 @@ async function initHotspotCharts() {
                     <td>${p.road && p.road !== 'Unknown' && p.road !== 'All Roads' ? `${escapeMapHtml(p.road)} <span style="color:var(--gray-400);">— ${escapeMapHtml(p.barangay)}</span>` : escapeMapHtml(p.barangay)}</td>
                     <td>${p.totalIncidents.toLocaleString()}</td>
                     <td>${p.riskScore.toFixed(1)}</td>
-                    <td><span class="risk-pill ${pillClass[p.riskLevel]}">${p.riskLevel.toUpperCase()}</span></td>
+                    <td><span class="risk-pill ${pillClass[p.riskLevel]}">${(RISK_LABELS[p.riskLevel] || p.riskLevel).toUpperCase()}</span></td>
                 </tr>`).join('');
         }
     }
 
-    const topRoads = predictions.slice(0, 6);
-    const levelColor = { high: '#dc2626', medium: '#f59e0b', low: '#22c55e' };
-    const placeName = p => (p.road && p.road !== 'Unknown' && p.road !== 'All Roads') ? `${p.road} (${p.barangay})` : p.barangay;
-    safeChart('hotspotChart', { type: 'bar', data: { labels: topRoads.map(placeName), datasets: [{ data: topRoads.map(p => p.totalIncidents), backgroundColor: topRoads.map(p => levelColor[p.riskLevel]), borderRadius: 6 }] }, options: { ...chartDefaults, indexAxis: 'y', scales: { x: { grid: { color: '#f1f5f9' } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
-    safeChart('riskDonut', { type: 'doughnut', data: { labels: ['High', 'Medium', 'Low'], datasets: [{ data: [high, medium, low], backgroundColor: ['#dc2626', '#f59e0b', '#22c55e'], borderWidth: 3, borderColor: 'white' }] }, options: { ...chartDefaults, cutout: '65%', plugins: { legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10 } } } } } });
+    safeChart('riskDonut', { type: 'doughnut', data: { labels: ['High', 'Moderate', 'Low'], datasets: [{ data: [high, medium, low], backgroundColor: [RISK_COLORS.high, RISK_COLORS.moderate, RISK_COLORS.low], borderWidth: 3, borderColor: 'white' }] }, options: { ...chartDefaults, cutout: '65%', plugins: { legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10 } } } } } });
 
     const hourBuckets = new Array(12).fill(0);
     incidents.forEach(record => {
@@ -1582,6 +2087,80 @@ async function initHotspotCharts() {
     });
     const hourPeak = Math.max(1, ...hourBuckets);
     safeChart('peakHoursChart', { type: 'bar', data: { labels: ['12AM', '2AM', '4AM', '6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM', '8PM', '10PM'], datasets: [{ data: hourBuckets, backgroundColor: (ctx) => { const v = ctx.raw / hourPeak; return v > 0.85 ? '#dc2626' : v > 0.65 ? '#f59e0b' : v > 0.4 ? '#fbbf24' : '#22c55e'; }, borderRadius: 5 }] }, options: { ...chartDefaults, scales: { y: { grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 9 } } } } } });
+
+    renderProneAreas();
+}
+
+// ===== PREDICTED ACCIDENT-PRONE AREAS (KDE density features -> Random Forest, ml/prone_area_forest.py) =====
+const PRONE_COLORS = { high: '#dc2626', moderate: '#eab308', low: '#16a34a' };
+const PRONE_LABELS = { high: 'High', moderate: 'Moderate', low: 'Low' };
+let proneMap = null;
+let proneLayer = null;
+
+async function loadBoundaryGeoJson() {
+    for (const url of MANDALUYONG_GEOJSON_URLS) {
+        try {
+            const response = await fetch(url, { cache: 'force-cache' });
+            if (!response.ok) continue;
+            const data = await response.json();
+            if (Array.isArray(data.features) && data.features.length === 27) return data;
+        } catch { /* try the next location */ }
+    }
+    return null;
+}
+
+async function renderProneAreas() {
+    const note = document.getElementById('paNote');
+    if (!note) return;
+    let data;
+    try { data = await api.getProneAreas(); }
+    catch (error) { note.innerHTML = `<i class="fas fa-triangle-exclamation" style="color:#dc2626;"></i> ${escapeMapHtml(error.message)}`; return; }
+
+    if (!data.trained) {
+        note.innerHTML = `<i class="fas fa-triangle-exclamation" style="color:#d97706;"></i> ${escapeMapHtml(data.reason || 'The prediction model has not been trained yet.')}`;
+        return;
+    }
+    const m = data.model;
+    const period = p => `${monthKeyLabel(p.from)} – ${monthKeyLabel(p.to)}`;
+    document.getElementById('paPeriod').textContent = `Prediction for ${period(m.predictionPeriod)}`;
+    note.innerHTML = `<i class="fas fa-diagram-project" style="color:var(--blue);"></i> The city is split into <b>${m.cellMeters} m</b> cells. For each cell, <b>Kernel Density Estimation</b> measures how concentrated accidents are — at the cell (${m.bandwidthMeters} m kernel), in the last 3 months, and across the surrounding area (${m.neighbourhoodBandwidthMeters} m). `
+        + `These KDE outputs, with the cell's own counts, are the input to a <b>Random Forest classifier</b> (Python / scikit-learn) trained on <b>${m.trainingPeriods}</b> past periods (${m.trainingRows.toLocaleString()} examples from ${m.accidentsUsed.toLocaleString()} located accidents) to predict which cells become accident-prone over the next ${m.horizonMonths} months. `
+        + `It predicts <b style="color:${PRONE_COLORS.high};">${m.predictedCells.high}</b> high, <b style="color:#a16207;">${m.predictedCells.moderate}</b> moderate and <b style="color:${PRONE_COLORS.low};">${m.predictedCells.low}</b> low cells for ${period(m.predictionPeriod)}. KDE features carry <b>${Math.round(m.kdeImportanceShare * 100)}%</b> of the model's weight.`;
+
+    // --- barangay table ---
+    document.getElementById('paBarangayBody').innerHTML = data.barangays.map(b => `
+        <tr>
+            <td style="font-weight:600;">${escapeMapHtml(b.barangay)}</td>
+            <td style="color:${PRONE_COLORS.high};font-weight:700;">${b.high}</td>
+            <td style="color:#a16207;font-weight:700;">${b.moderate}</td>
+            <td>${Math.round(b.maxProbability * 100)}%</td>
+            <td><span class="risk-pill ${b.level === 'high' ? 'risk-high' : b.level === 'moderate' ? 'risk-med' : 'risk-low'}">${PRONE_LABELS[b.level]}</span></td>
+        </tr>`).join('');
+
+    // --- map: every cell tinted by its predicted level ---
+    const container = document.getElementById('proneMap');
+    if (!window.L || !container) return;
+    if (!proneMap) {
+        const geo = await loadBoundaryGeoJson();
+        proneMap = L.map(container, { zoomControl: true, preferCanvas: true, minZoom: 12, maxZoom: 18 });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(proneMap);
+        if (geo) {
+            const outline = L.geoJSON(geo, { style: { color: '#0b2f6d', weight: 1.2, fill: false }, interactive: false }).addTo(proneMap);
+            proneMap.fitBounds(outline.getBounds(), { padding: [8, 8] });
+            proneMap.setMaxBounds(outline.getBounds().pad(0.2));
+        } else if (data.cells.length) {
+            proneMap.fitBounds(data.cells.map(c => c.bounds).flat());
+        }
+    }
+    if (proneLayer) proneMap.removeLayer(proneLayer);
+    proneLayer = L.layerGroup().addTo(proneMap);
+    data.cells.forEach(c => {
+        const color = PRONE_COLORS[c.level];
+        L.rectangle(c.bounds, { color, weight: c.level === 'low' ? 0 : 1, fillColor: color, fillOpacity: c.level === 'high' ? 0.55 : c.level === 'moderate' ? 0.42 : 0.12 })
+            .bindPopup(`<strong>${escapeMapHtml(c.barangay)}</strong><br>Chance of being accident-prone: <strong>${Math.round(c.probability * 100)}%</strong> (${PRONE_LABELS[c.level]})<br>Last 3 months: ${c.recentPerMonth} accidents / month<br>KDE density: ${c.kdeDensity} accidents / km² / month`)
+            .addTo(proneLayer);
+    });
+    setTimeout(() => proneMap.invalidateSize(), 100);
 }
 
 async function initSafetyCharts() {
@@ -1734,11 +2313,11 @@ function renderDashRecent() {
     tbody.innerHTML = rows.map(r => {
         const idx = incidents.indexOf(r);
         return `<tr>
-                    <td><span class="incident-id" onclick="showPage('incidents');setTimeout(()=>openDetailModal(${idx}),100)">${r.id}</span></td>
-                    <td style="font-size:12px;">${r.date} · ${r.time}</td>
-                    <td style="font-size:12px;">${r.road}</td>
+                    <td><span class="incident-id" onclick="showPage('incidents');setTimeout(()=>openDetailModal(${idx}),100)">${escapeMapHtml(r.id ?? '')}</span></td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.date ?? '')} · ${escapeMapHtml(r.time ?? '')}</td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.road ?? '')}</td>
                     <td>${getSevBadge(r.sev)}</td>
-                    <td style="font-size:12px;">${r.type}</td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.type ?? '')}</td>
                 </tr>`;
     }).join('');
 }
@@ -1796,7 +2375,8 @@ function saveSettings() {
         const last = document.getElementById('settingsLast').value.trim();
         if (first || last) currentUser.name = `${first} ${last}`.trim();
         currentUser.dept = document.getElementById('settingsDept').value;
-        document.getElementById('profileName').textContent = currentUser.name;
+        const chipName = document.getElementById('chipName');
+        if (chipName) chipName.textContent = currentUser.name;
         const dw = document.getElementById('dashWelcome');
         if (dw) dw.textContent = `Welcome, ${currentUser.name.split(' ')[0]} 👋`;
     }
@@ -1843,19 +2423,22 @@ async function renderUserTable() {
         return;
     }
 
+    // Names, emails and phones are typed by residents at sign-up, so all of it is escaped:
+    // raw HTML here would run inside the administrator's session.
+    const h = v => escapeMapHtml(v ?? '');
     tbody.innerHTML = accountList.map(u => {
         const lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never signed in';
         const isSelf = currentUser && u.id === currentUser.id;
         return `
                 <tr>
-                    <td><div style="display:flex;align-items:center;gap:10px;"><div style="width:32px;height:32px;border-radius:50%;background:${u.color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;">${u.avatar}</div><div><div style="font-weight:600;font-size:13px;">${u.name}${isSelf ? ' <span style="font-size:10px;color:var(--gray-400);">(you)</span>' : ''}</div><div style="font-size:10px;color:var(--gray-400);">${u.dept || ''}</div></div></div></td>
-                    <td style="font-size:12px;color:var(--gray-500);">${u.email}<div style="font-size:10px;">${u.phone || ''}</div></td>
+                    <td><div style="display:flex;align-items:center;gap:10px;"><div style="width:32px;height:32px;border-radius:50%;background:${h(u.color)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;">${h(u.avatar)}</div><div><div style="font-weight:600;font-size:13px;">${h(u.name)}${isSelf ? ' <span style="font-size:10px;color:var(--gray-400);">(you)</span>' : ''}</div><div style="font-size:10px;color:var(--gray-400);">${h(u.dept)}</div></div></div></td>
+                    <td style="font-size:12px;color:var(--gray-500);">${h(u.email)}<div style="font-size:10px;">${h(u.phone)}</div></td>
                     <td>${u.role === 'admin' ? '<span class="admin-badge"><i class="fas fa-shield-alt"></i> Admin</span>' : '<span class="user-badge"><i class="fas fa-user"></i> User</span>'}</td>
-                    <td><span class="status-badge status-${u.status}">${u.status === 'active' ? '● Active' : '○ Inactive'}</span></td>
+                    <td><span class="status-badge status-${h(u.status)}">${u.status === 'active' ? '● Active' : '○ Inactive'}</span></td>
                     <td style="font-size:12px;color:var(--gray-500);">${lastLogin}</td>
                     <td><div style="display:flex;gap:5px;">
-                        <button class="btn btn-sm" style="background:${u.status === 'active' ? '#fef2f2' : '#f0fdf4'};color:${u.status === 'active' ? '#dc2626' : '#16a34a'};border:1px solid ${u.status === 'active' ? '#fecaca' : '#bbf7d0'};" title="${u.status === 'active' ? 'Deactivate' : 'Reactivate'}" onclick="toggleUserStatus('${u.id}')"><i class="fas ${u.status === 'active' ? 'fa-ban' : 'fa-check'}"></i></button>
-                        ${isSelf ? '' : `<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" title="Remove account" onclick="deleteUserAccount('${u.id}')"><i class="fas fa-trash-alt"></i></button>`}
+                        <button class="btn btn-sm" style="background:${u.status === 'active' ? '#fef2f2' : '#f0fdf4'};color:${u.status === 'active' ? '#dc2626' : '#16a34a'};border:1px solid ${u.status === 'active' ? '#fecaca' : '#bbf7d0'};" title="${u.status === 'active' ? 'Deactivate' : 'Reactivate'}" onclick="toggleUserStatus('${h(u.id)}')"><i class="fas ${u.status === 'active' ? 'fa-ban' : 'fa-check'}"></i></button>
+                        ${isSelf ? '' : `<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" title="Remove account" onclick="deleteUserAccount('${h(u.id)}')"><i class="fas fa-trash-alt"></i></button>`}
                     </div></td>
                 </tr>
             `;
@@ -1929,6 +2512,7 @@ const NOTIF_STYLES = {
     account_removed: { cssType: 'alert', icon: 'fas fa-user-slash', iconBg: '#fee2e2', iconColor: '#dc2626' },
     incident_created: { cssType: 'warning', icon: 'fas fa-triangle-exclamation', iconBg: '#ffedd5', iconColor: '#ea580c' },
     incident_updated: { cssType: 'info', icon: 'fas fa-pen', iconBg: '#dbeafe', iconColor: '#2563eb' },
+    incident_deleted: { cssType: 'alert', icon: 'fas fa-trash', iconBg: '#fee2e2', iconColor: '#dc2626' },
     profile_updated: { cssType: 'info', icon: 'fas fa-id-badge', iconBg: '#ede9fe', iconColor: '#7c3aed' },
     password_changed: { cssType: 'warning', icon: 'fas fa-key', iconBg: '#fef3c7', iconColor: '#d97706' }
 };
@@ -2309,16 +2893,16 @@ function renderImportPreview(rows, warnings, columnSummary) {
     tbody.innerHTML = rows.map(r => `
                 <tr>
                     <td>${r._warn
-            ? `<span title="${r._warn.replace(/"/g, '&quot;')}" style="color:#d97706;font-size:11px;font-weight:700;cursor:help;">⚠️ WARN</span>`
+            ? `<span title="${escapeMapHtml(r._warn)}" style="color:#d97706;font-size:11px;font-weight:700;cursor:help;">⚠️ WARN</span>`
             : `<span style="color:#16a34a;font-size:11px;font-weight:700;">✅ OK</span>`}
                     </td>
-                    <td style="font-size:12px;font-weight:600;color:var(--blue);">${r.id}</td>
-                    <td style="font-size:12px;">${r.date}</td>
-                    <td style="font-size:12px;">${r.time}</td>
-                    <td style="font-size:12px;">${r.barangay}</td>
-                    <td style="font-size:12px;">${r.road}</td>
+                    <td style="font-size:12px;font-weight:600;color:var(--blue);">${escapeMapHtml(r.id ?? '')}</td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.date ?? '')}</td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.time ?? '')}</td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.barangay ?? '')}</td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.road ?? '')}</td>
                     <td>${getSevBadge(r.sev)}</td>
-                    <td style="font-size:12px;">${r.type}</td>
+                    <td style="font-size:12px;">${escapeMapHtml(r.type ?? '')}</td>
                 </tr>
             `).join('');
 }
@@ -2332,7 +2916,6 @@ async function confirmImport() {
         const result = await api.bulkCreateIncidents(clean);
         closeImportModal();
         await loadIncidentsFromServer();
-        loadHotspotsFromServer();
         const skippedMsg = result.skippedCount ? `, ${result.skippedCount} skipped (duplicate/invalid)` : '';
         showToast(`✅ ${result.createdCount} accident${result.createdCount !== 1 ? 's' : ''} imported and saved${skippedMsg}`);
     } catch (error) {
@@ -2403,9 +2986,11 @@ function doExportNow() {
     closeExportModal();
 }
 
-function exportCSV(data, filename) {
+/* opts (all optional): cols — columns to write instead of the Export dialog's ticked ones;
+   subtitle — what the rows are (e.g. a report's barangay and dates), shown in PDF/Excel. */
+function exportCSV(data, filename, opts = {}) {
     const rows = data || getExportData();
-    const cols = getSelectedCols();
+    const cols = opts.cols || getSelectedCols();
     const headers = cols.map(c => COL_HEADERS[c] || c);
     const lines = [
         headers.join(','),
@@ -2419,9 +3004,9 @@ function exportCSV(data, filename) {
     showToast('✅ CSV exported successfully!');
 }
 
-function exportExcel(data, filename) {
+function exportExcel(data, filename, opts = {}) {
     const rows = data || getExportData();
-    const cols = getSelectedCols();
+    const cols = opts.cols || getSelectedCols();
     const wsData = [
         cols.map(c => COL_HEADERS[c] || c),
         ...rows.map(r => cols.map(c => r[c] || ''))
@@ -2442,6 +3027,7 @@ function exportExcel(data, filename) {
     const summaryData = [
         ['RIMAS Export Summary', ''],
         ['Generated', new Date().toLocaleString()],
+        ...(opts.subtitle ? [['Report', opts.subtitle]] : []),
         ['Total Records', rows.length],
         ['Fatal', rows.filter(r => r.sev === 'Fatal').length],
         ['Injury', rows.filter(r => r.sev === 'Injury').length],
@@ -2456,18 +3042,18 @@ function exportExcel(data, filename) {
     showToast('✅ Excel file exported successfully!');
 }
 
-function exportPDF(data, filename) {
+function exportPDF(data, filename, opts = {}) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const rows = data || getExportData();
-    const cols = getSelectedCols();
+    const cols = opts.cols || getSelectedCols();
 
     doc.setFillColor(15, 30, 60);
     doc.rect(0, 0, 297, 22, 'F');
     doc.setFontSize(13); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
     doc.text('Mandaluyong Road Accident Mapping & Analytics System', 14, 10);
     doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-    doc.text('RIMAS — Accident Export Report', 14, 16);
+    doc.text(opts.subtitle ? `RIMAS — ${opts.subtitle}` : 'RIMAS — Accident Export Report', 14, 16);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 200, 16);
 
     const total = rows.length;
@@ -2531,11 +3117,25 @@ function exportPDF(data, filename) {
     showToast('✅ PDF exported successfully!');
 }
 
-function exportReport(fmt) {
+/* Downloads exactly the accidents in the report preview: the chosen barangay and dates. If
+   the parameters were changed without pressing Generate Report, the preview is regenerated
+   first so the file and the screen always match. */
+async function exportReport(fmt) {
     fmt = fmt || currentReportFmt;
-    if (fmt === 'pdf') exportPDF(incidents, `RIMAS_Report_${today()}.pdf`);
-    else if (fmt === 'excel') exportExcel(incidents, `RIMAS_Report_${today()}.xlsx`);
-    else exportCSV(incidents, `RIMAS_Report_${today()}.csv`);
+    const filters = readReportFilters();
+    if (!validReportFilters(filters)) return;
+    if (!lastReport || !sameReportFilters(lastReport.filters, filters)) {
+        if (!(await generateReport())) return;
+    }
+    const { rows } = lastReport;
+    if (!rows.length) { showToast('⚠️ No accidents match this barangay and date range — nothing to download.'); return; }
+
+    const slug = v => String(v).replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '');
+    const name = `RIMAS_Report_${filters.barangay === 'all' ? 'All-Barangays' : slug(filters.barangay)}_${filters.from || 'start'}_to_${filters.to || today()}`;
+    const opts = { cols: Object.keys(COL_HEADERS), subtitle: `Accident Report · ${reportScopeText(filters)}` };
+    if (fmt === 'pdf') exportPDF(rows, `${name}.pdf`, opts);
+    else if (fmt === 'excel') exportExcel(rows, `${name}.xlsx`, opts);
+    else exportCSV(rows, `${name}.csv`, opts);
 }
 
 function printReport() {

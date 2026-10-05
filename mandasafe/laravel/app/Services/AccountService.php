@@ -21,13 +21,22 @@ class AccountService
 {
     public const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 
+    /**
+     * SHA-256 of the demo passwords earlier versions shipped with (the default administrator's
+     * and the sample resident's). They are public, so in production an account still using
+     * one is refused at sign-in until its password is changed. Only the hashes are kept here.
+     */
+    private const RETIRED_PASSWORD_SHA256 = [
+        'a36aef5a11c4073fbe60314fc9df530a9d5f986533594d1f5190742ff9e0e408',
+        '3a7dff96bc6d04fe70470d7ef4335f964546c9e1c0f7ec78c4794bb790bdada4',
+    ];
+
     public const DEFAULT_ADMIN = [
         'name' => 'RIMAS Administrator',
         'email' => 'admin@rimas.gov.ph',
         'phone' => '+639171234567',
         'role' => 'admin',
         'dept' => 'Mandaluyong City TPMO',
-        'password' => 'Admin@2026',
     ];
 
     public function __construct(private NotificationService $notifications)
@@ -45,10 +54,20 @@ class AccountService
         return 'USR-' . (1000 + Setting::nextSequence('nextAccountSeq'));
     }
 
-    public function seedDefaultAdmin(): void
+    /**
+     * Creates the first administrator when there is none. The password comes from
+     * MANDASAFE_ADMIN_PASSWORD, or is generated at random and returned so the caller can show
+     * it once; nothing is built into the code. Returns null when the account already exists.
+     */
+    public function seedDefaultAdmin(): ?string
     {
         if (Account::where('email', self::DEFAULT_ADMIN['email'])->exists()) {
-            return;
+            return null;
+        }
+
+        $password = (string) env('MANDASAFE_ADMIN_PASSWORD', '');
+        if ($password === '') {
+            $password = \Illuminate\Support\Str::password(20, symbols: false);
         }
 
         Account::create([
@@ -59,10 +78,12 @@ class AccountService
             'role' => 'admin',
             'dept' => self::DEFAULT_ADMIN['dept'],
             'status' => 'active',
-            'password' => Hash::make(self::DEFAULT_ADMIN['password']),
+            'password' => Hash::make($password),
             'created_at_iso' => self::isoNow(),
             'last_login_at_iso' => null,
         ]);
+
+        return $password;
     }
 
     /** Accepts either an email address or a contact number, the way the sign-in page does. */
@@ -96,7 +117,8 @@ class AccountService
         if (strlen($name) < 2) {
             throw new RimasException('Enter your full name.');
         }
-        if (! preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
+        self::assertPlainText($name, 'Your name');
+        if (! preg_match('/^[^\s@<>"`]+@[^\s@<>"`]+\.[^\s@<>"`]+$/', $email)) {
             throw new RimasException('Enter a valid email address.');
         }
         if (strlen($phone) < 9) {
@@ -167,6 +189,7 @@ class AccountService
             if (strlen($name) < 2) {
                 throw new RimasException('Enter your full name.');
             }
+            self::assertPlainText($name, 'Your name');
             if ($name !== $account->name) {
                 $account->name = $name;
                 $changed[] = 'name';
@@ -232,6 +255,11 @@ class AccountService
         }
         if (! Hash::check((string) $password, $account->password)) {
             throw new RimasException('Incorrect email/phone number or password.');
+        }
+        if (app()->environment('production') && in_array(hash('sha256', (string) $password), self::RETIRED_PASSWORD_SHA256, true)) {
+            throw new RimasException($account->isAdmin()
+                ? 'This administrator still uses the old default password. Set a new one on the server: php artisan mandasafe:set-password ' . $account->email
+                : 'This account still uses a sample password that is no longer allowed. Use "Forgot password?" or ask an administrator to reset it.');
         }
 
         return $account;
@@ -401,5 +429,17 @@ class AccountService
         }
 
         return $request->header('x-rimas-token');
+    }
+
+    /**
+     * Names are shown in the administrator's console. Markup characters have no place in a
+     * person's name, and refusing them here keeps a crafted sign-up from ever reaching a page
+     * as HTML (the pages escape it as well).
+     */
+    private static function assertPlainText(string $value, string $label): void
+    {
+        if (preg_match('/[<>"`]/', $value)) {
+            throw new RimasException($label . ' cannot contain < > " or ` characters.');
+        }
     }
 }

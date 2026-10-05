@@ -24,7 +24,8 @@ class PredictionInput extends Model
         return $query->orderByDesc('sort_key');
     }
 
-    public function toApi(): array
+    /** $withAudit adds who last edited the entry; only administrators get it. */
+    public function toApi(bool $withAudit = false): array
     {
         return [
             'id' => $this->id,
@@ -33,8 +34,9 @@ class PredictionInput extends Model
             'month' => $this->month,
             'incidentCount' => (int) $this->incident_count,
             'notes' => $this->notes ?? '',
+        ] + ($withAudit ? [
             'updatedBy' => $this->updated_by,
             'updatedAt' => $this->updated_at_iso,
-        ];
+        ] : []);
     }
 }

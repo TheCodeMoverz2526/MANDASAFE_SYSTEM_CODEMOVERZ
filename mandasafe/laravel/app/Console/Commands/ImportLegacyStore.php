@@ -8,6 +8,7 @@ use App\Models\PredictionInput;
 use App\Models\RimasSession;
 use App\Models\Setting;
 use App\Services\AccountService;
+use App\Services\SpatialService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -16,25 +17,19 @@ use Illuminate\Support\Facades\Hash;
  * Moves the old data/store.json into the database, once.
  *
  * Everything transfers as-is except passwords: the JSON store held Node scrypt hashes, which
- * PHP cannot verify, so each account is re-hashed with bcrypt. The two accounts the README
- * documents keep their published passwords; anything else gets the fallback below and is
- * listed at the end so you know which ones to reset (the sign-in page's "Forgot password?"
- * does it without an administrator).
+ * PHP cannot verify, so every account gets a new password — --fallback-password if given,
+ * otherwise a random one per account — listed at the end so each owner can be told or can
+ * use "Forgot password?". No password is built into the code.
  */
 class ImportLegacyStore extends Command
 {
     protected $signature = 'mandasafe:import
                             {--path= : Path to store.json (defaults to config mandasafe.legacy_store)}
                             {--fresh : Delete existing rows before importing}
-                            {--fallback-password=ChangeMe@2026 : Password given to accounts with no documented one}';
+                            {--fallback-password= : Password given to every imported account (default: a random one each)}';
 
     protected $description = 'Import the legacy data/store.json into the MandaSafe database';
 
-    /** Passwords the project README publishes, so the demo accounts keep working. */
-    private const KNOWN_PASSWORDS = [
-        'admin@rimas.gov.ph' => 'Admin@2026',
-        'juan@example.com' => 'Resident2026',
-    ];
 
     public function handle(): int
     {
@@ -72,11 +67,8 @@ class ImportLegacyStore extends Command
         DB::transaction(function () use ($incidents, $inputs, $accounts, $sessions, $store, $fallback, &$reset) {
             foreach ($accounts as $account) {
                 $email = Account::normaliseEmail($account['email'] ?? '');
-                $password = self::KNOWN_PASSWORDS[$email] ?? null;
-                if ($password === null) {
-                    $password = $fallback;
-                    $reset[] = $email;
-                }
+                $password = $fallback !== '' ? $fallback : \Illuminate\Support\Str::password(16, symbols: false);
+                $reset[$email] = $password;
 
                 Account::updateOrCreate(['id' => $account['id']], [
                     'name' => $account['name'] ?? 'Unnamed',
@@ -97,7 +89,8 @@ class ImportLegacyStore extends Command
             $total = count($incidents);
             $rows = [];
             foreach (array_values($incidents) as $index => $incident) {
-                $rows[] = [
+                // upsert() skips model events, so the spatial columns are set here directly.
+                $rows[] = SpatialService::incidentColumns($incident['lat'] ?? null, $incident['lng'] ?? null, $incident['barangay'] ?? null) + [
                     'id' => $incident['id'],
                     'date' => $incident['date'] ?? null,
                     'time' => $incident['time'] ?? '',
@@ -159,9 +152,9 @@ class ImportLegacyStore extends Command
 
         if ($reset !== []) {
             $this->newLine();
-            $this->warn('These accounts had no documented password and were set to "' . $fallback . '":');
-            foreach ($reset as $email) {
-                $this->line('  - ' . $email);
+            $this->warn('Passwords cannot be carried over, so every account has a new one:');
+            foreach ($reset as $email => $password) {
+                $this->line('  - ' . $email . '  ' . $password);
             }
             $this->line('Each owner can change it from "Forgot password?" on the sign-in page.');
         }

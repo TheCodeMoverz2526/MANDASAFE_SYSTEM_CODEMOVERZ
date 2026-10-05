@@ -102,7 +102,7 @@
       <div class="band-card">
         <div class="hd"><span data-i="megaphone" style="width:17px;height:17px;color:#1d4ed8"></span> Busiest Barangay</div>
         <div class="it" style="margin-top:12px">
-          <img src="assets/cityhall.png" alt="">
+          <img src="assets/cityhall.jpg" alt="">
           <div><h4 id="topName">—</h4><p id="topBody">Loading the latest figures…</p></div>
         </div>
       </div>
@@ -149,12 +149,12 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
   const levelClass = { high: 'level-high', medium: 'level-medium', low: 'level-low' };
   const trendMark = { up: '▲', down: '▼', stable: '■' };
   document.getElementById('predGrid').innerHTML = s.topPredictions.map(p => `
-    <div class="card" style="border-left:4px solid ${p.riskLevel === 'high' ? '#dc2626' : p.riskLevel === 'medium' ? '#f59e0b' : '#16a34a'}">
+    <div class="card" style="border-left:4px solid ${p.riskLevel === 'high' ? '#dc2626' : p.riskLevel === 'medium' ? '#eab308' : '#16a34a'}">
       <div class="card-body">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
           <div><h3 style="font-size:16px;font-weight:700">${esc(p.barangay)}</h3>
             <p style="font-size:12px;color:var(--muted);margin-top:2px">${esc(p.road)}</p></div>
-          <span class="tag ${{ high: 't-high', medium: 't-med', low: 't-resolved' }[p.riskLevel]}">${esc(p.riskLevel)}</span>
+          <span class="tag ${{ high: 't-high', medium: 't-med', low: 't-low' }[p.riskLevel]}">${esc({ high: 'High', medium: 'Moderate', low: 'Low' }[p.riskLevel] || p.riskLevel)}</span>
         </div>
         <div style="display:flex;gap:20px;margin-top:14px">
           <div><div style="font-size:20px;font-weight:800">${trendMark[p.trend] || ''} ${num(p.predictedNextMonth)}</div>

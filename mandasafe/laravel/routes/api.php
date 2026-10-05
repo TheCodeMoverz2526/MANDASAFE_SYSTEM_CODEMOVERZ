@@ -32,6 +32,10 @@ Route::get('/stats', [AnalyticsController::class, 'stats']);
 Route::get('/summary', [AnalyticsController::class, 'summary']);
 Route::get('/hotspots', [AnalyticsController::class, 'hotspots']);
 Route::get('/hotspots/barangays', [AnalyticsController::class, 'barangayHotspots']);
+Route::get('/prone-areas', [AnalyticsController::class, 'proneAreas']);
+Route::get('/severity', [AnalyticsController::class, 'severity']);
+Route::get('/spatial/summary', [AnalyticsController::class, 'spatialSummary']);
+Route::get('/spatial/nearby', [AnalyticsController::class, 'spatialNearby']);
 Route::get('/barangays', [AnalyticsController::class, 'barangays']);
 Route::get('/otp-status', [AnalyticsController::class, 'otpStatus']);
 
@@ -69,6 +73,7 @@ Route::prefix('auth')->group(function () {
 /* ---------- administrator only ---------- */
 Route::middleware('rimas.admin')->group(function () {
     Route::post('/incidents/bulk', [IncidentController::class, 'bulk']);
+    Route::post('/incidents/bulk-delete', [IncidentController::class, 'bulkDestroy']);
     Route::post('/incidents', [IncidentController::class, 'store']);
     Route::put('/incidents/{id}', [IncidentController::class, 'update']);
     Route::delete('/incidents/{id}', [IncidentController::class, 'destroy']);

@@ -18,7 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
             // Anything that is not an API call is one of the MandaSafe pages (or an asset)
             // sitting in the folder above this app. No session or CSRF middleware applies —
             // these are static files, exactly as the old Node server served them.
-            Route::fallback(StaticSiteController::class);
+            // Pages arrive here (bootstrap/static.php leaves .html to Laravel), so they are
+            // gzipped like the API: the admin console alone is over 100 KB of HTML.
+            Route::fallback(StaticSiteController::class)->middleware(CompressResponse::class);
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

@@ -36,9 +36,12 @@ class PredictionInputController extends ApiController
     }
 
     /** GET /api/prediction-inputs */
-    public function index()
+    /** GET /api/prediction-inputs — open to everyone; who edited each entry is for admins only. */
+    public function index(Request $request)
     {
-        return response()->json(PredictionInput::newestFirst()->get()->map->toApi()->all());
+        $withAudit = $this->requestIsAdmin($request);
+
+        return response()->json(PredictionInput::newestFirst()->get()->map(fn ($input) => $input->toApi($withAudit))->all());
     }
 
     /** POST /api/prediction-inputs */
@@ -65,7 +68,7 @@ class PredictionInputController extends ApiController
 
             Setting::touchDataVersion();
 
-            return $input->toApi();
+            return $input->toApi(true);
         }, 400, 201);
     }
 
@@ -97,7 +100,7 @@ class PredictionInputController extends ApiController
 
             Setting::touchDataVersion();
 
-            return $input->toApi();
+            return $input->toApi(true);
         });
     }
 

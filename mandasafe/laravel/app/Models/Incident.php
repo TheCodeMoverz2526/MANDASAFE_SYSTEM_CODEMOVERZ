@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Services\SpatialService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Incident extends Model
 {
@@ -19,6 +21,25 @@ class Incident extends Model
         'lng' => 'float',
         'sort_key' => 'integer',
     ];
+
+    /**
+     * Keeps the spatial columns (POINT geometry, geohash, located barangay, location status)
+     * in step with the coordinates and barangay name on every create and edit.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Incident $incident) {
+            if ($incident->isDirty(['lat', 'lng', 'barangay']) || ! $incident->exists) {
+                $incident->fill(SpatialService::incidentColumns($incident->lat, $incident->lng, $incident->barangay));
+            }
+        });
+    }
+
+    /** The barangay this accident's coordinates fall inside (null when outside the city). */
+    public function locatedBarangay(): BelongsTo
+    {
+        return $this->belongsTo(Barangay::class, 'barangay_id');
+    }
 
     /** Newest first — the order the JSON array had, since new records were unshifted. */
     public function scopeNewestFirst($query)
@@ -45,7 +66,7 @@ class Incident extends Model
      *
      * Kept next to toApi() deliberately: the two must produce identical records.
      */
-    public static function listApi(): array
+    public static function listApi(bool $withAudit = false): array
     {
         $rows = static::query()->newestFirst()->toBase()->get();
 
@@ -66,7 +87,7 @@ class Incident extends Model
                 'status' => $row->status,
             ];
 
-            foreach (self::AUDIT_FIELDS as $key => $column) {
+            foreach ($withAudit ? self::AUDIT_FIELDS : [] as $key => $column) {
                 if ($row->{$column} !== null) {
                     $record[$key] = $row->{$column};
                 }
@@ -83,7 +104,11 @@ class Incident extends Model
      * left out when they are empty rather than sent as nulls, which is how the records looked
      * before the move to a database — a record only grows an updatedBy once it is edited.
      */
-    public function toApi(): array
+    /**
+     * $withAudit adds who created/edited the record (an administrator's email). Only
+     * administrators get it; the public endpoints (map, summary, nearby) leave it out.
+     */
+    public function toApi(bool $withAudit = false): array
     {
         $record = [
             'id' => $this->id,
@@ -99,7 +124,7 @@ class Incident extends Model
             'status' => $this->status,
         ];
 
-        foreach (self::AUDIT_FIELDS as $key => $column) {
+        foreach ($withAudit ? self::AUDIT_FIELDS : [] as $key => $column) {
             if ($this->{$column} !== null) {
                 $record[$key] = $this->{$column};
             }

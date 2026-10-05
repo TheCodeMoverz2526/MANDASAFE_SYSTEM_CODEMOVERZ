@@ -50,6 +50,12 @@ class OtpService
         if ($this->vocotextReady() || $this->twilioReady() || $this->emailReady()) {
             return false;
         }
+        // Never online: a code shown on the page would let anyone who knows a resident's
+        // email reset that resident's password. Without a provider, "Forgot password" says
+        // it is unavailable instead.
+        if (app()->environment('production')) {
+            return false;
+        }
 
         return filter_var($this->config('test_mode'), FILTER_VALIDATE_BOOLEAN);
     }

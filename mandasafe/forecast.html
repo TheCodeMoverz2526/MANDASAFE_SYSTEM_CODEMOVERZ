@@ -10,39 +10,42 @@
 <main class="main">
   <div class="page-head">
     <div><h1>Accident Forecast</h1>
-      <p>Predicted accidents next month for each area of Mandaluyong City.</p></div>
+      <p id="subtitle">Predicted accidents next month for each area of Mandaluyong City.</p></div>
     <div class="spacer"></div>
     <div class="head-tools"><span class="pill"><span class="live"></span> <span id="range">Loading…</span></span></div>
   </div>
 
+  <!-- Advance prediction filters (horizon, dates, barangay), drawn by js/forecast-core.js. -->
+  <div class="card" style="margin-bottom:18px;padding:12px 20px" id="fcFilters"></div>
+
   <div class="grid g-4" style="margin-bottom:18px">
     <div class="card stat"><span class="ic ic-blue" data-i="calendar"></span>
-      <div><h3 id="fMonth">—</h3><div class="lbl">Forecast Month</div></div></div>
+      <div><h3 id="fMonth">—</h3><div class="lbl" id="fMonthLbl">Forecast Month</div></div></div>
     <div class="card stat"><span class="ic ic-purple" data-i="trend"></span>
-      <div><h3 id="fTotal">—</h3><div class="lbl">Predicted Accidents (City)</div><div class="delta" id="fTotalDelta"></div></div></div>
+      <div><h3 id="fTotal">—</h3><div class="lbl" id="fTotalLbl">Predicted Accidents (City)</div><div class="delta" id="fTotalDelta"></div></div></div>
     <div class="card stat"><span class="ic ic-red" data-i="alert"></span>
-      <div><h3 id="fUp">—</h3><div class="lbl">Areas Trending Up</div></div></div>
+      <div><h3 id="fUp">—</h3><div class="lbl" id="fUpLbl">Areas Trending Up</div></div></div>
     <div class="card stat"><span class="ic ic-green" data-i="check"></span>
-      <div><h3 id="fErr">—</h3><div class="lbl">Avg Error per Area</div><div class="delta" id="fErrDelta" style="color:var(--muted)"></div></div></div>
+      <div><h3 id="fErr">—</h3><div class="lbl" id="fErrLbl">Avg Error per Area</div><div class="delta" id="fErrDelta" style="color:var(--muted)"></div></div></div>
   </div>
 
   <div class="grid g-2" style="margin-bottom:18px">
     <div class="card">
-      <div class="card-head"><h2>City Trend &amp; Next Month</h2></div>
+      <div class="card-head"><h2 id="cityTitle">City Trend &amp; Next Month</h2></div>
       <div class="card-body"><div style="position:relative;height:280px"><canvas id="cityChart"></canvas></div></div>
     </div>
     <div class="card">
-      <div class="card-head"><h2>Last Month vs. Predicted — by Barangay</h2></div>
+      <div class="card-head"><h2 id="brgyTitle">Last Month vs. Predicted — by Barangay</h2></div>
       <div class="card-body"><div style="position:relative;height:280px"><canvas id="brgyChart"></canvas></div></div>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-head"><h2>Predicted Accidents Next Month</h2>
+    <div class="card-head"><h2 id="tableTitle">Predicted Accidents Next Month</h2>
       <span class="link" id="model"></span></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Barangay</th><th>Road</th><th>Recorded</th><th>Predicted next month</th><th>Trend</th><th>Risk score</th><th>Level</th></tr></thead>
+        <thead><tr><th>Barangay</th><th>Road</th><th>Recorded</th><th id="predHead">Predicted next month</th><th>Trend</th><th>Risk score</th><th>Level</th></tr></thead>
         <tbody id="pred"><tr><td colspan="7" class="empty">Loading forecasts…</td></tr></tbody>
       </table>
     </div>
@@ -53,6 +56,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/forecast-core.js"></script>
 <script>
 if (requireAuth()) {
   buildShell('forecast');
@@ -70,103 +74,95 @@ if (requireAuth()) {
     document.getElementById('range').textContent =
       `${num(summary.totalIncidents)} accidents • ${fmtDate(summary.range.from)} – ${fmtDate(summary.range.to)}`;
 
-    const first = predictions[0];
-    const usingForest = predictions.length && predictions.every(p => p.forecastModel === 'random-forest');
-    const bt = usingForest ? first.forecastBacktest : null;
+    const $ = id => document.getElementById(id);
+    const FC = ForecastCore;
+    const model = FC.create(predictions);
+    const state = model.restoreState('ms-forecast-filter');
+    const filters = FC.mountFilters($('fcFilters'), model, state, render);
+    let cityChart = null, brgyChart = null, view = null;
+    const legend = { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } };
+    const toneColor = { up: 'var(--red)', down: 'var(--green)', muted: 'var(--muted)' };
 
-    /* ---------------- summary cards ----------------
-       The same figures as the TPMO console's Forecast page. "Last month" is the newest month
-       any area has records for; the forecast is for the month after it. */
-    const lastMonth = predictions.reduce((latest, p) => {
-      const m = p.history && p.history.length ? p.history[p.history.length - 1].month : '';
-      return m > latest ? m : latest;
-    }, '');
-    const countIn = (p, month) => (p.history || []).find(h => h.month === month)?.count || 0;
-    const rows = predictions.map(p => ({ ...p, lastMonthCount: countIn(p, lastMonth) }))
-      .sort((a, b) => b.predictedNextMonth - a.predictedNextMonth);
-    const total = rows.reduce((a, p) => a + p.predictedNextMonth, 0);
-    const lastTotal = rows.reduce((a, p) => a + p.lastMonthCount, 0);
-    const longMonth = key => {
-      if (!key) return '—';
-      const [y, m] = String(key).split('-').map(Number);
-      return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    };
+    FC.bindRows($('pred'), model, () => view);
 
-    document.getElementById('fMonth').textContent = first ? longMonth(first.forecastMonth) : '—';
-    document.getElementById('fTotal').textContent = num(total);
-    if (lastMonth && lastTotal) {
-      const change = Math.round((total - lastTotal) / lastTotal * 100);
-      const el = document.getElementById('fTotalDelta');
-      el.textContent = `${change > 0 ? '+' : ''}${change}% vs ${fmtMonth(lastMonth)} (${num(lastTotal)})`;
-      el.style.color = change > 0 ? 'var(--red)' : change < 0 ? 'var(--green)' : 'var(--muted)';
-    }
-    document.getElementById('fUp').textContent = `${rows.filter(p => p.trend === 'up').length} / ${rows.length}`;
-    document.getElementById('fErr').textContent = bt ? `±${bt.maeForest}` : '—';
-    document.getElementById('fErrDelta').textContent = bt
-      ? `accidents, tested on ${fmtMonth(bt.month)} · straight line: ±${bt.maeLinear}`
-      : 'not tested yet';
+    function render() {
+      const v = model.view(state);
+      const t = v.text;
 
-    /* ---------------- charts ---------------- */
-    if (window.Chart) {
-      // City trend: every area's history summed per month (last 18), then the forecast as a
-      // dashed line that starts at the last real month so the two join up.
-      const byMonth = {};
-      rows.forEach(p => (p.history || []).forEach(h => { byMonth[h.month] = (byMonth[h.month] || 0) + h.count; }));
-      const months = Object.keys(byMonth).sort().slice(-18);
-      const labels = months.map(fmtMonth);
-      const actual = months.map(m => byMonth[m]);
-      const forecastLine = months.map((m, i) => (i === months.length - 1 ? actual[i] : null));
-      if (first && first.forecastMonth) {
-        labels.push(fmtMonth(first.forecastMonth) + ' (forecast)');
-        actual.push(null);
-        forecastLine.push(total);
+      $('subtitle').textContent = t.subtitle;
+      filters.setHint(t.hint);
+      $('cityTitle').textContent = t.cityTitle;
+      $('brgyTitle').textContent = t.brgyTitle;
+      $('tableTitle').textContent = t.tableTitle;
+      $('predHead').textContent = t.predHead;
+
+      $('fMonth').textContent = t.monthValue;
+      $('fMonthLbl').textContent = t.monthLabel;
+      $('fTotal').textContent = t.totalValue;
+      $('fTotalLbl').textContent = t.totalLabel;
+      $('fTotalDelta').textContent = t.delta.text;
+      $('fTotalDelta').style.color = toneColor[t.delta.tone];
+      $('fUp').textContent = t.upValue;
+      $('fUpLbl').textContent = t.upLabel;
+      $('fErr').textContent = t.errValue;
+      $('fErrLbl').textContent = t.errLabel;
+      $('fErrDelta').textContent = t.errNote;
+
+      if (window.Chart) {
+        const c = model.cityTrend(v);
+        if (cityChart) cityChart.destroy();
+        cityChart = new Chart($('cityChart'), {
+          type: 'line',
+          data: { labels: c.labels, datasets: [
+            { label: 'Recorded', data: c.actual, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,.12)', fill: true, tension: .35, pointRadius: 2 },
+            { label: c.forecastLabel, data: c.forecast, borderColor: '#7c3aed', borderDash: [6, 4], pointRadius: c.pointSizes, pointBackgroundColor: '#7c3aed', fill: false, tension: .25 }
+          ] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend }, scales: { y: { beginAtZero: true }, x: { ticks: { maxRotation: 50, font: { size: 10 } } } } }
+        });
+
+        // A chosen barangay stays highlighted and the rest are dimmed; clicking a bar picks it.
+        const b = model.byBarangay(v);
+        const dim = name => state.barangay && name !== state.barangay;
+        if (brgyChart) brgyChart.destroy();
+        brgyChart = new Chart($('brgyChart'), {
+          type: 'bar',
+          data: { labels: b.names, datasets: [
+            ...(b.recorded ? [{ label: b.recordedLabel, data: b.recorded, backgroundColor: b.names.map(n => dim(n) ? 'rgba(148,163,184,.25)' : 'rgba(148,163,184,.75)'), borderRadius: 3 }] : []),
+            { label: b.predictedLabel, data: b.predicted, backgroundColor: b.names.map(n => dim(n) ? 'rgba(124,58,237,.2)' : 'rgba(124,58,237,.8)'), borderRadius: 3 }
+          ] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend },
+            onClick: (evt, items) => {
+              if (!items.length) return;
+              const name = b.names[items[0].index];
+              state.barangay = state.barangay === name ? '' : name;
+              filters.sync(); render();
+            },
+            scales: { x: { ticks: { autoSkip: false, maxRotation: 70, minRotation: 50, font: { size: 9 } } }, y: { beginAtZero: true } } }
+        });
+      } else {
+        ['cityChart', 'brgyChart'].forEach(id => {
+          const el = $(id);
+          if (el) el.parentElement.innerHTML = '<div class="empty">Charts need an internet connection to load.</div>';
+        });
       }
-      const legend = { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } };
 
-      new Chart(document.getElementById('cityChart'), {
-        type: 'line',
-        data: { labels, datasets: [
-          { label: 'Recorded', data: actual, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,.12)', fill: true, tension: .35, pointRadius: 2 },
-          { label: 'Forecast', data: forecastLine, borderColor: '#7c3aed', borderDash: [6, 4], pointRadius: 5, pointBackgroundColor: '#7c3aed', fill: false }
-        ] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend }, scales: { y: { beginAtZero: true }, x: { ticks: { maxRotation: 50, font: { size: 10 } } } } }
-      });
+      // Table rows open the "why this prediction" dialog (ForecastCore.openDetail).
+      v.list = v.scoped.slice().sort((a, b) => b.riskScore - a.riskScore);
+      view = v;
+      $('pred').innerHTML = v.list.map((p, i) => `
+        <tr ${FC.rowAttrs(i)}><td style="font-weight:600">${esc(p.barangay)}</td><td>${esc(p.road)}</td>
+        <td>${num(p.totalIncidents)}</td>
+        <td style="font-weight:700">${num(Math.round(p.predicted))}${v.H > 1 ? `<div style="font-weight:500;font-size:11px;color:var(--muted)">${p.path.map(x => num(Math.round(x))).join(' · ')}</div>` : ''}</td>
+        <td style="color:${FC.TREND_COLOR[p.periodTrend]};font-weight:700">${FC.TREND_ICON[p.periodTrend] || '■'} ${esc(p.periodTrend)}</td>
+        <td>${p.riskScore.toFixed(1)} / 10</td>
+        <td><span class="tag ${RISK_TAG[p.riskLevel] || 't-review'}">${esc(RISK_LABEL[p.riskLevel] || p.riskLevel)}</span></td></tr>`).join('')
+        || '<tr><td colspan="7" class="empty">No forecasts yet.</td></tr>';
 
-      new Chart(document.getElementById('brgyChart'), {
-        type: 'bar',
-        data: { labels: rows.map(p => p.barangay), datasets: [
-          { label: `Last month (${fmtMonth(lastMonth)})`, data: rows.map(p => p.lastMonthCount), backgroundColor: 'rgba(148,163,184,.75)', borderRadius: 3 },
-          { label: `Predicted (${first ? fmtMonth(first.forecastMonth) : 'next month'})`, data: rows.map(p => p.predictedNextMonth), backgroundColor: 'rgba(124,58,237,.8)', borderRadius: 3 }
-        ] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend },
-          scales: { x: { ticks: { autoSkip: false, maxRotation: 70, minRotation: 50, font: { size: 9 } } }, y: { beginAtZero: true } } }
-      });
-    } else {
-      ['cityChart', 'brgyChart'].forEach(id => {
-        document.getElementById(id).parentElement.innerHTML = '<div class="empty">Charts need an internet connection to load.</div>';
-      });
+      $('model').textContent = t.modelTag + (v.list.length ? ' · click a row for details' : '');
+      $('modelNote').textContent = t.modelNote;
     }
 
-    /* ---------------- table ---------------- */
-    const trendIcon = { up: '▲', down: '▼', stable: '■' };
-    const trendColor = { up: '#dc2626', down: '#16a34a', stable: '#64748b' };
-    document.getElementById('pred').innerHTML = predictions.map(p => `
-      <tr><td style="font-weight:600">${esc(p.barangay)}</td><td>${esc(p.road)}</td>
-      <td>${num(p.totalIncidents)}</td><td style="font-weight:700">${num(p.predictedNextMonth)}</td>
-      <td style="color:${trendColor[p.trend]};font-weight:700">${trendIcon[p.trend] || '■'} ${esc(p.trend)}</td>
-      <td>${p.riskScore.toFixed(1)} / 10</td>
-      <td><span class="tag ${RISK_TAG[p.riskLevel] || 't-review'}">${esc(p.riskLevel)}</span></td></tr>`).join('')
-      || '<tr><td colspan="7" class="empty">No forecasts yet.</td></tr>';
-
-    document.getElementById('model').textContent = !first ? ''
-      : first.forecastModel === 'random-forest'
-        ? `Model: Random Forest (Python)${first.mlModel === 'random-forest' ? ' + severity model' : ''}`
-        : 'Model: linear trend (heuristic)';
-
-    document.getElementById('modelNote').textContent = first && first.forecastModel === 'random-forest'
-      ? `Predictions for ${fmtMonth(first.forecastMonth)} come from a Random Forest (Python, scikit-learn) that learned from every barangay's monthly history: the last three months, the 3-, 6- and 12-month averages, and the time of year.`
-        + (bt ? ` Tested on ${fmtMonth(bt.month)}, which it had not seen, it was off by ${bt.maeForest} accidents per area on average — a straight-line trend was off by ${bt.maeLinear}.` : '')
-      : 'Forecasts use a straight-line trend per area until there is enough monthly history to train the Random Forest.';
+    render();
   })();
 }
 </script>

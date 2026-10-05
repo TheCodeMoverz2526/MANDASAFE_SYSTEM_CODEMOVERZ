@@ -104,13 +104,16 @@ class StaticSiteController extends Controller
 
         // Online as a demo: every page carries a notice bar so it is never taken for an
         // official City website.
+        // Pages are returned as text, not a file stream, so CompressResponse can gzip them.
         $notice = trim((string) config('mandasafe.demo_notice'));
-        if ($extension === 'html' && $notice !== '') {
+        if ($extension === 'html') {
             $html = (string) file_get_contents($filePath);
-            $bar = '<div role="note" style="position:sticky;top:0;z-index:100000;background:#fef3c7;color:#92400e;'
-                . 'border-bottom:1px solid #fcd34d;font:600 12.5px/1.4 system-ui,sans-serif;text-align:center;padding:7px 12px">'
-                . e($notice) . '</div>';
-            $html = preg_replace('/<body\b[^>]*>/i', '$0' . $bar, $html, 1) ?? $html;
+            if ($notice !== '') {
+                $bar = '<div role="note" style="position:sticky;top:0;z-index:100000;background:#fef3c7;color:#92400e;'
+                    . 'border-bottom:1px solid #fcd34d;font:600 12.5px/1.4 system-ui,sans-serif;text-align:center;padding:7px 12px">'
+                    . e($notice) . '</div>';
+                $html = preg_replace('/<body\b[^>]*>/i', '$0' . $bar, $html, 1) ?? $html;
+            }
 
             return response($html, 200, ['Content-Type' => $contentType, 'Cache-Control' => 'no-store']);
         }

@@ -100,10 +100,20 @@ if [ "$SCHEME" = https ]; then
     fi
 fi
 
+step "Administrator password"
+# The old built-in default password is refused in production, so set a real one now.
+if [ -t 0 ]; then
+    until sudo -u www-data php artisan mandasafe:set-password admin@rimas.gov.ph; do
+        echo "  Try again (at least 12 characters, typed the same twice)."
+    done
+else
+    echo "  Not running in a terminal. Afterwards run:"
+    echo "  cd $APP && sudo -u www-data php artisan mandasafe:set-password admin@rimas.gov.ph"
+fi
+
 step "Pre-computing analytics (Random Forest, hotspots, Safety Index)"
 sudo -u www-data php artisan mandasafe:warm || echo "  Warm-up failed; pages will compute on first visit. Check storage/logs."
 
 echo
 echo "MandaSafe is online at $SCHEME://$TARGET"
-echo "Next: set a new administrator password (DEPLOY.md, step 6):"
-echo "  cd $APP && sudo -u www-data php artisan mandasafe:set-password admin@rimas.gov.ph"
+echo "Sign in as admin@rimas.gov.ph with the password you just set, then scan the authenticator QR code."

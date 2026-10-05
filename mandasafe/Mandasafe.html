@@ -21,23 +21,6 @@
 
 <body>
 
-    <!-- PROFILE DROPDOWN -->
-    <div class="profile-dropdown" id="profileDropdown">
-        <div class="profile-header">
-            <div class="profile-name" id="profileName">—</div>
-            <div class="profile-email" id="profileEmail">—</div>
-            <div style="margin-top:6px;" id="profileRoleBadge"></div>
-        </div>
-        <div style="padding:6px 0;">
-            <div class="profile-menu-item" onclick="showPage('settings');toggleProfileDropdown()"><i
-                    class="fas fa-user-circle"></i> My Profile</div>
-            <div class="profile-menu-item" onclick="showPage('settings');toggleProfileDropdown()"><i
-                    class="fas fa-cog"></i> Account Settings</div>
-            <div class="profile-menu-item" id="adminPanelLink" style="display:none;"
-                onclick="showPage('users');toggleProfileDropdown()"><i class="fas fa-shield-alt"></i> Admin Panel</div>
-        </div>
-    </div>
-
     <!-- TOPBAR -->
     <div class="topbar">
         <div class="topbar-logo" onclick="showPage('home')">
@@ -45,7 +28,7 @@
             <div class="topbar-title">Mandaluyong Road Accident Mapping and Analytics System</div>
         </div>
         <div class="topbar-actions" style="position:relative;">
-            <div class="userchip" id="accountChip" onclick="toggleProfileDropdown()" title="Account">
+            <div class="userchip" id="accountChip" title="Signed in">
                 <span class="avatar" id="avatarBtn">RC</span>
                 <span><span class="nm" id="chipName">—</span><span class="rl" id="chipRole">Administrator</span></span>
             </div>
@@ -268,12 +251,11 @@
                         <h2 style="font-size:20px;font-weight:700;">Centralized Accident Repository</h2>
                     </div>
                     <div class="filter-bar" style="padding:0 0 14px;border:none;">
-                        <select class="filter-select" id="fltDateRange">
-                            <option value="all">All dates</option>
-                            <option value="1">Latest month</option>
-                            <option value="3">Latest 3 months</option>
-                            <option value="12">Latest 12 months</option>
-                        </select>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <input type="date" class="filter-select" id="fltDateFrom" title="From date" aria-label="From date">
+                            <span style="font-size:12px;color:var(--gray-400);">to</span>
+                            <input type="date" class="filter-select" id="fltDateTo" title="To date" aria-label="To date">
+                        </div>
                         <select class="filter-select" id="fltBarangay">
                             <option value="all">All barangays</option>
                         </select>
@@ -300,6 +282,10 @@
                             <span class="card-title">All Accidents</span>
                             <span style="margin-left:auto;font-size:12px;color:var(--gray-500);"
                                 id="incidentCountLabel">Loading…</span>
+                            <button class="btn btn-danger btn-sm" id="bulkDeleteBtn" style="margin-left:12px;display:none;"
+                                onclick="askDeleteSelected()"><i class="fas fa-trash"></i> <span id="bulkDeleteLabel">Delete selected</span></button>
+                            <button class="btn btn-secondary btn-sm" id="clearSelectionBtn" style="margin-left:8px;display:none;"
+                                onclick="clearIncidentSelection()">Clear selection</button>
                             <button class="btn btn-secondary btn-sm" style="margin-left:12px;"
                                 onclick="openExportModal()"><i class="fas fa-download"></i> Export Report</button>
                         </div>
@@ -307,6 +293,10 @@
                             <table class="data-table">
                                 <thead>
                                     <tr>
+                                        <th style="width:36px;"><input type="checkbox" id="selectAllIncidents"
+                                                onchange="toggleSelectAllIncidents(this.checked)"
+                                                title="Select every accident in the filtered list"
+                                                aria-label="Select every accident in the filtered list"></th>
                                         <th>Accident ID</th>
                                         <th>Date</th>
                                         <th>Time</th>
@@ -356,36 +346,27 @@
                             <div class="form-label">Severity</div><select class="form-select" id="mapFltSev"
                                 style="font-size:12px;">
                                 <option value="all">All Severities</option>
-                                <option>Fatal</option>
-                                <option>Injury</option>
-                                <option>Minor</option>
-                                <option>Damage Only</option>
                             </select>
                         </div>
                         <div class="form-group">
                             <div class="form-label">Barangay</div><select class="form-select" id="mapFltBarangay"
                                 style="font-size:12px;">
                                 <option value="all">All Barangays</option>
-                                <option>Plainview</option>
-                                <option>Highway Hills</option>
-                                <option>Wack-Wack</option>
                             </select>
                         </div>
-                        <div style="display:flex;gap:6px;"><button class="btn btn-primary btn-sm" style="flex:1;"
-                                onclick="applyMapFilters()">Apply
-                                Filter</button><button class="btn btn-secondary btn-sm"
-                                onclick="resetMapFilters()">Reset</button></div>
-                        <div class="legend" style="margin-top:20px;">
-                            <div class="form-label" style="margin-bottom:10px;">Accident Severity</div>
-                            <div class="legend-item">
-                                <div class="legend-dot" style="background:#dc2626;"></div><span>Fatal</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-dot" style="background:#eab308;"></div><span>Injury</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-dot" style="background:#16a34a;"></div><span>Minor</span>
-                            </div>
+                        <div style="display:flex;gap:6px;">
+                            <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center;"
+                                onclick="applyMapFilters()">Apply Filter</button>
+                            <button class="btn btn-secondary btn-sm" style="flex:1;justify-content:center;"
+                                onclick="resetMapFilters()">Clear filters</button>
+                        </div>
+                        <div class="map-focus-msg" id="mapFocusMsg" role="status" aria-live="polite"></div>
+                        <div class="legend" id="mapHeatLegend" style="margin-top:20px;" hidden>
+                            <div class="form-label" style="margin-bottom:10px;">Heatmap — barangay risk</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#dc2626;"></div><span>High</span></div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#eab308;"></div><span>Moderate</span></div>
+                            <div class="legend-item"><div class="legend-dot" style="background:#16a34a;"></div><span>Low</span></div>
+                            <div class="map-legend-note">Barangay accidents vs. the city average and median for the chosen filters</div>
                         </div>
                     </div>
                     <div class="map-container">
@@ -398,8 +379,6 @@
                                 Markers</button>
                             <button class="map-layer-btn" id="layerHeatmap" onclick="toggleMapLayer('heatmap', this)"><i
                                     class="fas fa-fire" style="color:#f59e0b;"></i> Heatmap</button>
-                            <button class="map-layer-btn" id="layerHotspots" onclick="toggleMapLayer('hotspots', this)"><i
-                                    class="fas fa-bullseye" style="color:#dc2626;"></i> Hotspots</button>
                             <span id="mapResultSummary" style="margin-left:12px;font-size:11px;color:var(--gray-500);">0 accidents shown</span>
                             <div style="margin-left:auto;display:flex;gap:6px;">
                                 <button class="icon-btn" style="background:var(--gray-100);color:var(--gray-700);"
@@ -410,127 +389,6 @@
                         </div>
                         <div class="leaflet-map-wrap">
                             <div id="mandaluyongLeafletMap" aria-label="Interactive map of Mandaluyong barangay boundaries"></div>
-                            <svg id="mapSvg" aria-hidden="true" viewBox="0 0 700 550"
-                                style="width:100%;height:100%;transform-origin:center;transition:transform .2s;"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <defs>
-                                    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                                        <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#c8d8c8" stroke-width=".5" />
-                                    </pattern>
-                                </defs>
-                                <rect width="700" height="550" fill="#dce8dc" />
-                                <rect width="700" height="550" fill="url(#grid)" />
-                                <g id="layerGroupBoundary">
-                                    <polygon points="350,20 600,20 600,180 400,180 350,100" fill="#c5d8c0"
-                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
-                                    <text x="490" y="90" fill="#5a7a55" font-size="12" font-weight="600"
-                                        text-anchor="middle" font-family="DM Sans">PLAINVIEW</text>
-                                    <polygon points="50,20 350,20 350,100 200,100 50,150" fill="#ccd8c0"
-                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
-                                    <text x="180" y="80" fill="#5a7a55" font-size="12" font-weight="600"
-                                        text-anchor="middle" font-family="DM Sans">HIGHWAY HILLS</text>
-                                    <polygon points="400,180 600,180 620,320 500,320 400,260" fill="#c5d8c0"
-                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
-                                    <text x="510" y="255" fill="#5a7a55" font-size="11" font-weight="600"
-                                        text-anchor="middle" font-family="DM Sans">WACK-WACK</text>
-                                    <polygon points="200,100 400,100 400,260 300,280 200,260 150,200 50,150"
-                                        fill="#d0d8c8" stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
-                                    <text x="260" y="190" fill="#5a7a55" font-size="12" font-weight="600"
-                                        text-anchor="middle" font-family="DM Sans">ADDITION HILLS</text>
-                                    <polygon points="50,150 200,200 200,360 100,360 20,300" fill="#c8d5c8"
-                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
-                                    <text x="100" y="280" fill="#5a7a55" font-size="12" font-weight="600"
-                                        text-anchor="middle" font-family="DM Sans">SAN JOSE</text>
-                                    <polygon points="200,260 400,260 420,380 300,400 200,360" fill="#ccdcc8"
-                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
-                                    <text x="300" y="340" fill="#5a7a55" font-size="12" font-weight="600"
-                                        text-anchor="middle" font-family="DM Sans">BARANGKA ILAYA</text>
-                                    <polygon points="300,400 420,380 460,500 200,500 200,440" fill="#c5d8c0"
-                                        stroke="#a8c0a0" stroke-width="1.5" opacity=".8" />
-                                    <text x="330" y="450" fill="#5a7a55" font-size="12" font-weight="600"
-                                        text-anchor="middle" font-family="DM Sans">MAUWAY</text>
-                                </g>
-                                <g id="layerGroupRoad">
-                                    <path d="M 140,300 Q 180,320 160,380 Q 150,420 180,440 Q 200,460 195,500"
-                                        fill="none" stroke="#7ab8d4" stroke-width="18" opacity=".6" />
-                                    <line x1="350" y1="0" x2="380" y2="550" stroke="#e8d84a" stroke-width="12"
-                                        opacity=".9" />
-                                    <line x1="350" y1="0" x2="380" y2="550" stroke="white" stroke-width="2"
-                                        stroke-dasharray="20,15" opacity=".6" />
-                                    <text x="400" y="30" fill="#8a7a00" font-size="10" font-weight="700"
-                                        font-family="DM Sans">EDSA</text>
-                                    <line x1="20" y1="160" x2="620" y2="200" stroke="#e8b44a" stroke-width="10"
-                                        opacity=".9" />
-                                    <text x="500" y="225" fill="#8a5a00" font-size="10" font-weight="700"
-                                        font-family="DM Sans">SHAW BLVD</text>
-                                    <line x1="20" y1="400" x2="620" y2="420" stroke="#e8c44a" stroke-width="9"
-                                        opacity=".8" />
-                                    <text x="500" y="445" fill="#8a5a00" font-size="10" font-weight="700"
-                                        font-family="DM Sans">BONI AVE</text>
-                                    <line x1="20" y1="90" x2="620" y2="110" stroke="#d4d4d4" stroke-width="7"
-                                        opacity=".7" />
-                                    <text x="60" y="85" fill="#666" font-size="9" font-weight="600"
-                                        font-family="DM Sans">ORTIGAS AVE</text>
-                                </g>
-                                <g id="layerGroupHeatmap" style="display:none;">
-                                    <ellipse cx="365" cy="175" rx="70" ry="55" fill="#dc2626" opacity=".28" />
-                                    <ellipse cx="375" cy="415" rx="55" ry="42" fill="#dc2626" opacity=".24" />
-                                    <ellipse cx="285" cy="185" rx="65" ry="50" fill="#f59e0b" opacity=".22" />
-                                    <ellipse cx="230" cy="98" rx="40" ry="32" fill="#f59e0b" opacity=".2" />
-                                    <ellipse cx="490" cy="105" rx="38" ry="30" fill="#fbbf24" opacity=".2" />
-                                </g>
-                                <g id="layerGroupCluster">
-                                    <g class="cluster"
-                                        onclick="selectIncident('A05928','Shaw Blvd near EDSA','Plainview','Vehicular Collision','Injury',13)">
-                                        <circle cx="365" cy="175" r="22" fill="#dc2626" stroke="white" stroke-width="3"
-                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="365" y="180"
-                                            fill="white" font-size="13" font-weight="800" text-anchor="middle"
-                                            font-family="DM Sans">13</text>
-                                    </g>
-                                    <g class="cluster"
-                                        onclick="selectIncident('A05920','Boni Ave at EDSA','Addition Hills','Pedestrian Involved','Fatal',9)">
-                                        <circle cx="375" cy="415" r="18" fill="#dc2626" stroke="white" stroke-width="3"
-                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="375" y="420"
-                                            fill="white" font-size="12" font-weight="800" text-anchor="middle"
-                                            font-family="DM Sans">9</text>
-                                    </g>
-                                    <g class="cluster"
-                                        onclick="selectIncident('A05919','Ortigas Ave','Highway Hills','Vehicular Collision','Injury',4)">
-                                        <circle cx="230" cy="98" r="16" fill="#dc2626" stroke="white" stroke-width="3"
-                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="230" y="103"
-                                            fill="white" font-size="11" font-weight="800" text-anchor="middle"
-                                            font-family="DM Sans">4</text>
-                                    </g>
-                                    <g class="cluster"
-                                        onclick="selectIncident('A05921','Ortigas Ave Plainview','Plainview','Single Vehicle','Minor',4)">
-                                        <circle cx="490" cy="105" r="16" fill="#f59e0b" stroke="white" stroke-width="3"
-                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="490" y="110"
-                                            fill="white" font-size="11" font-weight="800" text-anchor="middle"
-                                            font-family="DM Sans">4</text>
-                                    </g>
-                                    <g class="cluster"
-                                        onclick="selectIncident('A05925','Shaw Blvd near EDSA','Mauway','Vehicular Collision','Injury',13)">
-                                        <circle cx="285" cy="185" r="22" fill="#dc2626" stroke="white" stroke-width="3"
-                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="285" y="190"
-                                            fill="white" font-size="13" font-weight="800" text-anchor="middle"
-                                            font-family="DM Sans">13</text>
-                                    </g>
-                                    <g class="cluster"
-                                        onclick="selectIncident('A05930','Boni Ave Mauway','Mauway','Pedestrian','Damage Only',2)">
-                                        <circle cx="580" cy="415" r="14" fill="#16a34a" stroke="white" stroke-width="3"
-                                            filter="drop-shadow(0 3px 6px rgba(0,0,0,.3))" /><text x="580" y="420"
-                                            fill="white" font-size="11" font-weight="800" text-anchor="middle"
-                                            font-family="DM Sans">2</text>
-                                    </g>
-                                </g>
-                                <g transform="translate(650,480)">
-                                    <circle cx="0" cy="0" r="22" fill="white" stroke="#ddd" stroke-width="1.5"
-                                        opacity=".9" /><text x="0" y="-8" fill="#333" font-size="10" font-weight="700"
-                                        text-anchor="middle" font-family="DM Sans">N</text>
-                                    <path d="M 0,-15 L 5,0 L 0,5 L -5,0 Z" fill="#dc2626" opacity=".9" />
-                                    <path d="M 0,5 L 5,15 L 0,10 L -5,15 Z" fill="#888" />
-                                </g>
-                            </svg>
                         </div>
                     </div>
                     <div class="map-info-panel" id="mapInfoPanel">
@@ -633,7 +491,7 @@
                     </div>
                     <div>
                         <div class="card" style="margin-bottom:16px;">
-                            <div class="card-header"><span class="card-title">Accidents by Barangay</span></div>
+                            <div class="card-header"><span class="card-title">Accidents by Barangay (% of total)</span></div>
                             <div class="card-body">
                                 <div class="chart-wrap"><canvas id="barangayChart"></canvas></div>
                             </div>
@@ -679,6 +537,25 @@
                             <span id="risingWindow" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
                         <div class="card-body">
                             <div class="risk-factors" id="risingList"></div>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:0 24px 24px;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Severity Classification</span>
+                            <span id="sevModelTag" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
+                        <div class="card-body">
+                            <div class="prone-grid">
+                                <div>
+                                    <div class="form-label" style="margin-bottom:10px;">Accidents by severity</div>
+                                    <div id="sevDistribution"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+                                </div>
+                                <div>
+                                    <div class="form-label" style="margin-bottom:10px;">Severity classifier (Random Forest)</div>
+                                    <div class="ml-note" id="sevModelNote"></div>
+                                    <div id="sevBarangays"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -792,12 +669,12 @@
                             <div class="stat-val" id="hsStatCritical" style="color:#dc2626;">0</div>
                             <div class="stat-label">Critical Hotspots</div>
                         </div>
-                        <div class="stat-card" style="border-left:4px solid #f59e0b;">
-                            <div class="stat-val" id="hsStatMedium" style="color:#f59e0b;">0</div>
-                            <div class="stat-label">Medium Risk Zones</div>
+                        <div class="stat-card" style="border-left:4px solid #eab308;">
+                            <div class="stat-val" id="hsStatMedium" style="color:#eab308;">0</div>
+                            <div class="stat-label">Moderate Risk Zones</div>
                         </div>
-                        <div class="stat-card" style="border-left:4px solid #22c55e;">
-                            <div class="stat-val" id="hsStatLow" style="color:#22c55e;">0</div>
+                        <div class="stat-card" style="border-left:4px solid #16a34a;">
+                            <div class="stat-val" id="hsStatLow" style="color:#16a34a;">0</div>
                             <div class="stat-label">Low Risk Zones</div>
                         </div>
                         <div class="stat-card" style="border-left:4px solid var(--blue);">
@@ -828,22 +705,46 @@
                             </table>
                         </div>
                     </div>
-                    <div class="card">
-                        <div class="card-header"><span class="card-title">Accidents by Road</span></div>
-                        <div class="card-body">
-                            <div class="chart-wrap"><canvas id="hotspotChart"></canvas></div>
-                        </div>
-                    </div>
-                    <div class="card">
+                    <div class="card card-fill-chart">
                         <div class="card-header"><span class="card-title">Risk Distribution</span></div>
                         <div class="card-body">
                             <div class="chart-wrap"><canvas id="riskDonut"></canvas></div>
                         </div>
                     </div>
-                    <div class="card">
+                    <div class="card" style="grid-column:1 / -1;">
                         <div class="card-header"><span class="card-title">Peak Accident Hours</span></div>
                         <div class="card-body">
                             <div class="chart-wrap"><canvas id="peakHoursChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:0 24px 24px;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">Predicted Accident-Prone Areas — KDE + Random Forest</span>
+                            <span id="paPeriod" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
+                        <div class="card-body">
+                            <div class="ml-note" id="paNote"><i class="fas fa-spinner fa-spin"></i> Training the prediction model…</div>
+                            <div class="prone-grid">
+                                <div>
+                                    <div id="proneMap" class="prone-map" aria-label="Map of predicted accident-prone areas"></div>
+                                    <div class="prone-legend">
+                                        <span><i style="background:#dc2626;"></i>High — likely accident-prone</span>
+                                        <span><i style="background:#eab308;"></i>Moderate</span>
+                                        <span><i style="background:#16a34a;"></i>Low</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="form-label" style="margin-bottom:8px;">Barangays by predicted accident-prone areas</div>
+                                    <div style="overflow-x:auto;max-height:380px;overflow-y:auto;">
+                                        <table class="hotspot-table">
+                                            <thead>
+                                                <tr><th>Barangay</th><th>High</th><th>Moderate</th><th>Top chance</th><th>Level</th></tr>
+                                            </thead>
+                                            <tbody id="paBarangayBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -858,35 +759,40 @@
                                 class="fas fa-download"></i> Export CSV</button></div>
                 </div>
                 <div style="padding:20px 24px 0;">
+                    <!-- Advance prediction filters (horizon, dates, barangay), drawn by js/forecast-core.js. -->
+                    <div class="card mb-16" style="padding:12px 16px;" id="fcFilters"></div>
+                    <div id="fcSubtitle" style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:6px;"></div>
                     <div id="fcModelNote" style="font-size:11.5px;color:var(--gray-500);margin-bottom:12px;line-height:1.5;"></div>
                     <div class="grid-4 mb-16">
                         <div class="stat-card" style="border-left:4px solid var(--blue);">
                             <div class="stat-val" id="fcStatMonth" style="color:var(--blue);">—</div>
-                            <div class="stat-label">Forecast Month</div>
+                            <div class="stat-label" id="fcStatMonthLabel">Forecast Month</div>
                         </div>
                         <div class="stat-card" style="border-left:4px solid #7c3aed;">
                             <div class="stat-val" id="fcStatTotal" style="color:#7c3aed;">—</div>
-                            <div class="stat-label">Predicted Accidents (City)</div>
+                            <div class="stat-label" id="fcStatTotalLabel">Predicted Accidents (City)</div>
+                            <div id="fcStatTotalDelta" style="font-size:11px;font-weight:600;margin-top:4px;"></div>
                         </div>
                         <div class="stat-card" style="border-left:4px solid #dc2626;">
                             <div class="stat-val" id="fcStatUp" style="color:#dc2626;">—</div>
-                            <div class="stat-label">Areas Trending Up</div>
+                            <div class="stat-label" id="fcStatUpLabel">Areas Trending Up</div>
                         </div>
                         <div class="stat-card" style="border-left:4px solid #16a34a;">
                             <div class="stat-val" id="fcStatAccuracy" style="color:#16a34a;">—</div>
                             <div class="stat-label" id="fcStatAccuracyLabel">Forecast Error (avg / area)</div>
+                            <div id="fcStatAccuracyNote" style="font-size:11px;color:var(--gray-500);margin-top:4px;"></div>
                         </div>
                     </div>
                 </div>
                 <div class="hotspot-grid">
                     <div class="card">
-                        <div class="card-header"><span class="card-title">City Trend &amp; Next Month</span></div>
+                        <div class="card-header"><span class="card-title" id="fcCityTitle">City Trend &amp; Next Month</span></div>
                         <div class="card-body">
                             <div class="chart-wrap"><canvas id="fcCityChart"></canvas></div>
                         </div>
                     </div>
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Last Month vs. Predicted — by Barangay</span></div>
+                        <div class="card-header"><span class="card-title" id="fcBrgyTitle">Last Month vs. Predicted — by Barangay</span></div>
                         <div class="card-body">
                             <div class="chart-wrap"><canvas id="fcBarangayChart"></canvas></div>
                         </div>
@@ -894,7 +800,7 @@
                 </div>
                 <div style="padding:0 24px 24px;">
                     <div class="card">
-                        <div class="card-header"><span class="card-title">Predicted Accidents Next Month — All Areas</span>
+                        <div class="card-header"><span class="card-title" id="fcTableTitle">Predicted Accidents Next Month — All Areas</span>
                             <span id="fcModelTag" style="margin-left:auto;font-size:11px;font-weight:600;color:var(--blue);"></span></div>
                         <div style="overflow-x:auto;">
                             <table class="hotspot-table">
@@ -904,8 +810,8 @@
                                         <th>Barangay</th>
                                         <th>Road</th>
                                         <th>Recorded</th>
-                                        <th>Last Month</th>
-                                        <th>Predicted</th>
+                                        <th id="fcCompareHead">Last Month</th>
+                                        <th id="fcPredHead">Predicted</th>
                                         <th>Change</th>
                                         <th>Trend</th>
                                         <th>Risk Score</th>
@@ -1522,6 +1428,7 @@
     <div class="toast toast-success" id="toast"><span class="toast-icon"><i class="fas fa-check-circle"></i></span><span
             id="toastMsg">Done!</span></div>
 
+    <script src="js/forecast-core.js"></script>
     <script src="script.js"></script>
     <!-- HIDDEN FILE INPUT FOR DATA IMPORT (CSV / Excel) -->
     <input type="file" id="csvFileInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="handleCSVImport(event)">

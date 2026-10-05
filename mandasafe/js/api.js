@@ -27,7 +27,9 @@ async function apiGet(path) {
             headers: authToken() ? { Authorization: `Bearer ${authToken()}` } : {}
         });
     } catch {
-        throw new Error('Cannot reach the MandaSafe server. Start it with start-mandasafe.bat.');
+        throw new Error(['localhost', '127.0.0.1'].includes(location.hostname)
+            ? 'Cannot reach the MandaSafe server. Start it with start-mandasafe.bat.'
+            : 'MandaSafe is not responding right now. Please check your connection and try again in a moment.');
     }
     let data = null;
     try { data = await response.json(); } catch { /* no body */ }

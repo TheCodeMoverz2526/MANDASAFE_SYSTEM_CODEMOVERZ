@@ -19,7 +19,8 @@ const DEFAULT_ADMIN = {
     phone: '+639171234567',
     role: 'admin',
     dept: 'Mandaluyong City TPMO',
-    password: 'Admin@2026'
+    // Legacy Node server only (the site runs on Laravel now). No password is kept in code.
+    password: process.env.MANDASAFE_ADMIN_PASSWORD || require('crypto').randomBytes(12).toString('base64url')
 };
 
 /* ---------- helpers ---------- */

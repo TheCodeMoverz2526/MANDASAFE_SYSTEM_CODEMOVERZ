@@ -58,6 +58,22 @@ return (static function (): bool {
         return false;
     }
 
+    // The same allowlist as StaticSiteController::isPublic(). The site root also holds the
+    // old Node server (auth.js, server.js), its data (data/store.json: password hashes and
+    // session tokens), the ML scripts and an old nested copy of the project; none of it may
+    // be served. Anything not listed falls through to Laravel, which answers 404.
+    if (str_contains($requested, '..') || str_contains($requested, '\\')) {
+        return false;
+    }
+    $publicRootFiles = ['script.js', 'login.js', 'styles.css', 'data/mandaluyong-barangays.geojson'];
+    $publicDirectories = ['assets', 'css', 'js', 'vendor'];
+    $isPublic = in_array($requested, $publicRootFiles, true)
+        || (! str_contains($requested, '/') && str_ends_with(strtolower($requested), '.html'))
+        || (str_contains($requested, '/') && in_array($firstSegment, $publicDirectories, true));
+    if (! $isPublic) {
+        return false;
+    }
+
     $filePath = realpath($root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $requested));
     if ($filePath === false || ! is_file($filePath) || ! is_readable($filePath)) {
         return false;
@@ -87,8 +103,11 @@ return (static function (): bool {
 
     $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
 
-    // An unknown extension is not obviously web content — let Laravel decide.
-    if (! isset($types[$extension])) {
+    // An unknown extension is not obviously web content — let Laravel decide. Pages (.html)
+    // also go through Laravel: StaticSiteController adds the demo notice bar and sends them
+    // with no-store, so Back after signing out cannot show a signed-in page. That is one
+    // framework boot per page; the assets each page loads still take this fast path.
+    if (! isset($types[$extension]) || $extension === 'html') {
         return false;
     }
 

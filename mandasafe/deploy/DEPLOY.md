@@ -9,8 +9,9 @@ month; delete the server after the defense to stop paying).
 - The site carries the Mandaluyong City TPMO name. While it is a demo, keep the yellow
   notice bar on (`MANDASAFE_DEMO_NOTICE`, on by default) so no one takes it for an official
   City website. A real public launch needs the TPMO's approval.
-- Sign-up codes are in **test mode** by default: the code is shown on the page. Fine for a
-  panel demo; see step 5 to send real email/SMS codes instead.
+- Sign-up needs no code. **Forgot password?** needs email (or SMS) delivery — see step 5;
+  without it, that page says verification is unavailable. Codes are never shown on the page
+  online, so no one can reset someone else's password.
 
 ---
 
@@ -67,7 +68,7 @@ PC, in PowerShell, from the project folder:
 scp mandasafe\laravel\database\database.sqlite root@203.0.113.25:/var/www/mandasafe/mandasafe/laravel/database/
 ```
 
-(Skip this to start with an empty database and only the default administrator.)
+(Skip this to start with an empty database and only an administrator account.)
 
 ## 4. Run the setup script
 
@@ -89,7 +90,7 @@ Edit `/var/www/mandasafe/mandasafe/laravel/.env` (`sudo nano …`). The useful o
 | Setting | What it does |
 |---|---|
 | `MANDASAFE_DEMO_NOTICE` | The yellow bar on every page. Keep it for a demo. |
-| `OTP_TEST_MODE` | `true` shows sign-up codes on the page. Set `false` once email/SMS below work. |
+| `OTP_TEST_MODE` | Ignored online (codes are never shown in production). Leave `false`. |
 | `RESEND_API_KEY`, `OTP_FROM_EMAIL` | Real email codes (<https://resend.com>, free tier). |
 | `VOCOTEXT_USERNAME`, `VOCOTEXT_PASSWORD` | Real SMS codes. |
 
@@ -103,7 +104,9 @@ Check email/SMS with `sudo -u www-data php artisan mandasafe:otp-check`.
 
 ## 6. Secure the administrator — required
 
-The default administrator password is written in the code, so change it now:
+The setup script already asked you for a new administrator password. Earlier versions had a
+published default password; online it is refused at sign-in, so the administrator cannot sign
+in until a new one is set. To set or change it at any time:
 
 ```bash
 cd /var/www/mandasafe/mandasafe/laravel
@@ -117,7 +120,7 @@ Delete the old MandaSafe entry from your authenticator app.
 ## 7. Check it works
 
 - [ ] The home page opens with the padlock (HTTPS) and the yellow demo bar
-- [ ] A resident can sign up (test mode: the code is shown) and sign in
+- [ ] A resident can sign up and sign in
 - [ ] The administrator signs in with password + authenticator code
 - [ ] Accident Map, Hotspots, Forecast and Safety Index show data
 - [ ] `https://your-address/data/store.json` shows **Not found** (private data stays private)

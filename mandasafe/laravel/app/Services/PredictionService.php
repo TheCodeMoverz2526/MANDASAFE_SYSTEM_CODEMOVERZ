@@ -78,11 +78,13 @@ class PredictionService
      * untrained result) when Python is unavailable or there is too little history.
      *
      * @param  array<string, array<string, int>>  $histories  group key => [month => count]
-     * @return array{trained: bool, forecastMonth: ?string, oobR2: ?float, backtest: ?array, predicted: array<string, ?float>}
+     * `paths` holds each group's recursive forecast for the next `horizonMonths`.
+     *
+     * @return array{trained: bool, forecastMonth: ?string, oobR2: ?float, backtest: ?array, predicted: array<string, ?float>, paths: array<string, ?array>, horizonMonths: array, horizonBacktest: ?array}
      */
     private static function forecastWithForest(array $histories, bool &$degraded = false): array
     {
-        $untrained = ['trained' => false, 'forecastMonth' => null, 'oobR2' => null, 'backtest' => null, 'predicted' => []];
+        $untrained = ['trained' => false, 'forecastMonth' => null, 'oobR2' => null, 'backtest' => null, 'predicted' => [], 'paths' => [], 'horizonMonths' => [], 'horizonBacktest' => null];
 
         try {
             $response = MlBridge::run('forecast_forest.py', [
@@ -105,8 +107,10 @@ class PredictionService
         }
 
         $predicted = [];
+        $paths = [];
         foreach ($response['results'] ?? [] as $result) {
             $predicted[$result['key']] = $result['predicted'];
+            $paths[$result['key']] = $result['path'] ?? null;
         }
 
         return [
@@ -115,6 +119,9 @@ class PredictionService
             'oobR2' => $response['oobR2'] ?? null,
             'backtest' => $response['backtest'] ?? null,
             'predicted' => $predicted,
+            'paths' => $paths,
+            'horizonMonths' => $response['horizonMonths'] ?? [],
+            'horizonBacktest' => $response['horizonBacktest'] ?? null,
         ];
     }
 
@@ -158,6 +165,27 @@ class PredictionService
         $forecast = $yMean + $slope * ($n - $xMean);
 
         return ['value' => (int) max(0, self::jsRound($forecast)), 'slope' => $slope];
+    }
+
+    /** The same least-squares line projected $steps months ahead, for the fallback path. */
+    private static function linearPath(array $counts, int $steps): array
+    {
+        $n = count($counts);
+        if ($n === 0) {
+            return array_fill(0, $steps, 0);
+        }
+        if ($n === 1) {
+            return array_fill(0, $steps, (int) $counts[0]);
+        }
+        $slope = self::linearForecast($counts)['slope'];
+        $xMean = ($n - 1) / 2;
+        $yMean = array_sum($counts) / $n;
+        $path = [];
+        for ($k = 0; $k < $steps; $k++) {
+            $path[] = (int) max(0, self::jsRound($yMean + $slope * ($n + $k - $xMean)));
+        }
+
+        return $path;
     }
 
     /** JavaScript's Math.round: halves always go up, never away from zero. */
@@ -221,6 +249,11 @@ class PredictionService
             $recentAvg = $recentWindow === [] ? 0 : array_sum($recentWindow) / count($recentWindow);
 
             $forestValue = $forest['trained'] ? ($forest['predicted'][$key] ?? null) : null;
+            $forestPath = $forestValue !== null ? ($forest['paths'][$key] ?? null) : null;
+            $horizon = max(1, count($forest['horizonMonths']));
+            $forecastPath = $forestPath !== null
+                ? array_map(fn ($v) => (int) self::jsRound((float) $v), $forestPath)
+                : self::linearPath($counts, $horizon);
 
             if ($forestValue !== null) {
                 // The forest's forecast, and whether it sits above or below the recent level.
@@ -231,6 +264,7 @@ class PredictionService
                 $forecast = self::linearForecast($counts);
                 $predictedNextMonth = $forecast['value'];
                 $slope = $forecast['slope'];
+                $change = null;
                 $trend = $slope > 0.15 ? 'up' : ($slope < -0.15 ? 'down' : 'stable');
             }
             $frequencyScore = $recentAvg * 0.55 + $predictedNextMonth * 0.45;
@@ -263,6 +297,22 @@ class PredictionService
                 'forecastModel' => $forestValue !== null ? 'random-forest' : 'linear',
                 'forecastMonth' => $forest['forecastMonth'],
                 'forecastBacktest' => $forestValue !== null ? $forest['backtest'] : null,
+                // Advance forecast: one rounded count per month in forecastMonths (month +1 first).
+                'forecastMonths' => $forest['horizonMonths'],
+                'forecastPath' => $forest['horizonMonths'] === [] ? [$predictedNextMonth] : $forecastPath,
+                'horizonBacktest' => $forestValue !== null ? $forest['horizonBacktest'] : null,
+                // The unrounded figures behind trend and riskScore, so the Forecast page can
+                // explain them exactly (maxRawScore and riskScore are filled in below).
+                'explain' => [
+                    'forecastRaw' => round($forestValue ?? (float) $predictedNextMonth, 3),
+                    'recentAvg' => round($recentAvg, 3),
+                    'trendChange' => $change === null ? null : round($change, 4),
+                    'trendSlope' => $forestValue === null ? round($slope, 4) : null,
+                    'frequencyScore' => round($frequencyScore, 3),
+                    'severityMultiplier' => round($mlAdjustment, 4),
+                    'rawScore' => round($rawScore, 3),
+                    'maxRawScore' => null,
+                ],
                 'sources' => array_keys($group['sources']),
             ];
         }
@@ -272,6 +322,7 @@ class PredictionService
         foreach ($results as &$result) {
             $result['riskScore'] = self::jsRound(($result['_rawScore'] / $maxScore) * 100) / 10;
             $result['riskLevel'] = $result['riskScore'] >= 7 ? 'high' : ($result['riskScore'] >= 4 ? 'medium' : 'low');
+            $result['explain']['maxRawScore'] = round($maxScore, 3);
             unset($result['_rawScore']);
         }
         unset($result);

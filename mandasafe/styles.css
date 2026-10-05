@@ -159,12 +159,6 @@ body {
     gap: 10px;
     padding: 5px 10px 5px 5px;
     border-radius: 30px;
-    cursor: pointer;
-    transition: background .15s;
-}
-
-.userchip:hover {
-    background: #f1f5f9;
 }
 
 .userchip .avatar {
@@ -516,6 +510,18 @@ body {
 
 .data-table tr:hover td {
     background: var(--gray-50);
+}
+
+.data-table tr.row-selected td {
+    background: #eff6ff;
+}
+
+.data-table .row-select,
+#selectAllIncidents {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--blue);
 }
 
 .data-table tr:last-child td {
@@ -1115,6 +1121,12 @@ body {
     color: white;
 }
 
+/* Chosen but not applied yet — "Apply Filter" switches the map. */
+.map-layer-btn.is-pending {
+    outline: 2px dashed var(--blue);
+    outline-offset: 2px;
+}
+
 .map-info-panel {
     background: white;
     border-left: 1px solid var(--gray-200);
@@ -1200,7 +1212,75 @@ body {
     width: 12px;
     height: 12px;
     border-radius: 50%;
+    flex-shrink: 0;
 }
+
+.prone-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 20px;
+}
+
+.prone-map {
+    height: 380px;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    background: #eef3f8;
+}
+
+.prone-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--gray-700);
+}
+
+.prone-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.prone-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+.ml-note {
+    font-size: 12px;
+    color: var(--gray-700);
+    line-height: 1.6;
+    background: #f8fafc;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+}
+
+.sev-bar-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 110px;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.sev-bar-track { height: 10px; background: var(--gray-100); border-radius: 999px; overflow: hidden; }
+.sev-bar-fill { height: 100%; border-radius: 999px; }
+
+@media (max-width: 900px) {
+    .prone-grid { grid-template-columns: 1fr; }
+}
+
+.map-legend-note {
+    font-size: 11px;
+    color: var(--gray-500);
+    line-height: 1.4;
+}
+
+.map-focus-msg {
+    font-size: 11px;
+    color: #15803d;
+    margin-top: 8px;
+    line-height: 1.4;
+}
+
+.map-focus-msg:empty { display: none; }
 
 .cluster {
     cursor: pointer;
@@ -1317,6 +1397,24 @@ body {
     padding: 20px 24px;
 }
 
+/* A chart card stretched to its row's height (e.g. beside the hotspot table): the chart grows
+   to fill the card instead of leaving empty space below it. */
+.card-fill-chart {
+    display: flex;
+    flex-direction: column;
+}
+
+.card-fill-chart .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-fill-chart .chart-wrap {
+    flex: 1;
+    min-height: 260px;
+}
+
 .hotspot-table {
     width: 100%;
     border-collapse: collapse;
@@ -1351,14 +1449,15 @@ body {
     color: #dc2626;
 }
 
+/* Red / yellow / green, matching the map's risk levels. */
 .risk-med {
-    background: #fff7ed;
-    color: #ea580c;
+    background: #fefce8;
+    color: #a16207;
 }
 
 .risk-low {
-    background: #fefce8;
-    color: #ca8a04;
+    background: #f0fdf4;
+    color: #16a34a;
 }
 
 /* ===== SAFETY ===== */
@@ -1680,7 +1779,7 @@ body {
     z-index: 9999;
     background:
         linear-gradient(135deg, rgba(10, 22, 40, .88) 0%, rgba(15, 30, 60, .85) 40%, rgba(26, 48, 96, .82) 70%, rgba(13, 34, 68, .9) 100%),
-        url("assets/cityhall.png") center center / cover no-repeat;
+        url("assets/cityhall.jpg") center center / cover no-repeat;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1720,7 +1819,7 @@ body {
     flex: 1;
     background:
         linear-gradient(160deg, rgba(26, 86, 219, .55) 0%, rgba(15, 30, 60, .82) 100%),
-        url("assets/cityhall.png") center center / cover no-repeat;
+        url("assets/cityhall.jpg") center center / cover no-repeat;
     padding: 50px 44px;
     display: flex;
     flex-direction: column;
@@ -2273,76 +2372,6 @@ body {
     color: #5f6368;
     text-align: center;
     line-height: 1.5;
-}
-
-/* PROFILE DROPDOWN */
-.profile-dropdown {
-    position: absolute;
-    top: calc(var(--topbar-h) + 4px);
-    right: 8px;
-    z-index: 1200;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
-    width: 220px;
-    overflow: hidden;
-    display: none;
-}
-
-.profile-dropdown.open {
-    display: block;
-    animation: modalIn .15s ease;
-}
-
-.profile-header {
-    padding: 14px 16px;
-    background: linear-gradient(135deg, var(--navy), var(--navy-light));
-}
-
-.profile-name {
-    font-size: 14px;
-    font-weight: 700;
-    color: white;
-}
-
-.profile-email {
-    font-size: 11px;
-    color: rgba(255, 255, 255, .6);
-}
-
-.profile-menu-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 11px 16px;
-    font-size: 13px;
-    color: var(--gray-700);
-    cursor: pointer;
-    transition: background .15s;
-}
-
-.profile-menu-item:hover {
-    background: var(--gray-50);
-}
-
-.profile-menu-item i {
-    width: 16px;
-    color: var(--gray-400);
-    font-size: 13px;
-}
-
-.profile-menu-item.danger {
-    color: var(--red);
-}
-
-.profile-menu-item.danger i {
-    color: var(--red);
-}
-
-.profile-divider {
-    height: 1px;
-    background: var(--gray-100);
-    margin: 4px 0;
 }
 
 .export-fmt-card {

@@ -465,7 +465,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .pub-links a.on::after{content:'';position:absolute;left:13px;right:13px;bottom:-11px;height:3px;border-radius:3px;background:var(--blue-600)}
 
 .hero{position:relative;color:#fff;padding:34px 26px 70px;overflow:hidden;margin-top:calc(-1 * (66px + 28px));padding-top:120px}
-.hero::before{content:'';position:absolute;inset:0;background:url('../assets/cityhall.png') center 30%/cover no-repeat;transform:scale(1.04)}
+.hero::before{content:'';position:absolute;inset:0;background:url('../assets/cityhall.jpg') center 30%/cover no-repeat;transform:scale(1.04)}
 .hero::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,rgba(8,42,102,.95) 0%,rgba(11,52,124,.9) 45%,rgba(13,63,148,.78) 100%)}
 .hero-in{position:relative;z-index:2;max-width:1400px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:44px;align-items:center}
 @media(max-width:1000px){.hero-in{grid-template-columns:1fr}}
@@ -529,7 +529,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
    LOGIN
    ========================================================= */
 .login-page{min-height:100vh;padding:26px;display:grid;place-items:center;position:relative;overflow:hidden}
-.login-page::before{content:'';position:absolute;inset:0;background:url('../assets/cityhall.png') center/cover no-repeat}
+.login-page::before{content:'';position:absolute;inset:0;background:url('../assets/cityhall.jpg') center/cover no-repeat}
 .login-page::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,rgba(8,40,98,.96),rgba(10,50,120,.9) 55%,rgba(12,58,140,.86))}
 .login-wrap{position:relative;z-index:2;width:100%;max-width:1240px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);
   gap:52px;align-items:center}

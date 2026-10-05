@@ -27,7 +27,10 @@ async function api(path, options = {}) {
             ...options
         });
     } catch (error) {
-        throw new Error('Cannot reach the MandaSafe server. Start it with start-mandasafe.bat, then reload this page.');
+        // The start-the-server hint is for a developer's own PC; online, visitors get a plain message.
+        throw new Error(['localhost', '127.0.0.1'].includes(location.hostname)
+            ? 'Cannot reach the MandaSafe server. Start it with start-mandasafe.bat, then reload this page.'
+            : 'MandaSafe is not responding right now. Please check your connection and try again in a moment.');
     }
     let data = null;
     try { data = await response.json(); } catch { /* no body */ }

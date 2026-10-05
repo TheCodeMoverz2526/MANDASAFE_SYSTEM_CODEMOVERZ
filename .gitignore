@@ -1,2 +1,11 @@
 # Old nested clone of this same repo - do not track
 mandasafe/MANDASAFE_SYSTEM_CODEMOVERZ/
+
+# Python bytecode cache
+__pycache__/
+
+# Secrets and private data: never commit these. The legacy Node .env and data/store.json
+# (account password hashes and session tokens) used to be tracked.
+mandasafe/.env
+mandasafe/data/store.json
+mandasafe/data/store.backup.json

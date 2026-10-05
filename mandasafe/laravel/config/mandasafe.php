@@ -101,6 +101,14 @@ return [
     'analytics_cache_seconds' => (int) env('MANDASAFE_ANALYTICS_CACHE', 86400),
 
     /*
+    | After a change to the data, recompute the models in the background and keep showing the
+    | previous results until that is done (see App\Services\AnalyticsWarmer). php_cli is the
+    | command-line PHP that runs `artisan mandasafe:warm` when the site runs under PHP-FPM.
+    */
+    'background_warm' => filter_var(env('MANDASAFE_BACKGROUND_WARM', true), FILTER_VALIDATE_BOOLEAN),
+    'php_cli' => env('MANDASAFE_PHP_CLI', 'php'),
+
+    /*
     |--------------------------------------------------------------------------
     | Machine learning
     |--------------------------------------------------------------------------

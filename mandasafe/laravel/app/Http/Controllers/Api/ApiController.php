@@ -37,6 +37,15 @@ abstract class ApiController extends Controller
         }
     }
 
+    /** True when the request carries an active administrator session (for open routes). */
+    protected function requestIsAdmin(Request $request): bool
+    {
+        $accounts = app(\App\Services\AccountService::class);
+        $account = $accounts->accountForToken($accounts->tokenFromRequest($request));
+
+        return $account !== null && $account->isAdmin();
+    }
+
     /** The administrator the RimasAdmin middleware resolved for this request. */
     protected function actor(Request $request): Account
     {

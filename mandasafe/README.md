@@ -25,7 +25,7 @@ By hand, the same thing is:
 cd laravel
 composer install
 php artisan migrate
-php artisan db:seed          # guarantees the default administrator exists
+php artisan db:seed          # creates the administrator if missing and prints its password once
 php artisan serve --port=5500
 ```
 
@@ -36,18 +36,22 @@ MySQL or Node.js is needed to run it.
 
 ## Accounts
 
-| Role | Email | Password |
-|---|---|---|
-| Administrator | `admin@rimas.gov.ph` | `Admin@2026` |
-| Resident (demo) | `juan@example.com` | `Resident2026` |
+| Role | Email |
+|---|---|
+| Administrator | `admin@rimas.gov.ph` |
+| Resident (demo) | `juan@example.com` |
 
-Change both before real use (**Forgot password?** on the sign-in page). New sign-ups are always
-residents; an admin promotes them from **User Management**.
+No password is written in the code or in this file. A new database gets an administrator from
+`php artisan db:seed`, with the password in `MANDASAFE_ADMIN_PASSWORD` or a random one printed
+once. Set or change any password with `php artisan mandasafe:set-password <email>`.
 
-> The old JSON store held Node `scrypt` password hashes, which PHP cannot verify, so the import
-> re-hashed every account with bcrypt. The two accounts above kept their published passwords.
-> `cruzjuan11@gmail.com` had no documented password and was set to **`ChangeMe@2026`** — its
-> owner can change it from **Forgot password?** without an administrator.
+The sample passwords earlier versions published still work on a development PC, but **in
+production (`APP_ENV=production`) they are refused at sign-in** until the password is changed.
+New sign-ups are always residents; an admin promotes them from **User Management**.
+
+> The old JSON store held Node `scrypt` password hashes, which PHP cannot verify, so
+> `php artisan mandasafe:import` gives every imported account a new password (random, or
+> `--fallback-password`) and prints the list.
 
 ## The database
 

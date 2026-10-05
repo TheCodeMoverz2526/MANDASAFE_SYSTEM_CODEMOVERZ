@@ -43,9 +43,10 @@ class IncidentController extends ApiController
     }
 
     /** GET /api/incidents — newest first, the order the console and the maps expect. */
-    public function index()
+    /** GET /api/incidents — open to everyone; who entered each record is for admins only. */
+    public function index(Request $request)
     {
-        return response()->json(Incident::listApi());
+        return response()->json(Incident::listApi($this->requestIsAdmin($request)));
     }
 
     /** POST /api/incidents */
@@ -74,7 +75,7 @@ class IncidentController extends ApiController
 
             Setting::touchDataVersion();
 
-            $api = $incident->toApi();
+            $api = $incident->toApi(true);
             $this->notifications->notifyIncidentCreated($api, $this->actor($request)->email);
 
             return $api;
@@ -107,7 +108,7 @@ class IncidentController extends ApiController
 
             Setting::touchDataVersion();
 
-            $api = $incident->toApi();
+            $api = $incident->toApi(true);
             $this->notifications->notifyIncidentUpdated($api, $this->actor($request)->email);
 
             return $api;
@@ -115,17 +116,55 @@ class IncidentController extends ApiController
     }
 
     /** DELETE /api/incidents/{id} */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $incident = Incident::find(rawurldecode($id));
         if (! $incident) {
             return response()->json(['error' => 'Accident not found.'], 404);
         }
 
+        $api = $incident->toApi(true);
         $incident->delete();
         Setting::touchDataVersion();
+        $this->notifications->notifyIncidentDeleted($api, $this->actor($request)->email);
 
         return response()->json(['deleted' => $incident->id]);
+    }
+
+    /**
+     * POST /api/incidents/bulk-delete — removes every listed accident in one transaction, for
+     * the console's "delete filtered" button (e.g. every record from one date or one year).
+     * Either all of them go or, on an error, none do.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        return $this->attempt(function () use ($request) {
+            $ids = $this->body($request)['ids'] ?? null;
+            if (! is_array($ids) || $ids === []) {
+                throw new \App\Exceptions\RimasException('No accidents selected to delete.');
+            }
+            $ids = array_values(array_unique(array_filter($ids, fn ($id) => is_string($id) && $id !== '')));
+
+            $deleted = 0;
+            $removed = [];
+            DB::transaction(function () use ($ids, &$deleted, &$removed) {
+                foreach (array_chunk($ids, 500) as $chunk) {
+                    // What is about to go, for the notification.
+                    foreach (Incident::whereIn('id', $chunk)->get(['id', 'date', 'barangay']) as $row) {
+                        $removed[] = ['id' => $row->id, 'date' => $row->date, 'barangay' => $row->barangay];
+                    }
+                    $deleted += Incident::whereIn('id', $chunk)->delete();
+                }
+            });
+
+            if ($deleted > 0) {
+                Setting::touchDataVersion();
+                usort($removed, fn ($a, $b) => strcmp((string) $a['date'], (string) $b['date']));
+                $this->notifications->notifyIncidentsDeleted($removed, $this->actor($request)->email);
+            }
+
+            return ['deletedCount' => $deleted, 'notFoundCount' => count($ids) - $deleted];
+        });
     }
 
     /**
@@ -183,7 +222,7 @@ class IncidentController extends ApiController
                             'created_by' => $actorEmail,
                             'created_at_iso' => AccountService::isoNow(),
                             'sort_key' => $sortKey++,
-                        ])->toApi();
+                        ])->toApi(true);
                     } catch (\App\Exceptions\RimasException $exception) {
                         $skipped[] = ['index' => $index, 'reason' => $exception->getMessage()];
                     }

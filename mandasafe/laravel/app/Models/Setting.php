@@ -42,10 +42,14 @@ class Setting extends Model
         });
     }
 
-    /** Bumped by every write so cached predictions/hotspots/summaries are recomputed. */
+    /**
+     * Bumped by every write so cached predictions/hotspots/summaries are recomputed — in the
+     * background, once this request is over (see AnalyticsWarmer).
+     */
     public static function touchDataVersion(): void
     {
         static::put('dataVersion', (int) static::get('dataVersion', 0) + 1);
+        \App\Services\AnalyticsWarmer::kick();
     }
 
     public static function dataVersion(): int

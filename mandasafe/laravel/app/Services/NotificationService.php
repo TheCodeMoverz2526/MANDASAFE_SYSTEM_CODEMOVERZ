@@ -81,6 +81,48 @@ class NotificationService
         );
     }
 
+    /** Raised when an administrator deletes one accident report. */
+    public function notifyIncidentDeleted(array $incident, ?string $actorEmail): Notification
+    {
+        $by = $actorEmail ? " by {$actorEmail}" : '';
+
+        return $this->create(
+            'incident_deleted',
+            'Accident report deleted',
+            "{$incident['id']} ({$incident['date']}, {$incident['barangay']}) was deleted{$by}."
+        );
+    }
+
+    /**
+     * Raised once per "Delete selected", rather than once per row: how many went, the dates
+     * they covered and the first few ids, so the feed says what was removed.
+     *
+     * @param  array<int, array{id: string, date: ?string}>  $incidents  the rows actually deleted
+     */
+    public function notifyIncidentsDeleted(array $incidents, ?string $actorEmail): ?Notification
+    {
+        $count = count($incidents);
+        if ($count === 0) {
+            return null;
+        }
+        if ($count === 1) {
+            return $this->notifyIncidentDeleted($incidents[0] + ['barangay' => 'unknown barangay'], $actorEmail);
+        }
+
+        $by = $actorEmail ? " by {$actorEmail}" : '';
+        $dates = array_filter(array_column($incidents, 'date'));
+        sort($dates, SORT_STRING);
+        $span = $dates === [] ? '' : (reset($dates) === end($dates) ? ' from ' . reset($dates) : ' dated ' . reset($dates) . ' to ' . end($dates));
+        $ids = array_column($incidents, 'id');
+        $sample = implode(', ', array_slice($ids, 0, 3)) . ($count > 3 ? ' and ' . ($count - 3) . ' more' : '');
+
+        return $this->create(
+            'incident_deleted',
+            'Accident reports deleted',
+            "{$count} accident reports{$span} were deleted{$by}: {$sample}."
+        );
+    }
+
     /** Raised once per CSV/Excel import, rather than once per row. */
     public function notifyIncidentsImported(int $count, ?string $actorEmail): ?Notification
     {
