@@ -1240,6 +1240,17 @@
     </div>
 
     <!-- ADD USER MODAL -->
+    <!-- User details: opened by clicking a row in User Management -->
+    <div class="modal-overlay" id="userDetailsModal">
+        <div class="modal user-details-modal">
+            <div class="modal-header">
+                <div class="modal-title">User Details</div><button class="modal-close" onclick="closeUserDetails()"><i
+                        class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="userDetailsBody"></div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="addUserModal">
         <div class="modal">
             <div class="modal-header">

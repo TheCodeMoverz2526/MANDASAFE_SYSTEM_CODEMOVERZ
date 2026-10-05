@@ -134,6 +134,7 @@ const api = {
     getMe: () => apiRequest('/api/auth/me'),
     logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
     getAccounts: () => apiRequest('/api/accounts'),
+    getAccountDetails: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`),
     createAccount: (body) => apiRequest('/api/accounts', { method: 'POST', body: JSON.stringify(body) }),
     updateAccount: (id, body) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deleteAccount: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -2430,13 +2431,13 @@ async function renderUserTable() {
         const lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never signed in';
         const isSelf = currentUser && u.id === currentUser.id;
         return `
-                <tr>
+                <tr class="user-row" title="View details" onclick="openUserDetails('${h(u.id)}')">
                     <td><div style="display:flex;align-items:center;gap:10px;"><div style="width:32px;height:32px;border-radius:50%;background:${h(u.color)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;">${h(u.avatar)}</div><div><div style="font-weight:600;font-size:13px;">${h(u.name)}${isSelf ? ' <span style="font-size:10px;color:var(--gray-400);">(you)</span>' : ''}</div><div style="font-size:10px;color:var(--gray-400);">${h(u.dept)}</div></div></div></td>
                     <td style="font-size:12px;color:var(--gray-500);">${h(u.email)}<div style="font-size:10px;">${h(u.phone)}</div></td>
                     <td>${u.role === 'admin' ? '<span class="admin-badge"><i class="fas fa-shield-alt"></i> Admin</span>' : '<span class="user-badge"><i class="fas fa-user"></i> User</span>'}</td>
                     <td><span class="status-badge status-${h(u.status)}">${u.status === 'active' ? '● Active' : '○ Inactive'}</span></td>
                     <td style="font-size:12px;color:var(--gray-500);">${lastLogin}</td>
-                    <td><div style="display:flex;gap:5px;">
+                    <td onclick="event.stopPropagation()"><div style="display:flex;gap:5px;">
                         <button class="btn btn-sm" style="background:${u.status === 'active' ? '#fef2f2' : '#f0fdf4'};color:${u.status === 'active' ? '#dc2626' : '#16a34a'};border:1px solid ${u.status === 'active' ? '#fecaca' : '#bbf7d0'};" title="${u.status === 'active' ? 'Deactivate' : 'Reactivate'}" onclick="toggleUserStatus('${h(u.id)}')"><i class="fas ${u.status === 'active' ? 'fa-ban' : 'fa-check'}"></i></button>
                         ${isSelf ? '' : `<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" title="Remove account" onclick="deleteUserAccount('${h(u.id)}')"><i class="fas fa-trash-alt"></i></button>`}
                     </div></td>
@@ -2444,6 +2445,131 @@ async function renderUserTable() {
             `;
     }).join('');
 }
+
+// ===== USER DETAILS =====
+// Clicking a row opens everything the server knows about that account: profile, security
+// summary and activity history. The password itself is never shown — only its bcrypt hash is
+// stored, so nobody (administrators included) can read it back; the panel says when it changed.
+const USER_ACTIVITY_KINDS = {
+    login: { label: 'Signed in', icon: 'fa-right-to-bracket', bg: '#f0fdf4', fg: '#16a34a', group: 'auth' },
+    logout: { label: 'Signed out', icon: 'fa-right-from-bracket', bg: '#f1f5f9', fg: '#64748b', group: 'auth' },
+    login_failed: { label: 'Failed sign-in', icon: 'fa-triangle-exclamation', bg: '#fef2f2', fg: '#dc2626', group: 'auth' },
+    password_changed: { label: 'Password changed', icon: 'fa-key', bg: '#fffbeb', fg: '#d97706', group: 'account' },
+    profile_updated: { label: 'Profile updated', icon: 'fa-user-pen', bg: '#eff6ff', fg: '#2563eb', group: 'account' },
+    account_created: { label: 'Account created', icon: 'fa-user-plus', bg: '#eff6ff', fg: '#2563eb', group: 'account' },
+    account_changed: { label: 'Account changed by admin', icon: 'fa-user-shield', bg: '#f5f3ff', fg: '#7c3aed', group: 'account' },
+    admin_action: { label: 'Managed a user', icon: 'fa-users-gear', bg: '#f5f3ff', fg: '#7c3aed', group: 'data' },
+    incident_created: { label: 'Added accident', icon: 'fa-plus', bg: '#ecfeff', fg: '#0891b2', group: 'data' },
+    incident_updated: { label: 'Edited accident', icon: 'fa-pen', bg: '#ecfeff', fg: '#0891b2', group: 'data' },
+    incident_deleted: { label: 'Deleted accident', icon: 'fa-trash-alt', bg: '#fef2f2', fg: '#dc2626', group: 'data' },
+    incident_imported: { label: 'Imported accidents', icon: 'fa-file-import', bg: '#ecfeff', fg: '#0891b2', group: 'data' },
+    prediction_input: { label: 'Baseline data', icon: 'fa-chart-line', bg: '#ecfeff', fg: '#0891b2', group: 'data' }
+};
+let userDetailsData = null;
+let userDetailsFilter = 'all';
+
+function describeDevice(ua) {
+    if (!ua) return '';
+    const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome'
+        : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+    const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS'
+        : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : /Symfony|curl|artisan/i.test(ua) ? 'Server' : '';
+    return os ? `${browser} on ${os}` : browser;
+}
+
+async function openUserDetails(id) {
+    const body = document.getElementById('userDetailsBody');
+    document.getElementById('userDetailsModal').classList.add('open');
+    body.innerHTML = '<div class="ud-empty"><i class="fas fa-spinner fa-spin"></i> Loading details…</div>';
+    userDetailsFilter = 'all';
+    try {
+        userDetailsData = await api.getAccountDetails(id);
+        renderUserDetails();
+    } catch (error) {
+        body.innerHTML = `<div class="ud-empty" style="color:#dc2626;">${escapeMapHtml(error.message)}</div>`;
+    }
+}
+
+function closeUserDetails() {
+    document.getElementById('userDetailsModal').classList.remove('open');
+    userDetailsData = null;
+}
+
+function setUserDetailsFilter(filter) {
+    userDetailsFilter = filter;
+    renderUserDetails();
+}
+
+function renderUserDetails() {
+    if (!userDetailsData) return;
+    const { account: u, security: s, activity } = userDetailsData;
+    const h = v => escapeMapHtml(v ?? '');
+    const when = iso => iso ? new Date(iso).toLocaleString() : '—';
+    const item = (label, value) => `<div class="ud-item"><div class="ud-label">${label}</div><div class="ud-value">${value}</div></div>`;
+
+    const failed = activity.filter(a => a.action === 'login_failed').length;
+    const signIns = activity.filter(a => a.action === 'login').length;
+    const lastIp = activity.find(a => a.action === 'login')?.ip;
+
+    const filters = [['all', 'All'], ['auth', 'Sign-ins'], ['account', 'Account'], ['data', 'Data changes']];
+    const shown = activity.filter(a => userDetailsFilter === 'all' || (USER_ACTIVITY_KINDS[a.action]?.group || 'account') === userDetailsFilter);
+    const log = shown.length ? shown.map(a => {
+        const k = USER_ACTIVITY_KINDS[a.action] || { label: a.action, icon: 'fa-circle', bg: '#f1f5f9', fg: '#64748b' };
+        const meta = [when(a.at), a.ip ? 'IP ' + h(a.ip) : '', h(describeDevice(a.userAgent))].filter(Boolean).join(' · ');
+        return `<div class="ud-log-row">
+                <div class="ud-log-icon" style="background:${k.bg};color:${k.fg};"><i class="fas ${k.icon}"></i></div>
+                <div style="min-width:0;"><div><strong>${h(k.label)}</strong>${a.detail ? ' — ' + h(a.detail) : ''}</div>
+                <div class="ud-log-meta">${meta}</div></div>
+            </div>`;
+    }).join('') : '<div class="ud-empty">No activity recorded yet.</div>';
+
+    document.getElementById('userDetailsBody').innerHTML = `
+        <div class="ud-head">
+            <div class="ud-avatar" style="background:${h(u.color)};">${h(u.avatar)}</div>
+            <div style="min-width:0;">
+                <div class="ud-name">${h(u.name)}</div>
+                <div class="ud-sub">${h(u.id)} · ${h(u.dept)}</div>
+                <div style="margin-top:6px;display:flex;gap:6px;">
+                    ${u.role === 'admin' ? '<span class="admin-badge"><i class="fas fa-shield-alt"></i> Admin</span>' : '<span class="user-badge"><i class="fas fa-user"></i> User</span>'}
+                    <span class="status-badge status-${h(u.status)}">${u.status === 'active' ? '● Active' : '○ Inactive'}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="ud-section">Profile</div>
+        <div class="ud-grid">
+            ${item('Email', h(u.email))}
+            ${item('Contact number', h(u.phone))}
+            ${item('Account created', when(u.createdAt))}
+            ${item('Last updated', when(s.updatedAt))}
+        </div>
+
+        <div class="ud-section">Sign-in &amp; security</div>
+        <div class="ud-grid">
+            ${item('Last login', u.lastLoginAt ? when(u.lastLoginAt) : 'Never signed in')}
+            ${item('Last login IP', lastIp ? h(lastIp) : '—')}
+            ${item('Password', s.passwordChangedAt ? 'Last changed ' + when(s.passwordChangedAt) : 'Not changed since tracking began')}
+            ${item('Active sessions', s.activeSessions ? `${s.activeSessions} (latest ${when(s.lastSessionStartedAt)})` : 'None')}
+            ${u.role === 'admin' ? item('Authenticator app', s.twoFactorEnabledAt ? 'Set up ' + when(s.twoFactorEnabledAt) : 'Not set up yet') : ''}
+            ${item('Recent sign-ins / failures', `${signIns} / <span style="color:${failed ? '#dc2626' : 'inherit'};">${failed}</span>`)}
+        </div>
+        <div class="ud-note"><i class="fas fa-lock" style="margin-top:2px;"></i>
+            Passwords are stored encrypted (one-way hash) and cannot be viewed by anyone, including administrators.
+            The user can set a new one with "Forgot password?" on the sign-in page.</div>
+
+        <div class="ud-section">Activity (${activity.length})</div>
+        <div class="ud-filters">${filters.map(([key, label]) =>
+            `<button class="ud-filter${userDetailsFilter === key ? ' active' : ''}" onclick="setUserDetailsFilter('${key}')">${label}</button>`).join('')}</div>
+        <div class="ud-log">${log}</div>
+    `;
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('userDetailsModal')?.classList.contains('open')) closeUserDetails();
+});
+document.getElementById('userDetailsModal')?.addEventListener('click', e => {
+    if (e.target.id === 'userDetailsModal') closeUserDetails();
+});
 
 function toggleUserStatus(id) {
     const account = accountList.find(a => a.id === id);
