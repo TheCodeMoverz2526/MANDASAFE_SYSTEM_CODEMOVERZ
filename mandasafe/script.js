@@ -2509,9 +2509,8 @@ function renderUserDetails() {
 
     const failed = activity.filter(a => a.action === 'login_failed').length;
     const signIns = activity.filter(a => a.action === 'login').length;
-    const lastIp = activity.find(a => a.action === 'login')?.ip;
 
-    const filters = [['all', 'All'], ['auth', 'Sign-ins'], ['account', 'Account'], ['data', 'Data changes']];
+    const filters = [['all', 'All'], ['auth', 'Sign-ins'], ['account', 'Account']];
     const shown = activity.filter(a => userDetailsFilter === 'all' || (USER_ACTIVITY_KINDS[a.action]?.group || 'account') === userDetailsFilter);
     const log = shown.length ? shown.map(a => {
         const k = USER_ACTIVITY_KINDS[a.action] || { label: a.action, icon: 'fa-circle', bg: '#f1f5f9', fg: '#64748b' };
@@ -2547,7 +2546,6 @@ function renderUserDetails() {
         <div class="ud-section">Sign-in &amp; security</div>
         <div class="ud-grid">
             ${item('Last login', u.lastLoginAt ? when(u.lastLoginAt) : 'Never signed in')}
-            ${item('Last login IP', lastIp ? h(lastIp) : '—')}
             ${item('Password', s.passwordChangedAt ? 'Last changed ' + when(s.passwordChangedAt) : 'Not changed since tracking began')}
             ${item('Active sessions', s.activeSessions ? `${s.activeSessions} (latest ${when(s.lastSessionStartedAt)})` : 'None')}
             ${u.role === 'admin' ? item('Authenticator app', s.twoFactorEnabledAt ? 'Set up ' + when(s.twoFactorEnabledAt) : 'Not set up yet') : ''}
