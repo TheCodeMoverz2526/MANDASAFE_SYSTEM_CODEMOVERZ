@@ -59,8 +59,10 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // MYSQL_ATTR_SSL_CA may be relative to the app root (e.g. certs/aiven-ca.pem) so the
+            // same value works locally and on Vercel, where the app lives at a different path.
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => ($ca = env('MYSQL_ATTR_SSL_CA')) && is_file(base_path($ca)) ? base_path($ca) : $ca,
             ]) : [],
         ],
 

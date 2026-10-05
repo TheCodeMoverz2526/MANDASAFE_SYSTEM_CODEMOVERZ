@@ -1,0 +1,5 @@
+{
+    "require-dev": {
+        "revolution/laravel-vercel-installer": "^1.3"
+    }
+}
