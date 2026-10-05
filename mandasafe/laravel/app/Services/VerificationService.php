@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\RimasException;
 use App\Models\Account;
+use App\Models\AccountActivity;
 use App\Models\OtpChallenge;
 use App\Models\RimasSession;
 use Illuminate\Support\Facades\Hash;
@@ -157,6 +158,7 @@ class VerificationService
 
         if ($step === null) {
             $left = max(0, self::MAX_ATTEMPTS - $challenge->attempts);
+            AccountActivity::record($account->id, 'login_failed', 'Wrong authenticator code.');
 
             if ($left === 0) {
                 $this->discard($challenge);

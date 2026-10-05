@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\RimasException;
 use App\Models\Account;
+use App\Models\AccountActivity;
 use App\Models\RimasSession;
 use App\Models\Setting;
 use Illuminate\Http\Request;
@@ -165,6 +166,7 @@ class AccountService
         ]);
 
         $api = $account->toApi();
+        AccountActivity::record($account->id, 'account_created', 'Account created (' . $account->role . ').');
 
         // The very first account bootstraps itself as admin, with nobody yet to notify;
         // every account after that is someone the administrators should know arrived.
@@ -232,6 +234,7 @@ class AccountService
         $account->save();
 
         $api = $account->toApi();
+        AccountActivity::record($account->id, 'profile_updated', 'Changed own ' . implode(', ', $changed) . '.');
         $this->notifications->notifyProfileUpdated($api, $changed);
 
         return $api;
@@ -251,12 +254,15 @@ class AccountService
             throw new RimasException('Incorrect email/phone number or password.');
         }
         if ($account->status === 'inactive') {
+            AccountActivity::record($account->id, 'login_failed', 'Sign-in refused: the account is deactivated.');
             throw new RimasException('This account has been deactivated. Contact an administrator.');
         }
         if (! Hash::check((string) $password, $account->password)) {
+            AccountActivity::record($account->id, 'login_failed', 'Wrong password.');
             throw new RimasException('Incorrect email/phone number or password.');
         }
         if (app()->environment('production') && in_array(hash('sha256', (string) $password), self::RETIRED_PASSWORD_SHA256, true)) {
+            AccountActivity::record($account->id, 'login_failed', 'Sign-in refused: still using a retired default password.');
             throw new RimasException($account->isAdmin()
                 ? 'This administrator still uses the old default password. Set a new one on the server: php artisan mandasafe:set-password ' . $account->email
                 : 'This account still uses a sample password that is no longer allowed. Use "Forgot password?" or ask an administrator to reset it.');
@@ -291,7 +297,9 @@ class AccountService
 
         $account->password = Hash::make($password);
         $account->updated_at_iso = self::isoNow();
+        $account->password_changed_at_iso = $account->updated_at_iso;
         $account->save();
+        AccountActivity::record($account->id, 'password_changed', 'Password reset through "Forgot password?".');
 
         $api = $account->toApi();
         $this->notifications->notifyPasswordChanged($api);
@@ -304,17 +312,46 @@ class AccountService
         return Account::orderBy('id')->get()->map->toApi()->all();
     }
 
-    private function activeAdminCount(): int
-    {
-        return Account::where('role', 'admin')->where('status', 'active')->count();
-    }
-
-    public function updateAccount(string $id, array $changes): array
+    /**
+     * Everything User Management's details panel shows about one account. The password itself
+     * cannot be shown — only its bcrypt hash is stored — so this reports when it last changed.
+     */
+    public function accountDetails(string $id): array
     {
         $account = Account::find($id);
         if (! $account) {
             throw new RimasException('User not found.');
         }
+
+        $sessions = RimasSession::where('account_id', $id)->where('expires_at_iso', '>', self::isoNow());
+
+        return [
+            'account' => $account->toApi(),
+            'security' => [
+                'passwordChangedAt' => $account->password_changed_at_iso,
+                'twoFactorEnabledAt' => $account->totp_enabled_at_iso,
+                'activeSessions' => (clone $sessions)->count(),
+                'lastSessionStartedAt' => (clone $sessions)->max('created_at_iso'),
+                'updatedAt' => $account->updated_at_iso,
+            ],
+            'activity' => AccountActivity::where('account_id', $id)
+                ->orderByDesc('created_at_iso')->orderByDesc('id')
+                ->limit(200)->get()->map->toApi()->all(),
+        ];
+    }
+
+    private function activeAdminCount(): int
+    {
+        return Account::where('role', 'admin')->where('status', 'active')->count();
+    }
+
+    public function updateAccount(string $id, array $changes, ?Account $actor = null): array
+    {
+        $account = Account::find($id);
+        if (! $account) {
+            throw new RimasException('User not found.');
+        }
+        $made = [];
 
         if (array_key_exists('role', $changes) && $changes['role'] !== null) {
             if (! in_array($changes['role'], ['admin', 'user'], true)) {
@@ -323,6 +360,9 @@ class AccountService
             // Never let the last remaining administrator demote themselves out of the system.
             if ($account->role === 'admin' && $changes['role'] !== 'admin' && $this->activeAdminCount() <= 1) {
                 throw new RimasException('At least one active administrator must remain.');
+            }
+            if ($changes['role'] !== $account->role) {
+                $made[] = 'role changed to ' . $changes['role'];
             }
             $account->role = $changes['role'];
         }
@@ -333,6 +373,9 @@ class AccountService
             }
             if ($account->role === 'admin' && $changes['status'] === 'inactive' && $this->activeAdminCount() <= 1) {
                 throw new RimasException('At least one active administrator must remain.');
+            }
+            if ($changes['status'] !== $account->status) {
+                $made[] = $changes['status'] === 'active' ? 'reactivated' : 'deactivated';
             }
             $account->status = $changes['status'];
         }
@@ -345,6 +388,14 @@ class AccountService
         }
         $account->updated_at_iso = self::isoNow();
         $account->save();
+
+        if ($made !== []) {
+            $what = ucfirst(implode(', ', $made));
+            AccountActivity::record($account->id, 'account_changed', $what . ($actor ? ' by ' . $actor->email : '') . '.');
+            if ($actor && $actor->id !== $account->id) {
+                AccountActivity::record($actor->id, 'admin_action', $what . ' for ' . $account->email . '.');
+            }
+        }
 
         return $account->toApi();
     }
@@ -362,7 +413,9 @@ class AccountService
         $api = $account->toApi();
 
         RimasSession::where('account_id', $id)->delete();
+        AccountActivity::where('account_id', $id)->delete();
         $account->delete();
+        AccountActivity::recordFor($actorEmail, 'admin_action', 'Removed the account ' . $api['email'] . '.');
 
         $this->notifications->notifyAccountRemoved($api, $actorEmail);
 
@@ -392,14 +445,17 @@ class AccountService
 
         $account->last_login_at_iso = self::isoNow();
         $account->save();
+        AccountActivity::record($account->id, 'login', $account->isAdmin() ? 'Signed in (password + authenticator code).' : 'Signed in.');
 
         return ['token' => $token, 'expiresAt' => $expiresAt, 'account' => $account->toApi()];
     }
 
     public function destroySession(?string $token): void
     {
-        if ($token) {
-            RimasSession::where('token', $token)->delete();
+        $session = $token ? RimasSession::find($token) : null;
+        if ($session) {
+            AccountActivity::record($session->account_id, 'logout', 'Signed out.');
+            $session->delete();
         }
     }
 

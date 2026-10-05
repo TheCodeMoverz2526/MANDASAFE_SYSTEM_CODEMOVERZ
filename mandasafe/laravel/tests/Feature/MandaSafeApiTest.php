@@ -103,6 +103,30 @@ class MandaSafeApiTest extends TestCase
         $this->postJson('/api/incidents/bulk-delete', ['ids' => ['#A10001']], $residentHeaders)->assertStatus(403);
     }
 
+    public function test_an_administrator_sees_a_users_details_and_activity_but_never_the_password(): void
+    {
+        $this->postJson('/api/auth/login', ['identifier' => 'juan@example.com', 'password' => 'wrong'])->assertStatus(401);
+        $token = $this->tokenFor('juan@example.com', 'Test-Resident#2026');
+        $this->postJson('/api/auth/logout', [], ['Authorization' => 'Bearer ' . $token])->assertOk();
+        $this->putJson('/api/accounts/USR-1002', ['status' => 'inactive'], $this->adminHeaders())->assertOk();
+
+        $this->postJson('/api/auth/login', ['identifier' => 'juan@example.com', 'password' => 'Test-Resident#2026'])->assertStatus(401);
+
+        $details = $this->getJson('/api/accounts/USR-1002', $this->adminHeaders())->assertOk();
+        $details->assertJsonPath('account.email', 'juan@example.com')
+            ->assertJsonPath('security.activeSessions', 0);
+        $this->assertSame(
+            ['login_failed', 'account_changed', 'logout', 'login', 'login_failed'],
+            array_column($details->json('activity'), 'action')
+        );
+        $this->assertStringContainsString('Deactivated by admin@rimas.gov.ph', $details->json('activity.1.detail'));
+        $this->assertStringNotContainsString('password":"', $details->getContent());
+        $this->assertStringNotContainsString('$2y$', $details->getContent());
+
+        $this->getJson('/api/accounts/USR-9999', $this->adminHeaders())->assertStatus(404);
+        $this->getJson('/api/accounts/USR-1002')->assertStatus(401);
+    }
+
     public function test_sign_in_rejects_a_wrong_password(): void
     {
         $this->postJson('/api/auth/login', ['identifier' => 'admin@rimas.gov.ph', 'password' => 'wrong'])

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\RimasException;
+use App\Models\AccountActivity;
 use App\Models\PredictionInput;
 use App\Models\Setting;
 use App\Services\AccountService;
@@ -67,6 +68,7 @@ class PredictionInputController extends ApiController
             ]);
 
             Setting::touchDataVersion();
+            AccountActivity::record($this->actor($request)->id, 'prediction_input', "Added baseline data {$input->id} ({$input->barangay}, {$input->month}).");
 
             return $input->toApi(true);
         }, 400, 201);
@@ -99,13 +101,14 @@ class PredictionInputController extends ApiController
             ])->save();
 
             Setting::touchDataVersion();
+            AccountActivity::record($this->actor($request)->id, 'prediction_input', "Edited baseline data {$input->id} ({$input->barangay}, {$input->month}).");
 
             return $input->toApi(true);
         });
     }
 
     /** DELETE /api/prediction-inputs/{id} */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $input = PredictionInput::find(rawurldecode($id));
         if (! $input) {
@@ -114,6 +117,7 @@ class PredictionInputController extends ApiController
 
         $input->delete();
         Setting::touchDataVersion();
+        AccountActivity::record($this->actor($request)->id, 'prediction_input', "Deleted baseline data {$input->id} ({$input->barangay}, {$input->month}).");
 
         return response()->json(['deleted' => $input->id]);
     }

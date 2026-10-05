@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\AccountActivity;
 use App\Models\Incident;
 use App\Models\Setting;
 use App\Services\AccountService;
@@ -77,6 +78,7 @@ class IncidentController extends ApiController
 
             $api = $incident->toApi(true);
             $this->notifications->notifyIncidentCreated($api, $this->actor($request)->email);
+            AccountActivity::record($this->actor($request)->id, 'incident_created', "Added accident {$api['id']} ({$api['barangay']}, {$api['date']}).");
 
             return $api;
         }, 400, 201);
@@ -110,6 +112,7 @@ class IncidentController extends ApiController
 
             $api = $incident->toApi(true);
             $this->notifications->notifyIncidentUpdated($api, $this->actor($request)->email);
+            AccountActivity::record($this->actor($request)->id, 'incident_updated', "Edited accident {$api['id']} ({$api['barangay']}, {$api['date']}).");
 
             return $api;
         });
@@ -127,6 +130,7 @@ class IncidentController extends ApiController
         $incident->delete();
         Setting::touchDataVersion();
         $this->notifications->notifyIncidentDeleted($api, $this->actor($request)->email);
+        AccountActivity::record($this->actor($request)->id, 'incident_deleted', "Deleted accident {$api['id']} ({$api['barangay']}, {$api['date']}).");
 
         return response()->json(['deleted' => $incident->id]);
     }
@@ -161,6 +165,7 @@ class IncidentController extends ApiController
                 Setting::touchDataVersion();
                 usort($removed, fn ($a, $b) => strcmp((string) $a['date'], (string) $b['date']));
                 $this->notifications->notifyIncidentsDeleted($removed, $this->actor($request)->email);
+                AccountActivity::record($this->actor($request)->id, 'incident_deleted', "Deleted {$deleted} accident record(s) in bulk.");
             }
 
             return ['deletedCount' => $deleted, 'notFoundCount' => count($ids) - $deleted];
@@ -231,6 +236,7 @@ class IncidentController extends ApiController
 
             Setting::touchDataVersion();
             $this->notifications->notifyIncidentsImported(count($created), $actorEmail);
+            AccountActivity::record($this->actor($request)->id, 'incident_imported', 'Imported ' . count($created) . ' accident record(s), skipped ' . count($skipped) . '.');
 
             return [
                 'created' => $created,

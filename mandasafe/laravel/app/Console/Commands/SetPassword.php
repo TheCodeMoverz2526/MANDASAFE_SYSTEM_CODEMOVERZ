@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Account;
+use App\Models\AccountActivity;
 use App\Models\RimasSession;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
@@ -45,8 +46,10 @@ class SetPassword extends Command
 
         $account->password = Hash::make($password);
         $account->updated_at_iso = now()->utc()->format('Y-m-d\TH:i:s.v\Z');
+        $account->password_changed_at_iso = $account->updated_at_iso;
         $account->save();
         RimasSession::where('account_id', $account->id)->delete();
+        AccountActivity::record($account->id, 'password_changed', 'Password set from the server command line.');
 
         $this->info("  Password updated for {$account->email}. All of its sessions were signed out.");
 
