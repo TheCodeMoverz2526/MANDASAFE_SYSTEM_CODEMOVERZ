@@ -44,7 +44,28 @@ function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
 function showError(id, message) { const box = document.getElementById(id); box.textContent = message; box.style.display = 'block'; }
 function clearErrors() { document.querySelectorAll('.auth-error').forEach(error => { error.textContent = ''; error.style.display = 'none'; }); }
 function showPanel(id) { document.querySelectorAll('.auth-panel').forEach(panel => panel.classList.toggle('active', panel.id === id)); clearErrors(); }
-function setBusy(on) { document.querySelectorAll('.auth-submit').forEach(b => b.disabled = on); }
+/* While a request is out, the buttons are disabled and say what is happening ("Signing in…",
+   from each button's data-busy) next to a spinner. Once signed in they stay that way: the
+   browser is already on its way to the next page. */
+let signedIn = false;
+function setBusy(on) {
+    if (!on && signedIn) return;
+    document.querySelectorAll('.auth-submit').forEach(button => {
+        button.disabled = on;
+        if (on && button.dataset.idle === undefined) {
+            button.dataset.idle = button.innerHTML;
+            const spinner = document.createElement('i');
+            spinner.className = 'fas fa-spinner fa-spin';
+            button.replaceChildren(spinner, ` ${button.dataset.busy || 'Please wait…'}`);
+        } else if (!on && button.dataset.idle !== undefined) {
+            button.innerHTML = button.dataset.idle;
+            delete button.dataset.idle;
+        }
+    });
+}
+
+// Back from the dashboard may restore this page exactly as it was left — mid sign-in.
+window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 
 function togglePassword(id, button) {
     const input = document.getElementById(id);
@@ -95,6 +116,9 @@ function completeLogin(session) {
         role: session.account.role,
         dept: session.account.dept
     }));
+    // The logo screen covers the hand-over until the next page's own screen takes over.
+    signedIn = true;
+    if (window.PageLoader) PageLoader.show('Signing you in…');
     // Administrators go to the RIMAS console; residents go to the public dashboard.
     window.location.assign(session.account.role === 'admin' ? 'Mandasafe.html' : 'dashboard.html');
 }

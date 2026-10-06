@@ -65,7 +65,7 @@
                                         class="fas fa-eye"></i></button></div>
                         </div>
                         <div class="auth-error" id="loginError" role="alert"></div>
-                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-lock"></i> Sign In</button>
+                        <button class="btn btn-primary auth-submit" type="submit" data-busy="Signing in…"><i class="fas fa-lock"></i> Sign In</button>
                     </form>
                     <div class="auth-links"><button type="button" onclick="showPanel('createPanel')">Create an
                             account</button><span>·</span><button type="button"
@@ -115,7 +115,7 @@
                                     Policy</a> and processing of my personal data under the Data Privacy
                                 Act.</span></label>
                         <div class="auth-error" id="createError" role="alert"></div>
-                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-user-plus"></i>
+                        <button class="btn btn-primary auth-submit" type="submit" data-busy="Creating account…"><i class="fas fa-user-plus"></i>
                             Create account</button>
                     </form>
                 </div>
@@ -132,7 +132,7 @@
                                 autocomplete="email" required>
                         </div>
                         <div class="auth-error" id="forgotError" role="alert"></div>
-                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-paper-plane"></i>
+                        <button class="btn btn-primary auth-submit" type="submit" data-busy="Sending code…"><i class="fas fa-paper-plane"></i>
                             Send verification code</button>
                     </form>
                 </div>
@@ -152,7 +152,7 @@
                         </div>
                         <div class="demo-otp" id="demoOtp" hidden></div>
                         <div class="auth-error" id="otpError" role="alert"></div>
-                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-check"></i> Verify
+                        <button class="btn btn-primary auth-submit" type="submit" data-busy="Verifying…"><i class="fas fa-check"></i> Verify
                             code</button>
                     </form>
                     <div class="resend-row"><span id="resendTimer">Resend code in 00:30</span><button type="button"
@@ -179,7 +179,7 @@
                                 aria-label="Digit 5"><input inputmode="numeric" maxlength="1" aria-label="Digit 6">
                         </div>
                         <div class="auth-error" id="totpError" role="alert"></div>
-                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-shield-alt"></i>
+                        <button class="btn btn-primary auth-submit" type="submit" data-busy="Verifying…"><i class="fas fa-shield-alt"></i>
                             Verify and sign in</button>
                     </form>
                 </div>
@@ -204,7 +204,7 @@
                                         class="fas fa-eye"></i></button></div>
                         </div>
                         <div class="auth-error" id="newPasswordError" role="alert"></div>
-                        <button class="btn btn-primary auth-submit" type="submit"><i class="fas fa-key"></i> Reset
+                        <button class="btn btn-primary auth-submit" type="submit" data-busy="Resetting password…"><i class="fas fa-key"></i> Reset
                             password</button>
                     </form>
                 </div>
