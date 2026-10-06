@@ -779,13 +779,22 @@ async function populateReportBarangaySelect() {
 /* The Reports page parameters, and the rows/preview they produced last (what Download uses). */
 let lastReport = null;
 function readReportFilters() {
+    const type = document.getElementById('reportTypeSelect')?.value || 'trend';
     return {
+        type,
         from: document.getElementById('reportDateFrom')?.value || '',
         to: document.getElementById('reportDateTo')?.value || '',
-        barangay: document.getElementById('reportBarangaySelect')?.value || 'all'
+        // The barangay summary always covers every barangay.
+        barangay: type === 'barangay' ? 'all' : (document.getElementById('reportBarangaySelect')?.value || 'all')
     };
 }
-function sameReportFilters(a, b) { return a.from === b.from && a.to === b.to && a.barangay === b.barangay; }
+function sameReportFilters(a, b) { return a.type === b.type && a.from === b.from && a.to === b.to && a.barangay === b.barangay; }
+function onReportTypeChange() {
+    const isSummary = document.getElementById('reportTypeSelect')?.value === 'barangay';
+    const group = document.getElementById('reportBarangayGroup');
+    if (group) group.style.display = isSummary ? 'none' : '';
+    generateReport();
+}
 function validReportFilters(f) {
     if (f.from && f.to && f.from > f.to) {
         showToast('⚠️ The start date is after the end date — fix the date range first.');
@@ -796,6 +805,82 @@ function validReportFilters(f) {
 function reportScopeText(f) {
     const rangeText = f.from && f.to ? `${f.from} to ${f.to}` : f.from ? `From ${f.from}` : f.to ? `Through ${f.to}` : 'All dates on record';
     return `${f.barangay === 'all' ? 'All Barangays' : f.barangay} · ${rangeText}`;
+}
+
+/* One row per barangay (all of Mandaluyong's, including those with no accidents in range):
+   counts by severity, share of the city's total, its most common accident type and road,
+   its busiest 2-hour window and how many of its roads the forecast rates high-risk. */
+function buildBarangaySummary(rows, predictions) {
+    const byName = new Map(knownBarangayNames.map(name => [name, []]));
+    rows.forEach(r => {
+        const name = r.barangay || 'Unspecified';
+        if (!byName.has(name)) byName.set(name, []);
+        byName.get(name).push(r);
+    });
+    const topOf = (list, key) => {
+        const counts = new Map();
+        list.forEach(r => {
+            const v = String(r[key] || '').trim();
+            if (v && v !== 'Unknown') counts.set(v, (counts.get(v) || 0) + 1);
+        });
+        let best = null;
+        counts.forEach((c, v) => { if (!best || c > best.count) best = { value: v, count: c }; });
+        return best;
+    };
+    const cityTotal = rows.length;
+    const list = [...byName.entries()].map(([barangay, items]) => {
+        const sev = k => items.filter(r => r.sev === k).length;
+        const peak = peakTwoHourWindow(items);
+        const road = topOf(items, 'road');
+        const type = topOf(items, 'type');
+        return {
+            barangay,
+            total: items.length,
+            share: cityTotal ? items.length / cityTotal * 100 : 0,
+            fatal: sev('Fatal'), injury: sev('Injury'), minor: sev('Minor'), damage: sev('Damage'),
+            topType: type ? type.value : '—',
+            topRoad: road ? `${road.value} (${road.count})` : '—',
+            peakHours: peak.count >= 3 ? `${hourLabel(peak.start)}–${hourLabel((peak.start + 2) % 24)}` : '—',
+            highRiskRoads: predictions.filter(p => p.riskLevel === 'high' && p.barangay === barangay).length
+        };
+    }).sort((a, b) => b.total - a.total || a.barangay.localeCompare(b.barangay));
+    const sum = k => list.reduce((acc, b) => acc + b[k], 0);
+    return {
+        list,
+        totals: { total: cityTotal, fatal: sum('fatal'), injury: sum('injury'), minor: sum('minor'), damage: sum('damage'), highRiskRoads: sum('highRiskRoads') }
+    };
+}
+
+const BARANGAY_SUMMARY_HEADERS = ['#', 'Barangay', 'Accidents', '% of City', 'Fatal', 'Injury', 'Minor', 'Damage Only',
+    'Most Common Type', 'Top Road (accidents)', 'Peak Hours', 'High-Risk Roads'];
+function barangaySummaryRows(summary) {
+    return summary.list.map((b, i) => [i + 1, b.barangay, b.total, `${b.share.toFixed(1)}%`, b.fatal, b.injury, b.minor, b.damage,
+        b.topType, b.topRoad, b.peakHours, b.highRiskRoads]);
+}
+function barangaySummaryTotalRow(summary) {
+    const t = summary.totals;
+    return ['', 'All barangays', t.total, t.total ? '100%' : '0%', t.fatal, t.injury, t.minor, t.damage, '', '', '', t.highRiskRoads];
+}
+
+function renderBarangaySummaryTable(summary) {
+    const num = new Set([0, 2, 3, 4, 5, 6, 7, 11]);
+    const cell = (v, i, extra = '') => `<td style="${num.has(i) ? 'text-align:right;' : ''}${extra}">${escapeMapHtml(typeof v === 'number' ? v.toLocaleString() : v)}</td>`;
+    const withRecords = summary.list.filter(b => b.total).length;
+    return `
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+            <h3 style="font-size:15px;font-weight:700;margin:0;">Summary by Barangay</h3>
+            <span style="font-size:12px;color:var(--gray-500);">${summary.list.length} barangays · ${withRecords} with accidents in this range · busiest first</span>
+        </div>
+        <div style="overflow-x:auto;border:1px solid var(--gray-200);border-radius:8px;">
+            <table class="data-table">
+                <thead><tr>${BARANGAY_SUMMARY_HEADERS.map((h, i) => `<th style="${num.has(i) ? 'text-align:right;' : ''}white-space:nowrap;">${h}</th>`).join('')}</tr></thead>
+                <tbody>
+                    ${barangaySummaryRows(summary).map(row => `<tr>${row.map((v, i) => cell(v, i, i === 1 ? 'font-weight:600;white-space:nowrap;' : i === 4 && v ? 'color:var(--red);font-weight:700;' : '')).join('')}</tr>`).join('')}
+                    <tr>${barangaySummaryTotalRow(summary).map((v, i) => cell(v, i, 'font-weight:700;background:var(--gray-50);')).join('')}</tr>
+                </tbody>
+            </table>
+        </div>
+        <p style="font-size:11px;color:var(--gray-500);margin-top:8px;">Peak Hours is the busiest 2-hour window (shown when a barangay has at least 3 timed accidents). High-Risk Roads counts that barangay's roads the forecast rates High.</p>`;
 }
 
 async function generateReport() {
@@ -821,8 +906,9 @@ async function generateReport() {
     const injury = filtered.filter(r => r.sev === 'Injury').length;
 
     let highRiskRoads = 0;
+    let predictions = [];
     try {
-        const predictions = await api.getPredictions();
+        predictions = await api.getPredictions();
         highRiskRoads = predictions.filter(p => p.riskLevel === 'high' && (barangay === 'all' || p.barangay === barangay)).length;
     } catch { /* leave at 0 if predictions can't be fetched */ }
 
@@ -835,11 +921,24 @@ async function generateReport() {
     if (injuryEl) injuryEl.textContent = injury.toLocaleString();
     if (highRiskEl) highRiskEl.textContent = highRiskRoads.toLocaleString();
 
+    const isSummary = filters.type === 'barangay';
+    const title = document.getElementById('reportTitle');
+    if (title) title.textContent = isSummary ? 'Barangay Summary Report' : 'Accident Trend Report';
     const subtitle = document.getElementById('reportSubtitle');
     if (subtitle) subtitle.textContent = `Mandaluyong City, ${reportScopeText(filters)}`;
 
     initReportChart(filtered);
-    lastReport = { filters, rows: filtered };
+    let summary = null;
+    const summaryEl = document.getElementById('reportBarangaySummary');
+    if (isSummary) {
+        await ensureBarangayNames();
+        summary = buildBarangaySummary(filtered, predictions);
+        if (summaryEl) { summaryEl.innerHTML = renderBarangaySummaryTable(summary); summaryEl.style.display = ''; }
+    } else if (summaryEl) {
+        summaryEl.style.display = 'none';
+        summaryEl.innerHTML = '';
+    }
+    lastReport = { filters, rows: filtered, summary };
     showToast(total ? `📄 Report generated — ${total} accident${total !== 1 ? 's' : ''} in range` : '📄 Report generated — no accidents match these filters');
     return true;
 }
@@ -3313,6 +3412,10 @@ async function exportReport(fmt) {
 
     const slug = v => String(v).replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '');
     const name = `RIMAS_Report_${filters.barangay === 'all' ? 'All-Barangays' : slug(filters.barangay)}_${filters.from || 'start'}_to_${filters.to || today()}`;
+    if (filters.type === 'barangay') {
+        exportBarangaySummary(fmt, lastReport.summary, filters, `RIMAS_Barangay_Summary_${filters.from || 'start'}_to_${filters.to || today()}`);
+        return;
+    }
     const opts = { cols: Object.keys(COL_HEADERS), subtitle: `Accident Report · ${reportScopeText(filters)}` };
     if (fmt === 'pdf') exportPDF(rows, `${name}.pdf`, opts);
     else if (fmt === 'excel') exportExcel(rows, `${name}.xlsx`, opts);
@@ -3323,6 +3426,113 @@ function selectFmt(btn, fmt) {
     currentReportFmt = fmt;
     document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+}
+
+/* The Barangay Summary Report as CSV, Excel or PDF: the same rows and totals as the preview. */
+async function exportBarangaySummary(fmt, summary, filters, base) {
+    const scope = reportScopeText(filters);
+    const rows = barangaySummaryRows(summary);
+    const totalRow = barangaySummaryTotalRow(summary);
+
+    if (fmt === 'csv') {
+        const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const lines = [
+            ['Barangay Summary Report', `Mandaluyong City, ${scope}`].map(cell).join(','),
+            ['Generated', new Date().toLocaleString()].map(cell).join(','),
+            '',
+            BARANGAY_SUMMARY_HEADERS.map(cell).join(','),
+            ...rows.map(r => r.map(cell).join(',')),
+            totalRow.map(cell).join(',')
+        ];
+        const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${base}.csv`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showToast('✅ Barangay summary exported (CSV)');
+        return;
+    }
+
+    if (fmt === 'excel') {
+        if (!(await loadExportLibrary('xlsx'))) return;
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet([
+            ['Barangay Summary Report'], [`Mandaluyong City, ${scope}`], [`Generated ${new Date().toLocaleString()}`], [],
+            BARANGAY_SUMMARY_HEADERS, ...rows, totalRow
+        ]);
+        ws['!cols'] = [5, 24, 10, 10, 8, 8, 8, 12, 24, 34, 16, 14].map(wch => ({ wch }));
+        XLSX.utils.book_append_sheet(wb, ws, 'Barangay Summary');
+        XLSX.writeFile(wb, `${base}.xlsx`);
+        showToast('✅ Barangay summary exported (Excel)');
+        return;
+    }
+
+    if (!(await loadExportLibrary('pdf'))) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const W = doc.internal.pageSize.width, H = doc.internal.pageSize.height;
+    // The built-in PDF fonts only cover Latin-1.
+    const clean = v => String(v ?? '').replace(/[–—]/g, '-').replace(/[^\x09\x0A\x0D\x20-\xFF]/g, '');
+
+    doc.setFillColor(15, 30, 60);
+    doc.rect(0, 0, W, 22, 'F');
+    doc.setFontSize(13); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+    doc.text('Mandaluyong Road Accident Mapping & Analytics System', 14, 10);
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.text(clean(`RIMAS - Barangay Summary Report · ${scope}`), 14, 16);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, W - 14, 16, { align: 'right' });
+
+    const t = summary.totals;
+    const boxes = [
+        { label: 'Total Accidents', val: t.total.toLocaleString(), color: [26, 86, 219] },
+        { label: 'Fatal', val: t.fatal.toLocaleString(), color: [220, 38, 38] },
+        { label: 'Injury', val: t.injury.toLocaleString(), color: [234, 179, 8] },
+        { label: 'Barangays with accidents', val: `${summary.list.filter(b => b.total).length} / ${summary.list.length}`, color: [22, 163, 74] },
+    ];
+    boxes.forEach((b, i) => {
+        const x = 14 + i * 68;
+        doc.setFillColor(...b.color);
+        doc.roundedRect(x, 26, 62, 18, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+        doc.text(b.val, x + 31, 36, { align: 'center' });
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+        doc.text(b.label, x + 31, 41, { align: 'center' });
+    });
+
+    const right = { halign: 'right' };
+    doc.autoTable({
+        head: [BARANGAY_SUMMARY_HEADERS],
+        body: rows.map(r => r.map(clean)),
+        foot: [totalRow.map(clean)],
+        startY: 48,
+        margin: { left: 14, right: 14 },
+        styles: { fontSize: 7.5, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.3 },
+        headStyles: { fillColor: [15, 30, 60], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+        footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: { 0: right, 1: { fontStyle: 'bold' }, 2: right, 3: right, 4: right, 5: right, 6: right, 7: right, 11: right },
+        didParseCell(data) {
+            if (data.section === 'body' && data.column.index === 4 && Number(data.cell.raw) > 0) {
+                data.cell.styles.textColor = [220, 38, 38];
+                data.cell.styles.fontStyle = 'bold';
+            }
+        }
+    });
+    const noteY = doc.lastAutoTable.finalY + 6;
+    if (noteY < H - 12) {
+        doc.setFontSize(7); doc.setTextColor(100, 116, 139); doc.setFont('helvetica', 'italic');
+        doc.text('Peak Hours: busiest 2-hour window (barangays with at least 3 timed accidents). High-Risk Roads: roads the forecast rates High.', 14, noteY);
+    }
+
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(148, 163, 184);
+        doc.text('Mandaluyong City TPMO - Confidential', 14, H - 5);
+        doc.text(`Page ${i} of ${pageCount}`, W - 14, H - 5, { align: 'right' });
+    }
+    doc.save(`${base}.pdf`);
+    showToast('✅ Barangay summary exported (PDF)');
 }
 
 async function exportHotspot() {

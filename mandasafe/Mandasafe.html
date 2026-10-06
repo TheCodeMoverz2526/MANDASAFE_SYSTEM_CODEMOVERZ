@@ -571,6 +571,13 @@
                             <div class="form-label" style="margin-bottom:12px;font-size:13px;font-weight:700;">
                                 Parameters</div>
                             <div class="form-group">
+                                <div class="form-label">Report Type</div><select class="form-select" id="reportTypeSelect"
+                                    onchange="onReportTypeChange()">
+                                    <option value="trend">Accident Trend Report</option>
+                                    <option value="barangay">Barangay Summary Report (all 27)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
                                 <div class="form-label">Date Range</div>
                                 <div class="date-range-input" style="flex-direction:column;align-items:stretch;gap:6px;">
                                     <input type="date" id="reportDateFrom" class="date-input" style="width:100%;">
@@ -578,7 +585,7 @@
                                     <input type="date" id="reportDateTo" class="date-input" style="width:100%;">
                                 </div>
                             </div>
-                            <div class="form-group">
+                            <div class="form-group" id="reportBarangayGroup">
                                 <div class="form-label">Barangay</div><select class="form-select" id="reportBarangaySelect">
                                     <option value="all">All Barangays</option>
                                 </select>
@@ -625,6 +632,7 @@
                                     </div>
                                 </div>
                                 <div style="margin-top:20px;"><canvas id="reportChart" height="120"></canvas></div>
+                                <div id="reportBarangaySummary" style="display:none;margin-top:24px;"></div>
                             </div>
                         </div>
                     </div>
