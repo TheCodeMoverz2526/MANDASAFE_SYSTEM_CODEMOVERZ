@@ -116,9 +116,10 @@ function completeLogin(session) {
         role: session.account.role,
         dept: session.account.dept
     }));
-    // The logo screen covers the hand-over until the next page's own screen takes over.
+    // The button keeps saying "Signing in…" until the next page opens. For an administrator,
+    // the logo screen also covers the hand-over until the console has loaded its data.
     signedIn = true;
-    if (window.PageLoader) PageLoader.show('Signing you in…');
+    if (session.account.role === 'admin' && window.PageLoader) PageLoader.signInHandover();
     // Administrators go to the RIMAS console; residents go to the public dashboard.
     window.location.assign(session.account.role === 'admin' ? 'Mandasafe.html' : 'dashboard.html');
 }
