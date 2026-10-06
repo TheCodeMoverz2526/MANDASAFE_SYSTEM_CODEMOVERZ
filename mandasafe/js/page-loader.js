@@ -2,7 +2,7 @@
  *
  * Included as the FIRST element of <body> on every page, so it covers the page from the
  * first paint, before the stylesheets, Leaflet or Chart.js have arrived. It lifts once the
- * page has finished loading AND the data requests it started meanwhile (incidents, summary,
+ * page's HTML and scripts are in AND the data requests it started meanwhile (incidents, summary,
  * boundaries…) have answered, so the visitor never sees empty tables and maps. It never
  * stays longer than MAX_MS: a slow or failed request leaves the page to show its own
  * loading or error state.
@@ -57,7 +57,7 @@
     const loader = createLoader('Loading MandaSafe…');
 
     let pending = 0;
-    let loaded = document.readyState === 'complete';
+    let loaded = document.readyState !== 'loading';
     let done = false;
     let settleTimer = null;
 
@@ -102,7 +102,10 @@
         return request;
     };
 
-    window.addEventListener('load', () => { loaded = true; check(); });
+    // DOMContentLoaded, not load: by then the page's scripts have run and started their data
+    // requests. The full load event also waits for the icon font, the background photo and
+    // the map tiles, none of which the visitor needs to wait behind the logo for.
+    document.addEventListener('DOMContentLoaded', () => { loaded = true; check(); });
     setTimeout(hide, MAX_MS);
 
     window.PageLoader = { hide, show };
