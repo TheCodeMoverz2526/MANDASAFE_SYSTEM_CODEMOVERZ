@@ -6,20 +6,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mandaluyong RIMAS – Road Accident Mapping & Analytics System</title>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="vendor/leaflet/leaflet.js"></script>
+    <!-- Chart.js and Leaflet load at the end of <body>, so the console paints first.
+         jsPDF and SheetJS (~1.3 MB together) are only fetched when an export or an Excel
+         import actually runs — see loadExportLibrary() in script.js. -->
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
+<script src="js/page-loader.js"></script>
 
     <!-- TOPBAR -->
     <div class="topbar">
@@ -1439,6 +1441,8 @@
     <div class="toast toast-success" id="toast"><span class="toast-icon"><i class="fas fa-check-circle"></i></span><span
             id="toastMsg">Done!</span></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="vendor/leaflet/leaflet.js"></script>
     <script src="js/forecast-core.js"></script>
     <script src="script.js"></script>
     <!-- HIDDEN FILE INPUT FOR DATA IMPORT (CSV / Excel) -->

@@ -115,14 +115,22 @@ class StaticSiteController extends Controller
                 $html = preg_replace('/<body\b[^>]*>/i', '$0' . $bar, $html, 1) ?? $html;
             }
 
-            return response($html, 200, ['Content-Type' => $contentType, 'Cache-Control' => 'no-store']);
+            // Pages are never kept by the browser, so Back after signing out can't show a
+            // signed-in page from memory; it reloads, and the page's sign-in check runs.
+            // They are the same for every visitor (sign-in happens in the browser), so
+            // Vercel's CDN may keep them until the next deployment — see bootstrap/static.php.
+            return response($html, 200, [
+                'Content-Type' => $contentType,
+                'Cache-Control' => 'no-store',
+                'Vercel-CDN-Cache-Control' => 'max-age=31536000',
+            ]);
         }
 
+        // The same caching as bootstrap/static.php.
         return new BinaryFileResponse($filePath, 200, [
             'Content-Type' => $contentType,
-            // Pages are never kept, so Back after signing out can't show a signed-in page
-            // from the browser's memory; it reloads, and the page's sign-in check runs.
-            'Cache-Control' => $extension === 'html' ? 'no-store' : 'no-cache',
+            'Cache-Control' => in_array($firstSegment, ['vendor', 'assets'], true) ? 'public, max-age=86400' : 'no-cache',
+            'Vercel-CDN-Cache-Control' => 'max-age=31536000',
         ]);
     }
 }

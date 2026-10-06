@@ -120,11 +120,21 @@ return (static function (): bool {
     header('Content-Type: ' . $contentType);
     header('ETag: ' . $etag);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $modified) . ' GMT');
+    if (in_array($extension, $textTypes, true)) {
+        header('Vary: Accept-Encoding');
+    }
 
-    // no-cache means "ask me first", not "do not store": the browser keeps the file and
-    // revalidates, so an unchanged Leaflet or style.css comes back as an empty 304
-    // instead of being downloaded again on every page.
-    header('Cache-Control: no-cache');
+    // Leaflet (vendor/) and the images (assets/) practically never change, so the browser
+    // keeps them for a day without asking — on a slow connection each "has it changed?"
+    // round-trip costs more than the file. Our own css/ and js/ stay no-cache, which means
+    // "ask me first", not "do not store": an unchanged file comes back as an empty 304 and
+    // an edit shows up on the next page load.
+    header('Cache-Control: ' . (in_array($firstSegment, ['vendor', 'assets'], true) ? 'public, max-age=86400' : 'no-cache'));
+
+    // On Vercel every request starts the PHP function, often from cold. This lets Vercel's
+    // CDN answer for the file instead; its cache is cleared on each deployment, so it is
+    // never stale. Browsers and other servers ignore this header.
+    header('Vercel-CDN-Cache-Control: max-age=31536000');
 
     $noneMatch = trim($_SERVER['HTTP_IF_NONE_MATCH'] ?? '');
     $since = strtotime($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '') ?: 0;

@@ -1178,7 +1178,7 @@ async function initMandaluyongMap() {
         let lastError;
         for (const url of MANDALUYONG_GEOJSON_URLS) {
             try {
-                const response = await fetch(url, { cache: 'no-store' });
+                const response = await fetch(url, { cache: 'force-cache' });
                 if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
                 const candidate = await response.json();
                 if (Array.isArray(candidate.features) && candidate.features.length === 27) { boundaries = candidate; break; }
@@ -1866,8 +1866,8 @@ function forecastAreaFileName(p, v, ext) {
 
 /* The PDF is built from the open dialog itself (its summary, chart, month table and
    explanations), so the download says exactly what the admin is looking at. */
-function exportForecastAreaPdf(p, v, dialog) {
-    if (!window.jspdf || !window.jspdf.jsPDF) { showToast('⚠️ The PDF library did not load — check the internet connection.'); return; }
+async function exportForecastAreaPdf(p, v, dialog) {
+    if (!(await loadExportLibrary('pdf'))) return;
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const W = 210, M = 14, CW = W - M * 2;
@@ -2831,7 +2831,7 @@ async function ensureBarangayNames() {
     if (mandaluyongBarangayCentroids.size) { knownBarangayNames = [...mandaluyongBarangayCentroids.keys()]; return knownBarangayNames; }
     for (const url of MANDALUYONG_GEOJSON_URLS) {
         try {
-            const response = await fetch(url, { cache: 'no-store' });
+            const response = await fetch(url, { cache: 'force-cache' });
             if (!response.ok) continue;
             const data = await response.json();
             if (Array.isArray(data.features) && data.features.length) {
@@ -2978,6 +2978,7 @@ function importFile(file) {
     reader.onerror = () => showToast('⚠️ Could not read the file');
     reader.onload = async (ev) => {
         try {
+            if (!isCsv && !(await loadExportLibrary('xlsx'))) return;
             const parsed = isCsv ? parseDelimitedRows(ev.target.result) : parseWorkbookRows(ev.target.result);
             if (!parsed) { showToast('⚠️ File is empty or has no data rows'); return; }
             await processImportRows(parsed.headerCells, parsed.dataRows);
@@ -3110,6 +3111,53 @@ function doExportNow() {
     closeExportModal();
 }
 
+/* jsPDF and SheetJS are ~1.3 MB together and only needed for exports and Excel imports, so
+   they are fetched on first use instead of blocking every console page load. */
+const EXPORT_LIBRARIES = {
+    pdf: {
+        ready: () => !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable),
+        urls: [
+            'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'
+        ]
+    },
+    xlsx: {
+        ready: () => !!window.XLSX,
+        urls: ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js']
+    }
+};
+const exportLibraryLoads = {};
+
+function loadScriptOnce(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => { script.remove(); reject(new Error(`Could not load ${src}`)); };
+        document.head.appendChild(script);
+    });
+}
+
+/* Resolves true once the library is usable; on failure says so in a toast and resolves false
+   (and forgets the attempt, so the next click retries). */
+async function loadExportLibrary(kind) {
+    const lib = EXPORT_LIBRARIES[kind];
+    if (lib.ready()) return true;
+    if (!exportLibraryLoads[kind]) {
+        // In order: the autotable plugin attaches itself to an already-loaded jsPDF.
+        exportLibraryLoads[kind] = lib.urls.reduce((chain, url) => chain.then(() => loadScriptOnce(url)), Promise.resolve());
+    }
+    try {
+        await exportLibraryLoads[kind];
+    } catch (error) {
+        console.error(error);
+    }
+    if (lib.ready()) return true;
+    delete exportLibraryLoads[kind];
+    showToast(`⚠️ The ${kind === 'pdf' ? 'PDF' : 'Excel'} library did not load — check the internet connection.`);
+    return false;
+}
+
 /* opts (all optional): cols — columns to write instead of the Export dialog's ticked ones;
    subtitle — what the rows are (e.g. a report's barangay and dates), shown in PDF/Excel. */
 function exportCSV(data, filename, opts = {}) {
@@ -3128,9 +3176,10 @@ function exportCSV(data, filename, opts = {}) {
     showToast('✅ CSV exported successfully!');
 }
 
-function exportExcel(data, filename, opts = {}) {
+async function exportExcel(data, filename, opts = {}) {
     const rows = data || getExportData();
     const cols = opts.cols || getSelectedCols();
+    if (!(await loadExportLibrary('xlsx'))) return;
     const wsData = [
         cols.map(c => COL_HEADERS[c] || c),
         ...rows.map(r => cols.map(c => r[c] || ''))
@@ -3166,11 +3215,12 @@ function exportExcel(data, filename, opts = {}) {
     showToast('✅ Excel file exported successfully!');
 }
 
-function exportPDF(data, filename, opts = {}) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+async function exportPDF(data, filename, opts = {}) {
     const rows = data || getExportData();
     const cols = opts.cols || getSelectedCols();
+    if (!(await loadExportLibrary('pdf'))) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
     doc.setFillColor(15, 30, 60);
     doc.rect(0, 0, 297, 22, 'F');

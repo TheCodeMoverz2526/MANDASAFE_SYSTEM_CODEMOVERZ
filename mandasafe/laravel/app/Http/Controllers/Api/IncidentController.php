@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Services\AccountService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -47,7 +48,38 @@ class IncidentController extends ApiController
     /** GET /api/incidents — open to everyone; who entered each record is for admins only. */
     public function index(Request $request)
     {
-        return response()->json(Incident::listApi($this->requestIsAdmin($request)));
+        $admin = $this->requestIsAdmin($request);
+        $seconds = (int) config('mandasafe.analytics_cache_seconds');
+        if ($seconds <= 0) {
+            return response()->json(Incident::listApi($admin));
+        }
+
+        // Every map and the console load this whole list — 1.6 MB of JSON, ~130 KB gzipped.
+        // It is kept gzipped, ready to send, until the next write bumps the data version, so
+        // a visit costs one cache read instead of reading every row, encoding and compressing.
+        // That matters most on a remote database (Vercel + Aiven), where each is a round-trip.
+        // One entry per audience, overwritten on change, so old versions never pile up.
+        // Base64 because the MySQL cache table is a text column and gzip is binary.
+        $key = 'mandasafe:incidents-gz:' . ($admin ? 'admin' : 'public');
+        $version = Setting::dataVersion();
+        $cached = Cache::get($key);
+        if (! is_array($cached) || ($cached['version'] ?? null) !== $version) {
+            $json = json_encode(Incident::listApi($admin));
+            $cached = ['version' => $version, 'gzip' => base64_encode(gzencode($json, 6))];
+            Cache::put($key, $cached, $seconds);
+        }
+
+        $gzip = base64_decode($cached['gzip']);
+        if (str_contains(strtolower((string) $request->header('Accept-Encoding', '')), 'gzip')) {
+            return response($gzip, 200, [
+                'Content-Type' => 'application/json',
+                'Content-Encoding' => 'gzip',   // CompressResponse leaves an encoded response alone
+                'Content-Length' => (string) strlen($gzip),
+                'Vary' => 'Accept-Encoding',
+            ]);
+        }
+
+        return response(gzdecode($gzip), 200, ['Content-Type' => 'application/json', 'Vary' => 'Accept-Encoding']);
     }
 
     /** POST /api/incidents */
