@@ -2761,9 +2761,7 @@ async function markAllRead() {
     }
 }
 
-document.querySelectorAll('.report-type-item').forEach(item => {
-    item.addEventListener('click', () => { document.querySelectorAll('.report-type-item').forEach(i => i.classList.remove('active')); item.classList.add('active'); });
-});
+
 
 // ===== IMPORT / EXPORT SYSTEM =====
 let importedRows = [];
@@ -3319,10 +3317,6 @@ async function exportReport(fmt) {
     if (fmt === 'pdf') exportPDF(rows, `${name}.pdf`, opts);
     else if (fmt === 'excel') exportExcel(rows, `${name}.xlsx`, opts);
     else exportCSV(rows, `${name}.csv`, opts);
-}
-
-function printReport() {
-    window.print();
 }
 
 function selectFmt(btn, fmt) {

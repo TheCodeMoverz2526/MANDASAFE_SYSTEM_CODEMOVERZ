@@ -82,8 +82,6 @@
                         <h2 style="font-size:20px;font-weight:700;line-height:1;margin:0;">Overview</h2>
                         <div style="display:flex;align-items:center;gap:10px;">
                             <span id="dashWelcome" style="font-size:13px;color:var(--gray-500);"></span>
-                            <button class="btn btn-primary btn-sm admin-only" onclick="showPage('incidents');openModal()"><i
-                                    class="fas fa-plus"></i> New Accident</button>
                         </div>
                     </div>
                 </div>
@@ -286,8 +284,6 @@
                                 onclick="askDeleteSelected()"><i class="fas fa-trash"></i> <span id="bulkDeleteLabel">Delete selected</span></button>
                             <button class="btn btn-secondary btn-sm" id="clearSelectionBtn" style="margin-left:8px;display:none;"
                                 onclick="clearIncidentSelection()">Clear selection</button>
-                            <button class="btn btn-secondary btn-sm" style="margin-left:12px;"
-                                onclick="openExportModal()"><i class="fas fa-download"></i> Export Report</button>
                         </div>
                         <div class="table-scroll" id="incidentScroll">
                             <table class="data-table">
@@ -568,30 +564,9 @@
                 <div class="page-header">
                     <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
                             class="current">Reports</span></div>
-                    <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportReport('csv')"><i
-                                class="fas fa-download"></i> Download CSV</button><button class="btn btn-primary btn-sm"
-                            onclick="printReport()"><i class="fas fa-print"></i> Print</button></div>
                 </div>
                 <div class="reports-layout">
                     <div class="report-sidebar">
-                        <div style="margin-bottom:16px;">
-                            <div class="report-type-item active">
-                                <div class="report-icon" style="background:#eff6ff;color:#1a56db;"><i
-                                        class="fas fa-chart-line"></i></div><span>Accident Trend Report</span>
-                            </div>
-                            <div class="report-type-item">
-                                <div class="report-icon" style="background:#fef2f2;color:#dc2626;"><i
-                                        class="fas fa-fire"></i></div><span>Hotspot Report</span>
-                            </div>
-                            <div class="report-type-item">
-                                <div class="report-icon" style="background:#f0fdf4;color:#16a34a;"><i
-                                        class="fas fa-shield-alt"></i></div><span>Safety Index Report</span>
-                            </div>
-                            <div class="report-type-item">
-                                <div class="report-icon" style="background:#fff7ed;color:#eab308;"><i
-                                        class="fas fa-file-alt"></i></div><span>Custom Accident Report</span>
-                            </div>
-                        </div>
                         <div class="report-params">
                             <div class="form-label" style="margin-bottom:12px;font-size:13px;font-weight:700;">
                                 Parameters</div>
