@@ -3504,6 +3504,7 @@ async function exportBarangaySummary(fmt, summary, filters, base) {
         head: [BARANGAY_SUMMARY_HEADERS],
         body: rows.map(r => r.map(clean)),
         foot: [totalRow.map(clean)],
+        showFoot: 'lastPage',   // the totals row once, after the last barangay — not on every page
         startY: 48,
         margin: { left: 14, right: 14 },
         styles: { fontSize: 7.5, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.3 },
@@ -3512,6 +3513,8 @@ async function exportBarangaySummary(fmt, summary, filters, base) {
         alternateRowStyles: { fillColor: [248, 250, 252] },
         columnStyles: { 0: right, 1: { fontStyle: 'bold' }, 2: right, 3: right, 4: right, 5: right, 6: right, 7: right, 11: right },
         didParseCell(data) {
+            // columnStyles only reach body cells; line the totals up under their columns too.
+            if (data.section === 'foot' && [2, 3, 4, 5, 6, 7, 11].includes(data.column.index)) data.cell.styles.halign = 'right';
             if (data.section === 'body' && data.column.index === 4 && Number(data.cell.raw) > 0) {
                 data.cell.styles.textColor = [220, 38, 38];
                 data.cell.styles.fontStyle = 'bold';
