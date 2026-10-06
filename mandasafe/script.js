@@ -3124,11 +3124,20 @@ const EXPORT_LIBRARIES = {
     xlsx: {
         ready: () => !!window.XLSX,
         urls: ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js']
+    },
+    // Page snapshots (Analytics, Hotspots, Forecast, Safety Index): jsPDF + html2canvas.
+    snapshot: {
+        ready: () => !!(window.jspdf && window.jspdf.jsPDF && window.html2canvas),
+        urls: [
+            'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+        ]
     }
 };
 const exportLibraryLoads = {};
 
 function loadScriptOnce(src) {
+    if (document.querySelector(`script[src="${src}"]`)) return Promise.resolve();
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = src;
@@ -3154,7 +3163,7 @@ async function loadExportLibrary(kind) {
     }
     if (lib.ready()) return true;
     delete exportLibraryLoads[kind];
-    showToast(`⚠️ The ${kind === 'pdf' ? 'PDF' : 'Excel'} library did not load — check the internet connection.`);
+    showToast(`⚠️ The ${kind === 'xlsx' ? 'Excel' : 'PDF'} library did not load — check the internet connection.`);
     return false;
 }
 
@@ -3360,6 +3369,105 @@ async function exportSafety() {
     a.href = url; a.download = `RIMAS_SafetyIndex_${today()}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast('📄 Safety Index exported');
+}
+
+/* Downloads the open page (Analytics, Hotspots, Forecast, Safety Index) as a PDF that looks
+   like the screen: its cards, charts and tables, with the current filters applied. Each
+   top-level block of the page is captured on its own so a page break never cuts through a
+   card unless the card is taller than a whole PDF page. */
+async function exportPagePdf(pageId, title) {
+    const page = document.getElementById(pageId);
+    if (!page) return;
+    if (!(await loadExportLibrary('snapshot'))) return;
+    showToast('⏳ Preparing PDF…');
+
+    // The page's own blocks, minus the header with the export buttons.
+    const blocks = [...page.children].filter(el =>
+        !el.classList.contains('page-header') && el.offsetHeight > 0 && getComputedStyle(el).display !== 'none');
+    if (!blocks.length) { showToast('⚠️ Nothing on this page to export yet.'); return; }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const W = doc.internal.pageSize.width, H = doc.internal.pageSize.height;
+    const M = 10, CW = W - M * 2, top = 26, bottom = H - 10;
+
+    const header = () => {
+        doc.setFillColor(15, 30, 60);
+        doc.rect(0, 0, W, 20, 'F');
+        doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+        doc.text('Mandaluyong Road Accident Mapping & Analytics System', M, 9);
+        doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+        doc.text(`RIMAS - ${title} Report`, M, 15);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, W - M, 15, { align: 'right' });
+    };
+    header();
+    let y = top;
+    const newPage = () => { doc.addPage(); header(); y = top; };
+
+    // Capture the blocks at the page's on-screen width, so the layout matches what is shown.
+    const width = page.clientWidth;
+    const pxToMm = CW / width;
+    const options = {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: getComputedStyle(page).backgroundColor || '#f1f5f9',
+        windowWidth: document.documentElement.clientWidth,
+        ignoreElements: el => el.classList && el.classList.contains('page-header')
+    };
+
+    // Lists with their own scrollbar (e.g. Barangay Safety Scores) are opened up while the
+    // snapshot is taken, so the PDF shows every row; they are put back afterwards.
+    const expanded = [...page.querySelectorAll('*')]
+        .filter(el => /(auto|scroll)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1)
+        .map(el => {
+            const saved = el.getAttribute('style');
+            el.style.overflow = 'visible'; el.style.maxHeight = 'none'; el.style.height = 'auto';
+            return () => (saved === null ? el.removeAttribute('style') : el.setAttribute('style', saved));
+        });
+
+    try {
+        for (const block of blocks) {
+            const canvas = await window.html2canvas(block, options);
+            if (!canvas.width || !canvas.height) continue;
+            const scale = (block.offsetWidth * pxToMm) / canvas.width;   // mm per canvas pixel
+            const imgW = canvas.width * scale;
+            const x = M + (CW - imgW) / 2;
+            const fullH = canvas.height * scale;
+            if (y + fullH > bottom && y > top && fullH <= bottom - top) newPage();
+            // Taller than the space left: slice it into page-sized strips.
+            let srcY = 0;
+            while (srcY < canvas.height) {
+                const room = bottom - y;
+                const sliceH = Math.min(canvas.height - srcY, Math.floor(room / scale));
+                if (sliceH <= 0) { newPage(); continue; }
+                const part = document.createElement('canvas');
+                part.width = canvas.width; part.height = sliceH;
+                part.getContext('2d').drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+                doc.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', x, y, imgW, sliceH * scale);
+                y += sliceH * scale;
+                srcY += sliceH;
+                if (srcY < canvas.height) newPage();
+            }
+            y += 2;
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('⚠️ Could not build the PDF — please try again.');
+        return;
+    } finally {
+        expanded.forEach(restore => restore());
+    }
+
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(148, 163, 184);
+        doc.text('Mandaluyong City TPMO - Confidential', M, H - 4);
+        doc.text(`Page ${i} of ${pageCount}`, W - M, H - 4, { align: 'right' });
+    }
+
+    doc.save(`RIMAS_${title.replace(/[^\w-]+/g, '')}_${today()}.pdf`);
+    showToast('✅ PDF downloaded');
 }
 
 function today() {

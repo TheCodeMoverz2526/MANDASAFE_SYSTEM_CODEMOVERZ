@@ -430,6 +430,8 @@
                 <div class="page-header">
                     <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
                             class="current">Analytics</span></div>
+                    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="exportPagePdf('page-analytics', 'Analytics')"><i
+                                class="fas fa-file-pdf"></i> Export PDF</button></div>
                 </div>
                 <div style="padding:20px 24px 0;">
                     <div class="filter-bar" style="padding:0 0 14px;border:none;">
@@ -660,7 +662,9 @@
                     <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
                             class="current">Hotspot Analysis</span></div>
                     <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportHotspot()"><i
-                                class="fas fa-download"></i> Export</button></div>
+                                class="fas fa-download"></i> Export CSV</button>
+                        <button class="btn btn-primary btn-sm" onclick="exportPagePdf('page-hotspot', 'Hotspot Analysis')"><i
+                                class="fas fa-file-pdf"></i> Export PDF</button></div>
                 </div>
                 <div style="padding:20px 24px 0;">
                     <div id="hsModelBadge" style="font-size:11px;color:var(--gray-400);margin-bottom:12px;"></div>
@@ -756,7 +760,9 @@
                     <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
                             class="current">Accident Forecast</span></div>
                     <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportForecastCsv()"><i
-                                class="fas fa-download"></i> Export CSV</button></div>
+                                class="fas fa-download"></i> Export CSV</button>
+                        <button class="btn btn-primary btn-sm" onclick="exportPagePdf('page-forecast', 'Accident Forecast')"><i
+                                class="fas fa-file-pdf"></i> Export PDF</button></div>
                 </div>
                 <div style="padding:20px 24px 0;">
                     <!-- Advance prediction filters (horizon, dates, barangay), drawn by js/forecast-core.js. -->
@@ -881,7 +887,9 @@
                     <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
                             class="current">Safety Index</span></div>
                     <div class="page-actions"><button class="btn btn-secondary btn-sm" onclick="exportSafety()"><i
-                                class="fas fa-download"></i> Export Report</button></div>
+                                class="fas fa-download"></i> Export CSV</button>
+                        <button class="btn btn-primary btn-sm" onclick="exportPagePdf('page-safety', 'Safety Index')"><i
+                                class="fas fa-file-pdf"></i> Export PDF</button></div>
                 </div>
                 <div style="padding:20px 24px;">
                     <div class="grid-3 mb-16">
