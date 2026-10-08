@@ -7,6 +7,7 @@ use App\Models\Incident;
 use App\Models\Setting;
 use App\Services\AccountService;
 use App\Services\NotificationService;
+use App\Services\ResidentNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -18,8 +19,10 @@ use Illuminate\Support\Facades\DB;
  */
 class IncidentController extends ApiController
 {
-    public function __construct(private NotificationService $notifications)
-    {
+    public function __construct(
+        private NotificationService $notifications,
+        private ResidentNotificationService $alerts,
+    ) {
     }
 
     private function nextIncidentId(): string
@@ -110,6 +113,7 @@ class IncidentController extends ApiController
 
             $api = $incident->toApi(true);
             $this->notifications->notifyIncidentCreated($api, $this->actor($request)->email);
+            $this->alerts->notifyIncidentAdded($api);
             AccountActivity::record($this->actor($request)->id, 'incident_created', "Added accident {$api['id']} ({$api['barangay']}, {$api['date']}).");
 
             return $api;
@@ -268,6 +272,7 @@ class IncidentController extends ApiController
 
             Setting::touchDataVersion();
             $this->notifications->notifyIncidentsImported(count($created), $actorEmail);
+            $this->alerts->notifyIncidentsImported($created);
             AccountActivity::record($this->actor($request)->id, 'incident_imported', 'Imported ' . count($created) . ' accident record(s), skipped ' . count($skipped) . '.');
 
             return [

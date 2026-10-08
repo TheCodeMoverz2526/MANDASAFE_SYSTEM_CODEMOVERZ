@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\IncidentController;
@@ -45,6 +46,10 @@ Route::post('/send-otp', [AnalyticsController::class, 'sendOtp']);
 
 Route::get('/incidents', [IncidentController::class, 'index']);
 Route::get('/prediction-inputs', [PredictionInputController::class, 'index']);
+
+/* ---------- the resident bell: any signed-in account (checked in the controller) ---------- */
+Route::get('/alerts', [AlertController::class, 'index']);
+Route::post('/alerts/read-all', [AlertController::class, 'markAllRead']);
 
 /* ---------- sign-in ---------- */
 Route::prefix('auth')->group(function () {

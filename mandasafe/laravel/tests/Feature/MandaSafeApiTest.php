@@ -782,4 +782,75 @@ class MandaSafeApiTest extends TestCase
         $this->assertSame('Plainview', $prone['barangays'][0]['barangay']);
         $this->assertSame('high', $prone['barangays'][0]['level']);
     }
+
+    private function residentHeaders(): array
+    {
+        return ['Authorization' => 'Bearer ' . $this->tokenFor('juan@example.com', 'Test-Resident#2026')];
+    }
+
+    public function test_residents_are_notified_of_new_accidents_without_seeing_who_entered_them(): void
+    {
+        // The hotspot check that rides along with the poll is covered on its own below.
+        $this->mock(\App\Services\AnalyticsService::class, fn ($m) => $m->shouldReceive('hotspots')->andReturn([]));
+        $resident = $this->residentHeaders();
+
+        // A new account starts with nothing unread, whatever was posted before it signed up.
+        $this->getJson('/api/alerts', $resident)->assertOk()->assertJson(['unread' => 0]);
+
+        $this->postJson('/api/incidents', [
+            'barangay' => 'Plainview', 'road' => 'Boni Ave', 'sev' => 'Injury',
+            'type' => 'Vehicular Collision', 'date' => '2026-09-01',
+        ], $this->adminHeaders())->assertStatus(201);
+
+        $this->postJson('/api/incidents/bulk', ['records' => [
+            ['barangay' => 'Hulo', 'road' => 'J.P. Rizal', 'sev' => 'Minor', 'type' => 'Sideswipe', 'date' => '2026-08-15'],
+            ['barangay' => 'Hulo', 'road' => 'Coronado St', 'sev' => 'Minor', 'type' => 'Sideswipe', 'date' => '2026-08-16'],
+        ]], $this->adminHeaders())->assertStatus(201);
+
+        $feed = $this->getJson('/api/alerts', $resident)->assertOk()
+            ->assertJsonPath('unread', 2)
+            ->assertJsonPath('items.0.title', '2 new accident reports')
+            ->assertJsonPath('items.1.title', 'New accident reported')
+            ->assertJsonPath('items.1.desc', 'Injury Vehicular Collision on Boni Ave, Plainview (2026-09-01).')
+            ->assertJsonPath('items.1.unread', true);
+        $this->assertStringNotContainsString('admin@rimas.gov.ph', $feed->getContent());
+
+        $this->postJson('/api/alerts/read-all', [], $resident)->assertOk();
+        $this->getJson('/api/alerts', $resident)->assertOk()
+            ->assertJsonPath('unread', 0)
+            ->assertJsonPath('items.0.unread', false);
+
+        $this->getJson('/api/alerts')->assertStatus(401);
+        $this->postJson('/api/alerts/read-all')->assertStatus(401);
+    }
+
+    public function test_residents_are_notified_when_a_new_hotspot_appears(): void
+    {
+        $peak = fn (string $road, string $barangay) => ['road' => $road, 'barangay' => $barangay, 'incidentCount' => 7];
+        $runs = [
+            [$peak('Boni Ave', 'Plainview')],
+            [$peak('Boni Ave', 'Plainview'), $peak('Shaw Blvd', 'Wack-Wack')],
+            [$peak('Shaw Blvd', 'Wack-Wack')],
+        ];
+        $analytics = \Mockery::mock(\App\Services\AnalyticsService::class);
+        $analytics->shouldReceive('hotspots')->andReturnUsing(function () use (&$runs) {
+            return array_shift($runs);
+        });
+        $alerts = app(\App\Services\ResidentNotificationService::class);
+
+        // The first run only learns what the hotspots are.
+        $this->assertNull($alerts->checkForNewHotspots($analytics));
+        // Nothing changed since: not even computed again.
+        $this->assertNull($alerts->checkForNewHotspots($analytics));
+
+        Setting::touchDataVersion();
+        $notification = $alerts->checkForNewHotspots($analytics);
+        $this->assertSame('New accident hotspot', $notification->title);
+        $this->assertStringStartsWith('Shaw Blvd, Wack-Wack is now a hotspot, with 7 accidents', $notification->desc);
+        $this->assertSame('hotspots.html', $notification->link);
+
+        // A hotspot that went away is not news.
+        Setting::touchDataVersion();
+        $this->assertNull($alerts->checkForNewHotspots($analytics));
+    }
 }

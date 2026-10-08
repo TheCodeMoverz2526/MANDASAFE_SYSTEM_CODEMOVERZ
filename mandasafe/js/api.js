@@ -76,6 +76,8 @@ const API = {
     barangayHotspots: () => apiGet('/api/hotspots/barangays'),
     predictions: () => apiGet('/api/predictions'),
     stats:       () => apiGet('/api/stats'),
+    alerts:      () => apiGet('/api/alerts'),
+    alertsSeen:  () => apiSend('/api/alerts/read-all', 'POST', {}),
     me:          () => apiGet('/api/auth/me'),
     updateProfile: (body) => apiSend('/api/auth/profile', 'PUT', body)
 };

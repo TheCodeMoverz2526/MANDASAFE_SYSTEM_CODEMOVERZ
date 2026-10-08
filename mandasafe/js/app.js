@@ -161,6 +161,15 @@ function buildShell(active) {
         '</a>' +
         '<div class="topbar-actions">' +
           '<span class="pill" id="ms-live" title="Data source"><span class="live"></span> Live data</span>' +
+          '<div class="alerts-wrap">' +
+            '<button type="button" class="bell" id="ms-bell" aria-label="Notifications" aria-expanded="false" aria-controls="ms-alerts">' +
+              icon('bell') + '<span class="dot" id="ms-bell-dot" hidden></span>' +
+            '</button>' +
+            '<div class="alerts-panel" id="ms-alerts" hidden>' +
+              '<div class="alerts-head">Notifications</div>' +
+              '<div class="alerts-list" id="ms-alerts-list"><div class="empty">Loading…</div></div>' +
+            '</div>' +
+          '</div>' +
           '<div class="userchip is-static" id="ms-userchip">' +
             '<span class="avatar">' + initials + '</span>' +
             '<span><span class="nm">' + u.name + '</span>' +
@@ -203,7 +212,93 @@ function buildShell(active) {
     document.body.insertAdjacentHTML('afterbegin', topbar + sidebar + signOutDialog);
     wireNav();
     wireSignOut();
+    wireAlerts();
     document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+}
+
+/* ---------------- notification bell ----------------
+   New accident reports and new hotspots, from /api/alerts. Checked on load, every 30
+   seconds while the tab is visible, and on returning to the tab. Opening the panel marks
+   everything as seen for this account (the badge clears on every device).
+
+   A toast announces an item only once: the highest id already announced is remembered,
+   so moving between pages does not repeat it. */
+const ALERTS_TOASTED_KEY = 'mandasafeAlertsToasted';
+const ALERT_ICONS = { incident_added: 'car', hotspot_new: 'fire' };
+
+function timeAgo(iso) {
+    const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (!Number.isFinite(seconds)) return '';
+    if (seconds < 60) return 'just now';
+    const units = [[86400 * 7, 'w'], [86400, 'd'], [3600, 'h'], [60, 'min']];
+    for (const [size, label] of units) {
+        if (seconds >= size) return Math.floor(seconds / size) + ' ' + label + ' ago';
+    }
+    return '';
+}
+
+function wireAlerts() {
+    const bell = document.getElementById('ms-bell');
+    const dot = document.getElementById('ms-bell-dot');
+    const panel = document.getElementById('ms-alerts');
+    const list = document.getElementById('ms-alerts-list');
+    let feed = null;
+
+    const showBadge = count => {
+        dot.hidden = count <= 0;
+        dot.textContent = count > 9 ? '9+' : String(count);
+        bell.setAttribute('aria-label', count > 0 ? `Notifications, ${count} unread` : 'Notifications');
+    };
+
+    const render = () => {
+        if (!feed.items.length) {
+            list.innerHTML = '<div class="empty">No notifications yet. New accident reports and hotspots will appear here.</div>';
+            return;
+        }
+        list.innerHTML = feed.items.map(n =>
+            `<a class="alert-item${n.unread ? ' is-unread' : ''}" href="${esc(n.link || '#')}">` +
+              `<span class="alert-ic ${n.type === 'hotspot_new' ? 'is-hot' : ''}">${icon(ALERT_ICONS[n.type] || 'bell')}</span>` +
+              `<span class="alert-body"><span class="alert-title">${esc(n.title)}</span>` +
+              `<span class="alert-desc">${esc(n.desc || '')}</span>` +
+              `<span class="alert-time">${esc(timeAgo(n.createdAt))}</span></span>` +
+            '</a>').join('');
+    };
+
+    const announceNew = () => {
+        let toasted = null;
+        try { toasted = localStorage.getItem(ALERTS_TOASTED_KEY); } catch { /* private mode */ }
+        // First visit on this browser: nothing is "new" yet, only remember where we are.
+        const fresh = toasted === null ? [] : feed.items.filter(n => n.unread && n.id > Number(toasted));
+        if (fresh.length) toast(fresh.length === 1 ? fresh[0].title : `${fresh.length} new notifications`, 'bell');
+        try { localStorage.setItem(ALERTS_TOASTED_KEY, String(feed.latest)); } catch { /* private mode */ }
+    };
+
+    const load = async () => {
+        try { feed = await API.alerts(); }
+        catch { return; }   // the bell is extra; a failed check just waits for the next one
+        showBadge(feed.unread);
+        render();
+        announceNew();
+    };
+
+    const close = () => { panel.hidden = true; bell.setAttribute('aria-expanded', 'false'); };
+    bell.onclick = event => {
+        event.stopPropagation();
+        if (!panel.hidden) { close(); return; }
+        panel.hidden = false;
+        bell.setAttribute('aria-expanded', 'true');
+        if (feed && feed.unread > 0) {
+            showBadge(0);
+            feed.unread = 0;
+            API.alertsSeen().catch(() => { /* shown as unread again on the next check */ });
+        }
+    };
+    document.addEventListener('click', event => { if (!panel.hidden && !panel.contains(event.target)) close(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !panel.hidden) close(); });
+
+    load();
+    setInterval(() => { if (!document.hidden) load(); }, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 }
 
 function wireSignOut() {
@@ -262,10 +357,10 @@ function liveClock(el) {
     };
     tick(); setInterval(tick, 30000);
 }
-function toast(msg) {
+function toast(msg, iconName) {
     let t = document.querySelector('.toast');
     if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
-    t.innerHTML = icon('checkOnly') + '<span>' + esc(msg) + '</span>';
+    t.innerHTML = icon(iconName || 'checkOnly') + '<span>' + esc(msg) + '</span>';
     requestAnimationFrame(() => t.classList.add('show'));
     clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 3200);
 }

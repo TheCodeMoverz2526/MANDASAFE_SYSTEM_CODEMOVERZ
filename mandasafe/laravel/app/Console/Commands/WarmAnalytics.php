@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Setting;
 use App\Services\AnalyticsService;
 use App\Services\AnalyticsWarmer;
+use App\Services\ResidentNotificationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 
@@ -23,7 +24,7 @@ class WarmAnalytics extends Command
 
     protected $description = 'Compute and cache the predictions, stats, hotspots, summary, prone-area and severity models';
 
-    public function handle(AnalyticsService $analytics): int
+    public function handle(AnalyticsService $analytics, ResidentNotificationService $alerts): int
     {
         $lock = Cache::lock('mandasafe:warming', 900);
         if (! $lock->get()) {
@@ -56,6 +57,9 @@ class WarmAnalytics extends Command
                 }
                 $this->line('  The data changed while warming; warming again.');
             }
+
+            // The hotspots are fresh now: the cheapest moment to tell residents about new ones.
+            $alerts->checkForNewHotspots($analytics);
         } finally {
             AnalyticsWarmer::$warming = false;
             $lock->release();

@@ -70,6 +70,32 @@ img.brand-logo{width:54px;height:54px;border-radius:0;background:none;box-shadow
 .bell:hover{background:#f1f5f9}
 .bell .dot{position:absolute;top:4px;right:4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--red);
   color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center;border:2px solid #fff}
+.bell .dot[hidden]{display:none}
+.bell svg{width:22px;height:22px}
+
+/* Notification panel under the bell (js/app.js wireAlerts). */
+.alerts-wrap{position:relative}
+.alerts-panel{position:absolute;top:calc(100% + 10px);right:-8px;width:360px;max-width:calc(100vw - 32px);background:#fff;
+  border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);overflow:hidden;z-index:950}
+.alerts-panel[hidden]{display:none}
+.alerts-head{padding:14px 16px;font-weight:700;font-size:14.5px;border-bottom:1px solid var(--line)}
+.alerts-list{max-height:min(420px,70vh);overflow-y:auto}
+.alerts-list .empty{padding:28px 18px;font-size:13px}
+.alert-item{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.alert-item:last-child{border-bottom:0}
+.alert-item:hover{background:#f8fafc}
+.alert-item.is-unread{background:#eff6ff}
+.alert-item.is-unread:hover{background:#e0edff}
+.alert-ic{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;background:#dbeafe;color:var(--blue-500)}
+.alert-ic.is-hot{background:var(--red-50);color:var(--red)}
+.alert-ic svg{width:18px;height:18px}
+.alert-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.alert-title{font-weight:700;font-size:13.5px}
+.alert-desc{font-size:12.5px;color:var(--ink-2);line-height:1.4}
+.alert-time{font-size:11.5px;color:var(--muted)}
+@media(max-width:600px){
+  .alerts-panel{position:fixed;top:calc(var(--topbar-h) + 6px);left:16px;right:16px;width:auto;max-width:none}
+}
 .userchip{display:flex;align-items:center;gap:10px;padding:5px 10px 5px 5px;border-radius:30px}
 .userchip:hover{background:#f1f5f9}
 /* Display only: no hover highlight, no pointer, nothing to click. */
