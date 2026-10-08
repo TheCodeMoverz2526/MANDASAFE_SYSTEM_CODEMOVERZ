@@ -31,6 +31,11 @@ async function restoreDashboardSession() {
     applyDashboardUser(currentUser);
     showPage('home');
 
+    // The accident list is public and by far the largest download, so it starts alongside
+    // the session check instead of waiting for it; it is only drawn once the check passes.
+    const pendingIncidents = api.getIncidents();
+    pendingIncidents.catch(() => { /* reported by loadIncidentsFromServer */ });
+
     try {
         const account = await api.getMe();
         // Residents have their own read-only pages — only administrators use this console.
@@ -43,7 +48,7 @@ async function restoreDashboardSession() {
         return;
     }
 
-    loadIncidentsFromServer();
+    loadIncidentsFromServer(pendingIncidents);
     loadNotifications().then(startNotificationPolling);
 }
 
@@ -150,9 +155,9 @@ let incidents = [];
 let filteredIncidents = incidents.slice();
 let editingIndex = -1; // -1 = adding new, otherwise editing incidents[editingIndex]
 
-async function loadIncidentsFromServer() {
+async function loadIncidentsFromServer(pending = null) {
     try {
-        incidents = await api.getIncidents();
+        incidents = await (pending || api.getIncidents());
     } catch (error) {
         console.error('Failed to load accidents from server:', error);
         incidents = [];

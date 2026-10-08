@@ -268,6 +268,13 @@ class AccountService
                 : 'This account still uses a sample password that is no longer allowed. Use "Forgot password?" or ask an administrator to reset it.');
         }
 
+        // Hashes made at an older bcrypt cost are upgraded (or downgraded) to the current one,
+        // so every later sign-in pays only the configured cost. See config/hashing.php.
+        if (Hash::needsRehash($account->password)) {
+            $account->password = Hash::make((string) $password);
+            $account->save();
+        }
+
         return $account;
     }
 
