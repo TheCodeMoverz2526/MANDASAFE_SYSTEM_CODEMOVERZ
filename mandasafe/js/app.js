@@ -160,7 +160,6 @@ function buildShell(active) {
           '<span class="brand-sub" style="display:block">Road Accident Mapping &amp; Analytics System</span></span>' +
         '</a>' +
         '<div class="topbar-actions">' +
-          '<span class="pill" id="ms-live" title="Data source"><span class="live"></span> Live data</span>' +
           '<div class="alerts-wrap">' +
             '<button type="button" class="bell" id="ms-bell" aria-label="Notifications" aria-expanded="false" aria-controls="ms-alerts">' +
               icon('bell') + '<span class="dot" id="ms-bell-dot" hidden></span>' +

@@ -105,7 +105,7 @@ body {
     color: var(--blue);
 }
 
-/* Top-right of the admin console, matching the resident pages: a "Live data" pill, the
+/* Top-right of the admin console, matching the resident pages: the
    notification bell, and a name chip (initials + name + role) that opens the account menu. */
 .topbar-actions {
     display: flex;

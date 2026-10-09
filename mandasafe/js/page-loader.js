@@ -15,7 +15,7 @@
  * Self-contained (styles, markup and logic) so each page needs only the one <script> tag.
  */
 (function () {
-    const MAX_MS = 8000;     // lift no matter what after this long
+    const MAX_MS = 3000;     // lift no matter what after this long
     const SETTLE_MS = 150;   // lets a request that follows another (sign-in check, then data) start
     const FLAG = 'mandasafeAdminSignIn';
 

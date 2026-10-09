@@ -52,8 +52,10 @@ async function restoreDashboardSession() {
     loadNotifications().then(startNotificationPolling);
 }
 
-async function doLogout() {
-    try { await api.logout(); } catch { /* signing out locally is enough */ }
+function doLogout() {
+    // Not awaited: the server ends the session on its own time (keepalive lets the request
+    // outlive this page), so a slow or busy server never holds the console on screen.
+    api.logout().catch(() => { /* signing out locally is enough */ });
     currentUser = null;
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
@@ -137,7 +139,7 @@ const api = {
     getSummary: () => apiRequest('/api/summary'),
     getStats: () => apiRequest('/api/stats'),
     getMe: () => apiRequest('/api/auth/me'),
-    logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
+    logout: () => apiRequest('/api/auth/logout', { method: 'POST', keepalive: true }),
     getAccounts: () => apiRequest('/api/accounts'),
     getAccountDetails: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`),
     createAccount: (body) => apiRequest('/api/accounts', { method: 'POST', body: JSON.stringify(body) }),

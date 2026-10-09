@@ -127,10 +127,11 @@ function stayGuarded() {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) bounce(); });
 }
 
-async function logout() {
-    try {
-        await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${authToken()}` } });
-    } catch { /* signing out locally is enough */ }
+function logout() {
+    // Not awaited: the server ends the session on its own time (keepalive lets the request
+    // outlive this page), so a slow or busy server never holds the visitor on "Signing out…".
+    fetch('/api/auth/logout', { method: 'POST', keepalive: true, headers: { Authorization: `Bearer ${authToken()}` } })
+        .catch(() => { /* signing out locally is enough */ });
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
     // replace, not href: the signed-in page is taken out of the history, so Back can't reach it.
