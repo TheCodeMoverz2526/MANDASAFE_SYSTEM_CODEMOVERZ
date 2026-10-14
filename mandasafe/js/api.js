@@ -143,3 +143,76 @@ function setState(el, html, isError) {
     if (!el) return;
     el.innerHTML = `<div class="empty${isError ? ' is-error' : ''}">${html}</div>`;
 }
+
+/* ===== Live updates ===================================================
+   Every page showing accident data asks GET /api/data-version (one tiny query) every 20
+   seconds while it is on screen. When an administrator has added, edited, deleted or
+   imported accidents since, the page refreshes by itself: a page that registered
+   onDataChange() redraws in place (the incident map keeps its filters that way); any other
+   page reloads and returns to where the visitor had scrolled. */
+const DATA_POLL_MS = 20000;
+const DATA_SETTLE_MS = 6000;   // an import arrives in chunks; refresh once it has finished
+const SCROLL_KEY = 'msLiveScroll';
+let dataChangeHandler = null;
+
+function onDataChange(handler) { dataChangeHandler = handler; }
+
+function watchDataChanges() {
+    let known = null;      // the version this page's figures were loaded at
+    let pending = null;    // a newer version seen on the last check, not yet settled
+    let busy = false;
+    let timer = null;
+
+    const schedule = ms => { clearTimeout(timer); timer = setTimeout(check, ms); };
+    const typing = () => {
+        const el = document.activeElement;
+        return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+    };
+
+    async function refresh() {
+        if (dataChangeHandler) return (await dataChangeHandler()) !== false;
+        try { sessionStorage.setItem(SCROLL_KEY, JSON.stringify({ path: location.pathname, y: window.scrollY })); } catch { /* storage off */ }
+        location.reload();
+        return true;
+    }
+
+    async function check() {
+        if (busy || document.hidden) return schedule(DATA_POLL_MS);
+        busy = true;
+        try {
+            const response = await fetch('/api/data-version', { cache: 'no-store' });
+            const version = response.ok ? (await response.json()).version : null;
+            if (version === null || version === undefined) return schedule(DATA_POLL_MS);
+            if (known === null) { known = version; return schedule(DATA_POLL_MS); }
+            if (version === known) { pending = null; return schedule(DATA_POLL_MS); }
+
+            // Wait until the version stops moving, so a 10-chunk import refreshes once.
+            if (version !== pending) { pending = version; return schedule(DATA_SETTLE_MS); }
+            if (typing()) return schedule(DATA_SETTLE_MS);
+
+            if (await refresh()) { known = version; pending = null; }
+            schedule(DATA_POLL_MS);
+        } catch {
+            schedule(DATA_POLL_MS);   // offline for a moment; try again later
+        } finally {
+            busy = false;
+        }
+    }
+
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) schedule(0); });
+    check();
+}
+
+// Back to where the visitor was before an automatic reload. The figures load after the
+// page does, so the position is applied again once they have had a moment to render.
+(() => {
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(SCROLL_KEY) || 'null'); sessionStorage.removeItem(SCROLL_KEY); } catch { /* storage off */ }
+    if (!saved || saved.path !== location.pathname) return;
+    window.addEventListener('load', () => [300, 1200].forEach(ms => setTimeout(() => window.scrollTo(0, saved.y), ms)));
+})();
+
+// The profile page holds an edit form; the sign-in and support pages show no accident data.
+if (!/(profile|login|support)\.html$/i.test(location.pathname)) {
+    document.addEventListener('DOMContentLoaded', watchDataChanges);
+}

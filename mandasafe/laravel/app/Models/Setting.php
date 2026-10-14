@@ -53,6 +53,9 @@ class Setting extends Model
     public static function touchDataVersion(): void
     {
         static::put('dataVersion', (int) static::get('dataVersion', 0) + 1);
+        // When it changed, so a cache can tell a recompute still under way from one that never
+        // ran (see AnalyticsService::cached()).
+        static::put('dataVersionAt', time());
         \App\Services\AnalyticsWarmer::kick();
     }
 

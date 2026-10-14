@@ -159,10 +159,24 @@ if (requireAuth()) {
     [fFrom, fTo].forEach(input => { input.min = oldestDate; input.max = newestDate; });
     $('fHint').textContent = newestDate ? `Records run ${fmtDate(oldestDate)} – ${fmtDate(newestDate)}` : '';
 
+    // Rebuilt rather than appended, so a refresh after new data neither duplicates the list
+    // nor loses the barangay the visitor picked.
     const names = [...new Set(all.map(i => i.barangay).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const picked = fBarangay.value;
+    fBarangay.querySelectorAll('option:not(:first-child)').forEach(option => option.remove());
     fBarangay.insertAdjacentHTML('beforeend', names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+    if (picked && names.includes(picked)) fBarangay.value = picked;
     syncFilterUi();
   }
+
+  // An administrator added, edited or deleted accidents: reload the list and redraw in place,
+  // keeping the visitor's filters and map view (see watchDataChanges in js/api.js).
+  onDataChange(async () => {
+    try { all = await API.incidents(); } catch { return false; }
+    fillFilters();
+    apply();
+    return true;
+  });
 
   /* Layers, counts and popups are all drawn here, in one place, from the filtered set. */
   function apply() {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\Setting;
 use App\Services\AnalyticsService;
 use App\Services\OtpService;
 use App\Services\SpatialService;
@@ -21,6 +22,16 @@ class AnalyticsController extends ApiController
     public function predictions()
     {
         return response()->json($this->analytics->predictions());
+    }
+
+    /**
+     * GET /api/data-version — goes up by one on every accident or prediction-data write. The
+     * resident pages poll it (js/api.js) and refresh themselves when it changes. One indexed
+     * read, so it is cheap to ask often.
+     */
+    public function dataVersion()
+    {
+        return response()->json(['version' => Setting::dataVersion()]);
     }
 
     /** GET /api/stats */

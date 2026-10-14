@@ -43,6 +43,22 @@ class AnalyticsService
     }
 
     /**
+     * For figures that are plain counts of the accident records (the summary, the stats): they
+     * are recomputed as soon as the data changes instead of showing the previous result, so a
+     * record an administrator just added appears on the resident pages straight away. Any model
+     * output inside them (the forecasts) still comes from its own cache.
+     */
+    private function rememberFresh(string $name, callable $callback)
+    {
+        return $this->cached($name, function (&$degraded) use ($callback) {
+            return $callback();
+        }, false);
+    }
+
+    /** How long after a write the previous model results may still be shown while recomputing. */
+    private const STALE_GRACE_SECONDS = 120;
+
+    /**
      * For a computation that can silently degrade (a crashed Python interpreter falling back
      * to "no hotspots" or "untrained model"). A degraded result is real data, not a bug, but
      * it is also likely a passing hiccup, so it is kept for 30 seconds instead of a day.
@@ -65,7 +81,7 @@ class AnalyticsService
      *  - A degraded result (Python failed) is kept for 30 seconds only and never becomes the
      *    "previous result" that is served while warming.
      */
-    private function cached(string $name, callable $callback)
+    private function cached(string $name, callable $callback, bool $serveStale = true)
     {
         $seconds = (int) config('mandasafe.analytics_cache_seconds');
         if ($seconds <= 0) {
@@ -84,8 +100,12 @@ class AnalyticsService
         }
 
         // Serve the previous result while the background warm catches up — but never inside
-        // the warm itself, which is the process that has to do the real computation.
-        if (AnalyticsWarmer::enabled() && ! AnalyticsWarmer::$warming) {
+        // the warm itself, which is the process that has to do the real computation, and only
+        // for a short while after the write. On a host that freezes the server once the
+        // response is sent (Vercel), the background warm may never finish; past the grace
+        // period the request computes the figures itself, so they can't stay out of date.
+        $recentWrite = time() - (int) Setting::get('dataVersionAt', 0) < self::STALE_GRACE_SECONDS;
+        if ($serveStale && $recentWrite && AnalyticsWarmer::enabled() && ! AnalyticsWarmer::$warming) {
             $latest = Cache::get($latestKey);
             if (is_array($latest) && array_key_exists('value', $latest)) {
                 AnalyticsWarmer::kick();
@@ -131,7 +151,7 @@ class AnalyticsService
 
     public function stats(): array
     {
-        return $this->remember('stats', fn () => PredictionService::computeStats(
+        return $this->rememberFresh('stats', fn () => PredictionService::computeStats(
             $this->incidents(),
             $this->predictions()
         ));
@@ -291,7 +311,7 @@ class AnalyticsService
      */
     public function summary(): array
     {
-        return $this->remember('summary', function () {
+        return $this->rememberFresh('summary', function () {
             $incidents = $this->incidents();
             $predictions = $this->predictions();
             $stats = PredictionService::computeStats($incidents, $predictions);

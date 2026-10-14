@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/predictions', [AnalyticsController::class, 'predictions']);
 Route::get('/stats', [AnalyticsController::class, 'stats']);
 Route::get('/summary', [AnalyticsController::class, 'summary']);
+Route::get('/data-version', [AnalyticsController::class, 'dataVersion']);
 Route::get('/hotspots', [AnalyticsController::class, 'hotspots']);
 Route::get('/hotspots/barangays', [AnalyticsController::class, 'barangayHotspots']);
 Route::get('/prone-areas', [AnalyticsController::class, 'proneAreas']);
