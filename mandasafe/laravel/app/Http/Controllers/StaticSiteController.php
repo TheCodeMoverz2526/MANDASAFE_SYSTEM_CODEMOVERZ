@@ -74,9 +74,16 @@ class StaticSiteController extends Controller
             $contentType .= '; charset=utf-8';
         }
 
-        return new BinaryFileResponse($filePath, 200, [
+        // Pages, scripts and styles are re-checked on every load, images and the bundled Leaflet
+        // are reused for a day. The ETag turns a re-check of an unchanged file into a bodiless 304.
+        $response = new BinaryFileResponse($filePath, 200, [
             'Content-Type' => $contentType,
-            'Cache-Control' => 'no-cache',
-        ]);
+            'Cache-Control' => in_array($extension, self::TEXT_TYPES, true) && ! str_starts_with($requested, 'vendor/')
+                ? 'no-cache'
+                : 'public, max-age=86400',
+        ], true, null, true, true);
+        $response->isNotModified($request);
+
+        return $response;
     }
 }

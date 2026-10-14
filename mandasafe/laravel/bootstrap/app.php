@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\StaticSiteController;
+use App\Http\Middleware\CompressResponse;
 use App\Http\Middleware\RimasAdmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'rimas.admin' => RimasAdmin::class,
         ]);
+        $middleware->appendToGroup('api', CompressResponse::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // The pages read { error } out of every failed request, so keep that shape for the

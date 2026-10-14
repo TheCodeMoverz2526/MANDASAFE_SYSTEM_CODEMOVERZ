@@ -49,7 +49,7 @@ async function restoreDashboardSession() {
         return;
     }
 
-    loadIncidentsFromServer();
+    ensureIncidentsLoaded();
 }
 
 async function doLogout() {
@@ -136,12 +136,21 @@ let incidentPage = 1;
 const PAGE_SIZE = 5;
 let editingIndex = -1; // -1 = adding new, otherwise editing incidents[editingIndex]
 
+// The full incident list is several thousand rows, so it is fetched once and reused by every
+// page. Adding, editing and deleting update `incidents` in place, and an import reloads it.
+let incidentsRequest = null;
+function ensureIncidentsLoaded() {
+    if (!incidentsRequest) incidentsRequest = loadIncidentsFromServer();
+    return incidentsRequest;
+}
+
 async function loadIncidentsFromServer() {
     try {
         incidents = await api.getIncidents();
     } catch (error) {
         console.error('Failed to load incidents from server:', error);
         incidents = [];
+        incidentsRequest = null;
         showToast('⚠️ ' + error.message);
     }
     filteredIncidents = incidents.slice();
@@ -154,15 +163,22 @@ async function loadIncidentsFromServer() {
 }
 
 // KDE (Kernel Density Estimation) hotspots, recomputed server-side from all incident
-// locations whenever this is called — cached here so the map can redraw on filter changes
-// without re-fetching.
+// locations — cached here so the map can redraw on filter changes without re-fetching, and
+// fetched again only after the incident data changes (see refreshPredictionViews).
 let hotspotsCache = [];
+let hotspotsRequest = null;
+function ensureHotspotsLoaded() {
+    if (!hotspotsRequest) hotspotsRequest = loadHotspotsFromServer();
+    return hotspotsRequest;
+}
+
 async function loadHotspotsFromServer() {
     try {
         hotspotsCache = await api.getHotspots();
     } catch (error) {
         console.error('Failed to load hotspots from server:', error);
         hotspotsCache = [];
+        hotspotsRequest = null;
     }
     if (mandaluyongMapReady) renderMandaluyongMapLayers();
     return hotspotsCache;
@@ -262,6 +278,8 @@ async function deletePredictionInput(id) {
 }
 
 function refreshPredictionViews() {
+    hotspotsRequest = null;
+    if (mandaluyongMapReady && document.getElementById('page-map')?.classList.contains('active')) ensureHotspotsLoaded();
     if (document.getElementById('page-hotspot')?.classList.contains('active')) initHotspotCharts();
     if (document.getElementById('page-safety')?.classList.contains('active')) initSafetyCharts();
     if (document.getElementById('page-predictdata')?.classList.contains('active')) loadPredictionAdminPage();
@@ -404,7 +422,7 @@ function showPage(page) {
     if (page === 'notifications') renderNotifications();
     if (page === 'settings') populateSettings();
     if (page === 'predictdata') loadPredictionAdminPage();
-    if (page === 'map') { setTimeout(initMandaluyongMap, 0); loadIncidentsFromServer(); loadHotspotsFromServer(); }
+    if (page === 'map') { setTimeout(initMandaluyongMap, 0); ensureIncidentsLoaded(); ensureHotspotsLoaded(); }
 }
 
 // ===== MODALS =====
@@ -576,7 +594,7 @@ async function populateReportBarangaySelect() {
 
 async function generateReport() {
     await populateReportBarangaySelect();
-    await loadIncidentsFromServer();
+    await ensureIncidentsLoaded();
 
     const from = document.getElementById('reportDateFrom')?.value || '';
     const to = document.getElementById('reportDateTo')?.value || '';
@@ -722,8 +740,6 @@ function buildIncidentTooltip(record) {
 }
 function renderMandaluyongMapLayers() {
     if (!mandaluyongMap || !mandaluyongMapLayers.barangays) return;
-    mandaluyongMapLayers.incidents.clearLayers();
-    mandaluyongMapLayers.heatmap.clearLayers();
     mandaluyongMapLayers.hotspots.clearLayers();
     if (mandaluyongBoundaryGeoJson) {
         const bounds = mandaluyongBoundaryGeoJson.getBounds();
@@ -751,33 +767,20 @@ function renderMandaluyongMapLayers() {
     });
 
     const severityCounts = new Map();
+    const fatalCounts = new Map();
     const roadCounts = new Map();
+    const plotted = [];
     visibleIncidents.forEach(record => {
         const point = getIncidentPoint(record);
         if (!point) return;
         severityCounts.set(record.barangay, (severityCounts.get(record.barangay) || 0) + 1);
+        if (record.sev === 'Fatal') fatalCounts.set(record.barangay, (fatalCounts.get(record.barangay) || 0) + 1);
         roadCounts.set(record.road, (roadCounts.get(record.road) || 0) + 1);
-
-        const marker = L.circleMarker([point.lat, point.lng], {
-            radius: record.sev === 'Fatal' ? 10 : record.sev === 'Injury' ? 8 : 6,
-            color: '#ffffff',
-            weight: 2,
-            fillColor: getSeverityColor(record.sev),
-            fillOpacity: 0.9
-        }).bindPopup(`<div style="font-family:inherit"><strong>${escapeMapHtml(record.id)}</strong><br>${escapeMapHtml(record.date)} · ${escapeMapHtml(record.time)}<br>${escapeMapHtml(record.road)}<br>${escapeMapHtml(record.barangay)}<br><strong>${escapeMapHtml(record.sev)}</strong> · ${escapeMapHtml(record.type)}</div>`, { maxWidth: 260 });
-        marker.bindTooltip(buildIncidentTooltip(record), { sticky: true, direction: 'top', className: 'incident-tooltip' });
-        marker.on('click', () => selectIncident(record.id, record.road, record.barangay, record.type, record.sev, roadCounts.get(record.road) || 1, record));
-        marker.addTo(mandaluyongMapLayers.incidents);
-
-        const heat = L.circle([point.lat, point.lng], {
-            radius: record.sev === 'Fatal' ? 260 : record.sev === 'Injury' ? 200 : 150,
-            color: getSeverityColor(record.sev),
-            fillColor: getSeverityColor(record.sev),
-            fillOpacity: record.sev === 'Fatal' ? 0.22 : 0.16,
-            weight: 0
-        });
-        heat.addTo(mandaluyongMapLayers.heatmap);
+        plotted.push({ record, point });
     });
+    mapPlottedIncidents = plotted;
+    mapRoadCounts = roadCounts;
+    drawMapPointLayers();
 
     // Hotspot markers come from the server's KDE (Kernel Density Estimation) surface over all
     // incident locations, not a simple per-road count — so a marker here means "a real spatial
@@ -802,13 +805,57 @@ function renderMandaluyongMapLayers() {
     }
     mandaluyongBarangayLayers.forEach((layer, barangay) => {
         const total = severityCounts.get(barangay) || 0;
-        const fatal = visibleIncidents.filter(record => record.barangay === barangay && record.sev === 'Fatal').length;
+        const fatal = fatalCounts.get(barangay) || 0;
         layer.bindPopup(`<div class="barangay-popup"><div class="barangay-popup-title">${escapeMapHtml(barangay)}</div><div class="barangay-popup-meta">Visible incidents: <strong>${total}</strong><br>Fatal: <strong>${fatal}</strong></div></div>`, { className: 'barangay-popup', maxWidth: 250 });
     });
+}
 
-    mandaluyongMapLayers.incidents.eachLayer(layer => mandaluyongMap.hasLayer(mandaluyongMapLayers.incidents) || mandaluyongMapLayers.incidents.removeLayer(layer));
-    mandaluyongMapLayers.heatmap.eachLayer(layer => mandaluyongMap.hasLayer(mandaluyongMapLayers.heatmap) || mandaluyongMapLayers.heatmap.removeLayer(layer));
-    mandaluyongMapLayers.hotspots.eachLayer(layer => mandaluyongMap.hasLayer(mandaluyongMapLayers.hotspots) || mandaluyongMapLayers.hotspots.removeLayer(layer));
+// Thousands of incidents mean thousands of markers and heat circles, so they are only built
+// for the layers that are switched on (toggleMapLayer draws them when one is turned on), and
+// each popup/tooltip is only rendered when it is opened.
+let mapPlottedIncidents = [];
+let mapRoadCounts = new Map();
+function drawMapPointLayers() {
+    const showIncidents = mandaluyongMap.hasLayer(mandaluyongMapLayers.incidents);
+    const showHeatmap = mandaluyongMap.hasLayer(mandaluyongMapLayers.heatmap);
+    if (!showIncidents) mandaluyongMapLayers.incidents.clearLayers();
+    if (!showHeatmap) mandaluyongMapLayers.heatmap.clearLayers();
+    if (!showIncidents && !showHeatmap) return;
+
+    const markers = [];
+    const heat = [];
+    mapPlottedIncidents.forEach(({ record, point }) => {
+        if (showIncidents) {
+            const marker = L.circleMarker([point.lat, point.lng], {
+                radius: record.sev === 'Fatal' ? 10 : record.sev === 'Injury' ? 8 : 6,
+                color: '#ffffff',
+                weight: 2,
+                fillColor: getSeverityColor(record.sev),
+                fillOpacity: 0.9
+            }).bindPopup(() => `<div style="font-family:inherit"><strong>${escapeMapHtml(record.id)}</strong><br>${escapeMapHtml(record.date)} · ${escapeMapHtml(record.time)}<br>${escapeMapHtml(record.road)}<br>${escapeMapHtml(record.barangay)}<br><strong>${escapeMapHtml(record.sev)}</strong> · ${escapeMapHtml(record.type)}</div>`, { maxWidth: 260 });
+            marker.bindTooltip(() => buildIncidentTooltip(record), { sticky: true, direction: 'top', className: 'incident-tooltip' });
+            marker.on('click', () => selectIncident(record.id, record.road, record.barangay, record.type, record.sev, mapRoadCounts.get(record.road) || 1, record));
+            markers.push(marker);
+        }
+        if (showHeatmap) {
+            heat.push(L.circle([point.lat, point.lng], {
+                radius: record.sev === 'Fatal' ? 260 : record.sev === 'Injury' ? 200 : 150,
+                color: getSeverityColor(record.sev),
+                fillColor: getSeverityColor(record.sev),
+                fillOpacity: record.sev === 'Fatal' ? 0.22 : 0.16,
+                weight: 0
+            }));
+        }
+    });
+    // Swapping in whole groups is far cheaper than adding thousands of layers to a live map.
+    if (showIncidents) {
+        mandaluyongMap.removeLayer(mandaluyongMapLayers.incidents);
+        mandaluyongMapLayers.incidents = L.layerGroup(markers).addTo(mandaluyongMap);
+    }
+    if (showHeatmap) {
+        mandaluyongMap.removeLayer(mandaluyongMapLayers.heatmap);
+        mandaluyongMapLayers.heatmap = L.layerGroup(heat).addTo(mandaluyongMap);
+    }
 }
 async function initMandaluyongMap() {
     if (mandaluyongMapReady || !window.L) return;
@@ -827,7 +874,7 @@ async function initMandaluyongMap() {
         let lastError;
         for (const url of MANDALUYONG_GEOJSON_URLS) {
             try {
-                const response = await fetch(url, { cache: 'no-store' });
+                const response = await fetch(url);
                 if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
                 const candidate = await response.json();
                 if (Array.isArray(candidate.features) && candidate.features.length === 27) { boundaries = candidate; break; }
@@ -894,8 +941,13 @@ function toggleMapLayer(layer, btn) {
     const layerName = layer === 'boundary' ? 'barangays' : layer;
     const targetLayer = mandaluyongMapLayers[layerName];
     if (!mandaluyongMap || !targetLayer) return;
-    if (mandaluyongMap.hasLayer(targetLayer)) mandaluyongMap.removeLayer(targetLayer);
-    else mandaluyongMap.addLayer(targetLayer);
+    if (mandaluyongMap.hasLayer(targetLayer)) {
+        mandaluyongMap.removeLayer(targetLayer);
+        if (layerName === 'incidents' || layerName === 'heatmap') targetLayer.clearLayers();
+    } else {
+        mandaluyongMap.addLayer(targetLayer);
+        if (layerName === 'incidents' || layerName === 'heatmap') drawMapPointLayers();
+    }
 }
 function applyMapFilters() {
     renderMandaluyongMapLayers();
@@ -986,10 +1038,10 @@ function buildDayPeriodMatrix(list) {
     return matrix;
 }
 
-// Analytics, Reports, and the GIS Map all read from the same `incidents` array — refreshing
-// it here means anything just imported shows up here without a separate wiring step.
+// Analytics, Reports, and the GIS Map all read from the same `incidents` array, which every
+// add/edit/delete and import keeps current — so there is nothing to re-download here.
 async function initAnalyticsCharts() {
-    await loadIncidentsFromServer();
+    await ensureIncidentsLoaded();
 
     const monthly = buildMonthlySeries(incidents);
     safeChart('analyticsTimeChart', { type: 'line', data: { labels: monthly.labels, datasets: [{ label: 'Incidents', data: monthly.totals, borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.12)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#1a56db', pointBorderColor: 'white', pointBorderWidth: 2 }, { label: 'Injuries', data: monthly.injuries, borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,.1)', fill: true, tension: .4, pointRadius: 5, pointBackgroundColor: '#f59e0b', pointBorderColor: 'white', pointBorderWidth: 2 }] }, options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } }, scales: { y: { grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
@@ -1329,6 +1381,28 @@ const COL_HEADERS = {
 };
 
 const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+
+// The spreadsheet and PDF libraries (about 1.5 MB together) are only needed to import or
+// export, so they are fetched the first time one of those is used rather than holding up
+// every console page load.
+const LIBRARY_URLS = {
+    xlsx: ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'],
+    pdf: ['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js']
+};
+const libraryRequests = {};
+function loadLibrary(name) {
+    if (!libraryRequests[name]) {
+        // Loaded one after another: the autotable plugin needs jsPDF to be present first.
+        libraryRequests[name] = LIBRARY_URLS[name].reduce((chain, src) => chain.then(() => new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error(`Could not load ${src.split('/').pop()} — check the internet connection.`));
+            document.head.appendChild(script);
+        })), Promise.resolve()).catch(error => { delete libraryRequests[name]; throw error; });
+    }
+    return libraryRequests[name];
+}
 // Ordered so a more specific/less ambiguous field claims a header before a broader one gets
 // a chance at it (e.g. "id" alone is too generic to test first, or it would grab any header
 // that merely contains "id" as a substring, like "Residential Area").
@@ -1384,7 +1458,7 @@ async function ensureBarangayNames() {
     if (mandaluyongBarangayCentroids.size) { knownBarangayNames = [...mandaluyongBarangayCentroids.keys()]; return knownBarangayNames; }
     for (const url of MANDALUYONG_GEOJSON_URLS) {
         try {
-            const response = await fetch(url, { cache: 'no-store' });
+            const response = await fetch(url);
             if (!response.ok) continue;
             const data = await response.json();
             if (Array.isArray(data.features) && data.features.length) {
@@ -1496,19 +1570,19 @@ function parseWorkbookRows(arrayBuffer) {
 // Auto-maps arbitrary column headers, corrects known-barangay typos, and flags likely
 // duplicates against both the current import batch and what's already in the database.
 async function processImportRows(headerCells, dataRows) {
-    await ensureBarangayNames();
+    await Promise.all([ensureBarangayNames(), ensureIncidentsLoaded()]);
     const rawHeaders = headerCells.map(h => h.toLowerCase().replace(/[^a-z]/g, ''));
     const colMap = mapImportColumns(rawHeaders);
     const columnSummary = summarizeColumnMapping(headerCells, colMap);
     const seenKeys = new Set();
+    const existingKeys = new Set(incidents.map(inc => `${inc.date}||${inc.time}||${inc.barangay}||${inc.road}||${inc.type}`.toLowerCase()));
     const rows = [];
     const warnings = [];
 
     dataRows.forEach((cols, i) => {
         const row = buildImportRow(cols, colMap, i + 1);
         const dupKey = `${row.date}||${row.time}||${row.barangay}||${row.road}||${row.type}`.toLowerCase();
-        const isDup = seenKeys.has(dupKey) || incidents.some(inc =>
-            `${inc.date}||${inc.time}||${inc.barangay}||${inc.road}||${inc.type}`.toLowerCase() === dupKey);
+        const isDup = seenKeys.has(dupKey) || existingKeys.has(dupKey);
         if (isDup) row._warn = row._warn ? `${row._warn}; Possible duplicate` : 'Possible duplicate of an existing incident';
         seenKeys.add(dupKey);
         if (row._warn) warnings.push(`Row ${i + 1}: ${row._warn}`);
@@ -1531,6 +1605,7 @@ function importFile(file) {
     reader.onerror = () => showToast('⚠️ Could not read the file');
     reader.onload = async (ev) => {
         try {
+            if (!isCsv) await loadLibrary('xlsx');
             const parsed = isCsv ? parseDelimitedRows(ev.target.result) : parseWorkbookRows(ev.target.result);
             if (!parsed) { showToast('⚠️ File is empty or has no data rows'); return; }
             await processImportRows(parsed.headerCells, parsed.dataRows);
@@ -1680,13 +1755,14 @@ function exportCSV(data, filename) {
     showToast('✅ CSV exported successfully!');
 }
 
-function exportExcel(data, filename) {
+async function exportExcel(data, filename) {
     const rows = data || getExportData();
     const cols = getSelectedCols();
     const wsData = [
         cols.map(c => COL_HEADERS[c] || c),
         ...rows.map(r => cols.map(c => r[c] || ''))
     ];
+    try { await loadLibrary('xlsx'); } catch (error) { showToast('⚠️ ' + error.message); return; }
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
@@ -1717,11 +1793,12 @@ function exportExcel(data, filename) {
     showToast('✅ Excel file exported successfully!');
 }
 
-function exportPDF(data, filename) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+async function exportPDF(data, filename) {
     const rows = data || getExportData();
     const cols = getSelectedCols();
+    try { await loadLibrary('pdf'); } catch (error) { showToast('⚠️ ' + error.message); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
     doc.setFillColor(15, 30, 60);
     doc.rect(0, 0, 297, 22, 'F');

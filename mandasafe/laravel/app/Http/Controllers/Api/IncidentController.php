@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Incident;
 use App\Models\Setting;
 use App\Services\AccountService;
+use App\Services\AnalyticsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -38,9 +39,9 @@ class IncidentController extends ApiController
     }
 
     /** GET /api/incidents — newest first, the order the console and the maps expect. */
-    public function index()
+    public function index(AnalyticsService $analytics)
     {
-        return response()->json(Incident::newestFirst()->get()->map->toApi()->all());
+        return response($analytics->incidentsJson(), 200, ['Content-Type' => 'application/json']);
     }
 
     /** POST /api/incidents */

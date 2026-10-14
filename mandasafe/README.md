@@ -29,6 +29,13 @@ php artisan db:seed          # guarantees the default administrator exists
 php artisan serve --port=5500
 ```
 
+`start-mandasafe.bat` also does three things for speed: it pre-computes the forecasts and
+hotspots (`php artisan mandasafe:warm`), and it starts PHP's server with **OPcache** switched
+on (XAMPP ships it off, which makes every request recompile Laravel — roughly 100–150 ms each).
+`laravel/server.php` sends the pages and assets straight from disk with browser caching and
+gzip, so only `/api/...` calls boot Laravel. `php artisan serve` uses the same `server.php`,
+just without OPcache.
+
 Requirements: **PHP 8.2+** and **Composer** (both come with XAMPP — add `C:\xampp\php` to PATH).
 No web server, MySQL or Node.js is needed to run it.
 

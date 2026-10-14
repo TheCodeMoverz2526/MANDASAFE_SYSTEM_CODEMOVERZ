@@ -22,6 +22,15 @@ class AnalyticsService
         return Incident::newestFirst()->get()->map->toApi()->all();
     }
 
+    /**
+     * GET /api/incidents, already encoded. The list is ~8,000 rows (about 2 MB of JSON), so
+     * building it from the database on every request was the slowest call the console made.
+     */
+    public function incidentsJson(): string
+    {
+        return $this->remember('incidents-json', fn () => json_encode($this->incidents()));
+    }
+
     public function predictionInputs(): array
     {
         return PredictionInput::newestFirst()->get()->map->toApi()->all();
