@@ -39,7 +39,7 @@ class WarmAnalytics extends Command
             for ($round = 1; $round <= 5; $round++) {
                 $version = Setting::dataVersion();
 
-                foreach (['predictions', 'stats', 'hotspots', 'summary', 'proneAreas', 'severityClassification'] as $name) {
+                foreach (['predictions', 'barangayPredictions', 'stats', 'hotspots', 'summary', 'proneAreas', 'severityClassification'] as $name) {
                     $started = microtime(true);
                     $result = $analytics->{$name}();
                     $this->line(sprintf(

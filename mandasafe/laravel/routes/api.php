@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Route;
 
 /* ---------- open, read-only ---------- */
 Route::get('/predictions', [AnalyticsController::class, 'predictions']);
+Route::get('/predictions/barangays', [AnalyticsController::class, 'barangayPredictions']);
 Route::get('/stats', [AnalyticsController::class, 'stats']);
 Route::get('/summary', [AnalyticsController::class, 'summary']);
 Route::get('/data-version', [AnalyticsController::class, 'dataVersion']);

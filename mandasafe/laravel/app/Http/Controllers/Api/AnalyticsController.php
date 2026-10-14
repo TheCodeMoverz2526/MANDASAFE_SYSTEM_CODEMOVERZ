@@ -24,6 +24,12 @@ class AnalyticsController extends ApiController
         return response()->json($this->analytics->predictions());
     }
 
+    /** GET /api/predictions/barangays — one forecast row per barangay (roads combined). */
+    public function barangayPredictions()
+    {
+        return response()->json($this->analytics->barangayPredictions());
+    }
+
     /**
      * GET /api/data-version — goes up by one on every accident or prediction-data write. The
      * resident pages poll it (js/api.js) and refresh themselves when it changes. One indexed

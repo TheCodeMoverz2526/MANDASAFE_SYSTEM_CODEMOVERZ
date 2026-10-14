@@ -132,6 +132,7 @@ const api = {
     updatePredictionInput: (id, body) => apiRequest(`/api/prediction-inputs/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deletePredictionInput: (id) => apiRequest(`/api/prediction-inputs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getPredictions: () => apiRequest('/api/predictions'),
+    getBarangayPredictions: () => apiRequest('/api/predictions/barangays'),
     getProneAreas: () => apiRequest('/api/prone-areas'),
     getSeverity: () => apiRequest('/api/severity'),
     // Server-computed figures shared with the resident pages: monthly/hourly counts, the
@@ -1815,13 +1816,13 @@ async function initForecastPage() {
     const tableBody = document.getElementById('fcTableBody');
     let predictions = [];
     try {
-        predictions = await api.getPredictions();
+        predictions = await api.getBarangayPredictions();
     } catch (error) {
-        if (tableBody) tableBody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#dc2626;padding:24px;"><i class="fas fa-triangle-exclamation"></i> ${escapeMapHtml(error.message)}</td></tr>`;
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#dc2626;padding:24px;"><i class="fas fa-triangle-exclamation"></i> ${escapeMapHtml(error.message)}</td></tr>`;
         return;
     }
     if (!window.ForecastCore) {
-        if (tableBody) tableBody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#dc2626;padding:24px;">The forecast script (js/forecast-core.js) did not load.</td></tr>`;
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#dc2626;padding:24px;">The forecast script (js/forecast-core.js) did not load.</td></tr>`;
         return;
     }
 
@@ -1886,7 +1887,6 @@ function renderForecastPage() {
         return `<tr ${FC.rowAttrs(n)}>
             <td>${n + 1}</td>
             <td style="font-weight:600;">${escapeMapHtml(p.barangay)}</td>
-            <td>${escapeMapHtml(p.road)}</td>
             <td>${p.totalIncidents.toLocaleString()}</td>
             <td>${v.pastComplete ? Math.round(p.recorded).toLocaleString() : '<span style="color:var(--gray-400);">not recorded yet</span>'}</td>
             <td style="font-weight:700;">${Math.round(p.predicted).toLocaleString()}${v.H > 1 ? `<div style="font-weight:500;font-size:10.5px;color:var(--gray-500);">${p.path.map(x => Math.round(x).toLocaleString()).join(' · ')}</div>` : ''}</td>
@@ -1895,7 +1895,7 @@ function renderForecastPage() {
             <td>${p.riskScore.toFixed(1)} / 10</td>
             <td><span class="risk-pill ${levelClass[p.riskLevel] || 'risk-low'}">${escapeMapHtml(RISK_LABELS[p.riskLevel] || p.riskLevel)}</span></td>
         </tr>`;
-    }).join('') || `<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:24px;">No forecasts yet. Record accidents on the <strong>Accident Records</strong> page to build the forecast.</td></tr>`;
+    }).join('') || `<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px;">No forecasts yet. Record accidents on the <strong>Accident Records</strong> page to build the forecast.</td></tr>`;
     if (v.list.length) set('fcModelTag', `${t.modelTag} · click a row for details`);
 
     // --- charts ---

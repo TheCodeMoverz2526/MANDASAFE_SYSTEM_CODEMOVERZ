@@ -76,6 +76,7 @@
         const minDate = firstDay(futureMonths[0]);
         const maxDate = lastDay(futureMonths[maxHorizon - 1]);
         const barangays = [...new Set(predictions.map(p => p.barangay))].sort();
+        const perRoad = predictions.some(p => p.road && p.road !== 'All Roads');
 
         const pathOf = p => (p.forecastPath && p.forecastPath.length ? p.forecastPath : [p.predictedNextMonth]);
         const countIn = (p, month) => (p.history || []).find(h => h.month === month)?.count || 0;
@@ -203,7 +204,9 @@
                 t.delta = { text: '', tone: 'muted' };
             }
             t.upValue = `${v.scoped.filter(p => p.periodTrend === 'up').length} / ${v.scoped.length}`;
-            t.upLabel = st.barangay ? 'Roads Trending Up' : 'Areas Trending Up';
+            // Rows are barangays on the Forecast pages (roads combined), roads elsewhere.
+            t.upLabel = !perRoad ? (st.barangay ? 'Trending Up' : 'Barangays Trending Up')
+                : st.barangay ? 'Roads Trending Up' : 'Areas Trending Up';
 
             if (v.isNext) {
                 t.errValue = bt ? `±${bt.maeForest}` : '—';

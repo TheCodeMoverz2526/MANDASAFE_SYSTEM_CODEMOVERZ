@@ -149,6 +149,21 @@ class AnalyticsService
         });
     }
 
+    /**
+     * The same forecast with one row per barangay (every road combined) instead of one per
+     * barangay and road — what the Forecast pages list. The model runs on the barangay totals,
+     * so each barangay's forecast, trend and risk score are its own, not sums of road rows.
+     */
+    public function barangayPredictions(): array
+    {
+        return $this->rememberUnlessDegraded('predictions-barangay', function (&$degraded) {
+            $incidents = array_map(fn ($i) => array_replace($i, ['road' => 'All Roads']), $this->incidents());
+            $inputs = array_map(fn ($i) => array_replace($i, ['road' => 'All Roads']), $this->predictionInputs());
+
+            return PredictionService::computePredictions($incidents, $inputs, $degraded);
+        });
+    }
+
     public function stats(): array
     {
         return $this->rememberFresh('stats', fn () => PredictionService::computeStats(
