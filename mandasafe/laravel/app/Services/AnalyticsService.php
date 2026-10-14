@@ -250,29 +250,20 @@ class AnalyticsService
     public function proneAreas(): array
     {
         return $this->rememberUnlessDegraded('prone-areas', function (&$degraded) {
-            $incidents = [];
-            foreach ($this->incidents() as $incident) {
-                // Only real coordinates: a guessed location would teach the model a pattern
-                // that is not in the data.
-                if (is_numeric($incident['lat'] ?? null) && is_numeric($incident['lng'] ?? null)) {
-                    $incidents[] = [
-                        'lat' => (float) $incident['lat'],
-                        'lng' => (float) $incident['lng'],
-                        'date' => $incident['date'] ?? null,
-                        'sev' => $incident['sev'] ?? null,
-                        'barangay' => $incident['barangay'] ?? null,
-                    ];
-                }
-            }
-
             try {
-                return MlBridge::run('prone_area_forest.py', [
-                    'incidents' => $incidents,
-                    'boundaries' => GeoService::barangayPolygons(),
-                ]);
+                return $this->runProneAreaModel(true);
             } catch (Throwable $e) {
                 Log::warning('prone_area_forest.py unavailable', ['error' => $e->getMessage()]);
                 $degraded = true;
+
+                // No Python on this host (Vercel): serve the result saved by
+                // `php artisan mandasafe:snapshot-prone-areas` on a machine that has it.
+                $snapshot = is_file(self::proneAreaSnapshotPath())
+                    ? json_decode((string) file_get_contents(self::proneAreaSnapshotPath()), true)
+                    : null;
+                if (is_array($snapshot) && ! empty($snapshot['trained'])) {
+                    return $snapshot;
+                }
 
                 // A timeout is a busy or slow server, not a missing install — say which, and
                 // let the page try again once the 30-second degraded cache has expired.
@@ -283,6 +274,43 @@ class AnalyticsService
                 return ['trained' => false, 'retry' => true, 'reason' => $reason, 'model' => null, 'cells' => [], 'barangays' => []];
             }
         });
+    }
+
+    public static function proneAreaSnapshotPath(): string
+    {
+        return resource_path('ml/prone-areas.json');
+    }
+
+    /** Runs ml/prone_area_forest.py on every located accident; throws if Python fails. */
+    public function runProneAreaModel(bool $throw = false): array
+    {
+        $incidents = [];
+        foreach ($this->incidents() as $incident) {
+            // Only real coordinates: a guessed location would teach the model a pattern
+            // that is not in the data.
+            if (is_numeric($incident['lat'] ?? null) && is_numeric($incident['lng'] ?? null)) {
+                $incidents[] = [
+                    'lat' => (float) $incident['lat'],
+                    'lng' => (float) $incident['lng'],
+                    'date' => $incident['date'] ?? null,
+                    'sev' => $incident['sev'] ?? null,
+                    'barangay' => $incident['barangay'] ?? null,
+                ];
+            }
+        }
+
+        try {
+            return MlBridge::run('prone_area_forest.py', [
+                'incidents' => $incidents,
+                'boundaries' => GeoService::barangayPolygons(),
+            ]);
+        } catch (Throwable $e) {
+            if ($throw) {
+                throw $e;
+            }
+
+            return ['trained' => false, 'reason' => $e->getMessage()];
+        }
     }
 
     /**

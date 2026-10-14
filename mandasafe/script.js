@@ -2240,7 +2240,8 @@ async function renderProneAreas() {
     document.getElementById('paPeriod').textContent = `Prediction for ${period(m.predictionPeriod)}`;
     note.innerHTML = `<i class="fas fa-diagram-project" style="color:var(--blue);"></i> The city is split into <b>${m.cellMeters} m</b> cells. For each cell, <b>Kernel Density Estimation</b> measures how concentrated accidents are — at the cell (${m.bandwidthMeters} m kernel), in the last 3 months, and across the surrounding area (${m.neighbourhoodBandwidthMeters} m). `
         + `These KDE outputs, with the cell's own counts, are the input to a <b>Random Forest classifier</b> (Python / scikit-learn) trained on <b>${m.trainingPeriods}</b> past periods (${m.trainingRows.toLocaleString()} examples from ${m.accidentsUsed.toLocaleString()} located accidents) to predict which cells become accident-prone over the next ${m.horizonMonths} months. `
-        + `It predicts <b style="color:${PRONE_COLORS.high};">${m.predictedCells.high}</b> high, <b style="color:#a16207;">${m.predictedCells.moderate}</b> moderate and <b style="color:${PRONE_COLORS.low};">${m.predictedCells.low}</b> low cells for ${period(m.predictionPeriod)}. KDE features carry <b>${Math.round(m.kdeImportanceShare * 100)}%</b> of the model's weight.`;
+        + `It predicts <b style="color:${PRONE_COLORS.high};">${m.predictedCells.high}</b> high, <b style="color:#a16207;">${m.predictedCells.moderate}</b> moderate and <b style="color:${PRONE_COLORS.low};">${m.predictedCells.low}</b> low cells for ${period(m.predictionPeriod)}. KDE features carry <b>${Math.round(m.kdeImportanceShare * 100)}%</b> of the model's weight.`
+        + (m.snapshotAt ? ` <i>(Saved model result from ${escapeMapHtml(m.snapshotAt)}.)</i>` : '');
 
     // --- barangay table ---
     document.getElementById('paBarangayBody').innerHTML = data.barangays.map(b => `
