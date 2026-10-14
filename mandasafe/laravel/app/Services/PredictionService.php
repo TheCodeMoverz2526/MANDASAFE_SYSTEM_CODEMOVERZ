@@ -194,6 +194,67 @@ class PredictionService
         return floor($value + 0.5);
     }
 
+    /** Months ahead the straight-line fallback forecasts (the page's longest horizon is 12). */
+    private const FALLBACK_HORIZON = 12;
+
+    /** Normalised spelling => official name, for the 27 barangays in the boundary file. */
+    private static ?array $officialBarangays = null;
+
+    private static function barangayKey(string $name): string
+    {
+        $name = strtolower(str_replace(['Ñ', 'ñ'], 'n', $name));
+        $name = preg_replace('/^\s*(brgy|bgy|barangay)\b\.?/', '', $name);
+
+        return preg_replace('/[^a-z0-9]/', '', $name);
+    }
+
+    /**
+     * The official barangay a recorded name refers to, or null when it is not one of the 27.
+     * Imported files spell names many ways ("Brgy. Plainview", "PLAINVIEW", "Plainveiw",
+     * "Wack Wack"), and each spelling used to become its own "barangay" in the forecasts.
+     * Case, spacing, punctuation and a "Brgy." prefix are ignored, and a name within two
+     * typing slips of exactly one official name is taken to mean that one.
+     */
+    public static function officialBarangay($name): ?string
+    {
+        if (self::$officialBarangays === null) {
+            self::$officialBarangays = [];
+            foreach (array_keys(GeoService::barangayCentroids()) as $official) {
+                self::$officialBarangays[self::barangayKey((string) $official)] = (string) $official;
+            }
+        }
+        $name = trim((string) $name);
+        if ($name === '') {
+            return null;
+        }
+        // No boundary file to check against: keep the name as recorded.
+        if (self::$officialBarangays === []) {
+            return $name;
+        }
+
+        $key = self::barangayKey($name);
+        if (isset(self::$officialBarangays[$key])) {
+            return self::$officialBarangays[$key];
+        }
+        if (strlen($key) < 4) {
+            return null;
+        }
+
+        $best = null;
+        $bestDistance = PHP_INT_MAX;
+        $tie = false;
+        foreach (self::$officialBarangays as $officialKey => $official) {
+            $distance = levenshtein($key, $officialKey);
+            if ($distance < $bestDistance) {
+                [$best, $bestDistance, $tie] = [$official, $distance, false];
+            } elseif ($distance === $bestDistance) {
+                $tie = true;
+            }
+        }
+
+        return $bestDistance <= 2 && ! $tie ? $best : null;
+    }
+
     /**
      * @param  array  $incidents  plain rows with barangay/road/sev/type/date/time/status keys
      * @param  array  $predictionInputs  plain rows with barangay/road/month/incidentCount keys
@@ -202,13 +263,16 @@ class PredictionService
     {
         $groups = [];
 
+        // Only the 27 official barangays are forecast; every spelling of one is counted under
+        // its official name, and records naming no real barangay are left out of the forecast.
         foreach ($predictionInputs as $input) {
-            if (empty($input['barangay']) || empty($input['month'])) {
+            $barangay = self::officialBarangay($input['barangay'] ?? null);
+            if ($barangay === null || empty($input['month'])) {
                 continue;
             }
-            $key = self::groupKey($input['barangay'], $input['road'] ?? null);
+            $key = self::groupKey($barangay, $input['road'] ?? null);
             if (! isset($groups[$key])) {
-                $groups[$key] = ['barangay' => $input['barangay'], 'road' => $input['road'] ?: 'All Roads', 'history' => [], 'sources' => [], 'incidents' => []];
+                $groups[$key] = ['barangay' => $barangay, 'road' => $input['road'] ?: 'All Roads', 'history' => [], 'sources' => [], 'incidents' => []];
             }
             $month = $input['month'];
             $groups[$key]['history'][$month] = ($groups[$key]['history'][$month] ?? 0) + (int) ($input['incidentCount'] ?? 0);
@@ -216,12 +280,14 @@ class PredictionService
         }
 
         foreach ($incidents as $incident) {
-            if (empty($incident['barangay']) || empty($incident['road'])) {
+            $barangay = self::officialBarangay($incident['barangay'] ?? null);
+            if ($barangay === null || empty($incident['road'])) {
                 continue;
             }
-            $key = self::groupKey($incident['barangay'], $incident['road']);
+            $incident['barangay'] = $barangay;
+            $key = self::groupKey($barangay, $incident['road']);
             if (! isset($groups[$key])) {
-                $groups[$key] = ['barangay' => $incident['barangay'], 'road' => $incident['road'], 'history' => [], 'sources' => [], 'incidents' => []];
+                $groups[$key] = ['barangay' => $barangay, 'road' => $incident['road'], 'history' => [], 'sources' => [], 'incidents' => []];
             }
             $groups[$key]['incidents'][] = $incident;
 
@@ -237,6 +303,26 @@ class PredictionService
         $forecastDegraded = false;
         $forest = self::forecastWithForest(array_map(fn ($g) => $g['history'], $groups), $forecastDegraded);
         $degraded = $degraded || $forecastDegraded;
+
+        // Without the Python forest (not installed, or it failed) there used to be one month of
+        // forecast only, so the Forecast page could not pick any later month or a 3/6/12-month
+        // horizon. The straight-line fallback now covers the same 12 months ahead, starting the
+        // month after the newest record.
+        if ($forest['horizonMonths'] === []) {
+            $lastMonth = '';
+            foreach ($groups as $group) {
+                foreach (array_keys($group['history']) as $month) {
+                    $lastMonth = max($lastMonth, (string) $month);
+                }
+            }
+            if ($lastMonth !== '') {
+                $start = strtotime($lastMonth . '-01');
+                for ($k = 1; $k <= self::FALLBACK_HORIZON; $k++) {
+                    $forest['horizonMonths'][] = date('Y-m', strtotime("+{$k} month", $start));
+                }
+                $forest['forecastMonth'] = $forest['forecastMonth'] ?? $forest['horizonMonths'][0];
+            }
+        }
 
         $results = [];
         foreach ($groups as $key => $group) {
@@ -299,7 +385,8 @@ class PredictionService
                 'forecastBacktest' => $forestValue !== null ? $forest['backtest'] : null,
                 // Advance forecast: one rounded count per month in forecastMonths (month +1 first).
                 'forecastMonths' => $forest['horizonMonths'],
-                'forecastPath' => $forest['horizonMonths'] === [] ? [$predictedNextMonth] : $forecastPath,
+                // Month +1 is always the headline figure, whichever model produced the rest.
+                'forecastPath' => $forest['horizonMonths'] === [] ? [$predictedNextMonth] : array_replace($forecastPath, [0 => $predictedNextMonth]),
                 'horizonBacktest' => $forestValue !== null ? $forest['horizonBacktest'] : null,
                 // The unrounded figures behind trend and riskScore, so the Forecast page can
                 // explain them exactly (maxRawScore and riskScore are filled in below).
