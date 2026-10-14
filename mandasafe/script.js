@@ -2216,17 +2216,25 @@ async function loadBoundaryGeoJson() {
     return null;
 }
 
+let proneRetries = 0;
 async function renderProneAreas() {
     const note = document.getElementById('paNote');
     if (!note) return;
+    note.innerHTML = `<i class="fas fa-spinner fa-spin" style="color:var(--blue);"></i> Running the prediction model… this can take up to a minute.`;
     let data;
     try { data = await api.getProneAreas(); }
     catch (error) { note.innerHTML = `<i class="fas fa-triangle-exclamation" style="color:#dc2626;"></i> ${escapeMapHtml(error.message)}`; return; }
 
     if (!data.trained) {
         note.innerHTML = `<i class="fas fa-triangle-exclamation" style="color:#d97706;"></i> ${escapeMapHtml(data.reason || 'The prediction model has not been trained yet.')}`;
+        // A failed run is only cached for 30 s server-side, so try again after that.
+        if (data.retry && proneRetries < 3) {
+            proneRetries++;
+            setTimeout(renderProneAreas, 35000);
+        }
         return;
     }
+    proneRetries = 0;
     const m = data.model;
     const period = p => `${monthKeyLabel(p.from)} – ${monthKeyLabel(p.to)}`;
     document.getElementById('paPeriod').textContent = `Prediction for ${period(m.predictionPeriod)}`;

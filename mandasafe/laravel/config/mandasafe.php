@@ -123,6 +123,9 @@ return [
 
     'python_bin' => env('MANDASAFE_PYTHON_BIN', 'python'),
 
+    // Seconds one ML script may run before it is stopped.
+    'ml_timeout' => (int) env('MANDASAFE_ML_TIMEOUT', 300),
+
     /*
     |--------------------------------------------------------------------------
     | Demo notice

@@ -274,7 +274,13 @@ class AnalyticsService
                 Log::warning('prone_area_forest.py unavailable', ['error' => $e->getMessage()]);
                 $degraded = true;
 
-                return ['trained' => false, 'reason' => 'The prediction model could not run. Check that Python and scikit-learn are installed.', 'model' => null, 'cells' => [], 'barangays' => []];
+                // A timeout is a busy or slow server, not a missing install — say which, and
+                // let the page try again once the 30-second degraded cache has expired.
+                $reason = str_contains($e->getMessage(), 'timed out')
+                    ? 'The prediction model took too long to finish. Retrying shortly…'
+                    : 'The prediction model could not run. Retrying shortly… (if this keeps happening, check that Python and scikit-learn are installed and see storage/logs/laravel.log).';
+
+                return ['trained' => false, 'retry' => true, 'reason' => $reason, 'model' => null, 'cells' => [], 'barangays' => []];
             }
         });
     }

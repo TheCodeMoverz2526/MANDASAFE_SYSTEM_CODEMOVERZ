@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
@@ -18,10 +19,17 @@ class MlBridge
         $python = config('mandasafe.python_bin');
         $scriptPath = config('mandasafe.ml_root') . DIRECTORY_SEPARATOR . $script;
 
-        $result = Process::input(json_encode($payload))
-            ->env(self::pythonEnvironment())
-            ->timeout(120)
-            ->run([$python, $scriptPath]);
+        // The prone-area forest trains one model per candidate bandwidth; on a small server, or
+        // while the other models run at the same time, that can take minutes, not seconds.
+        $timeout = (int) config('mandasafe.ml_timeout', 300);
+        try {
+            $result = Process::input(json_encode($payload))
+                ->env(self::pythonEnvironment())
+                ->timeout($timeout)
+                ->run([$python, $scriptPath]);
+        } catch (ProcessTimedOutException $e) {
+            throw new RuntimeException("ML script {$script} timed out after {$timeout} seconds.", 0, $e);
+        }
 
         if (! $result->successful()) {
             throw new RuntimeException("ML script {$script} failed: " . $result->errorOutput());
