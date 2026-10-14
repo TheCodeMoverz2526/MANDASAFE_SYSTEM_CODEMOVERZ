@@ -22,7 +22,7 @@ class AnalyticsService
      * Bumped whenever the shape of a cached result changes (e.g. predictions gaining the
      * 24-month forecastPath), so old cache entries are ignored instead of served for a day.
      */
-    private const CACHE_SCHEMA = 6;
+    private const CACHE_SCHEMA = 7;
 
     /** Incidents as plain rows, newest first — the shape the ported algorithms expect. */
     public function incidents(): array
@@ -200,6 +200,9 @@ class AnalyticsService
                 if ($point === null) {
                     continue;
                 }
+                // Spelling variants count under the official barangay ("Brgy. Hulo" is Hulo),
+                // so each one's heat and map spot cover all of its accidents.
+                $incident['barangay'] = PredictionService::officialBarangay($incident['barangay'] ?? null) ?? ($incident['barangay'] ?? 'Unknown');
                 $records[] = [
                     'lat' => $point['lat'],
                     'lng' => $point['lng'],
@@ -208,17 +211,33 @@ class AnalyticsService
                 ];
             }
 
+            $centroids = GeoService::barangayCentroids();
             $result = KdeService::findHotspots($records, GeoService::mandaluyongBounds(), [
                 'withBarangays' => true,
                 // So each barangay's map spot is placed inside its own boundary.
                 'boundaries' => GeoService::barangayPolygons(),
-                'centroids' => GeoService::barangayCentroids(),
+                'centroids' => $centroids,
             ], $degraded);
+
+            // The ranking lists exactly the 27 official barangays: names that are not a
+            // barangay are left out, and one with no mapped accidents is listed at 0% at its
+            // centre, so the Hotspots page always shows every barangay.
+            $ranking = $result['barangays'] ?? [];
+            if ($centroids !== [] && $ranking !== []) {
+                $ranking = array_values(array_filter($ranking, fn ($b) => isset($centroids[$b['barangay']])));
+                $listed = array_column($ranking, 'barangay');
+                foreach ($centroids as $name => $centre) {
+                    if (! in_array($name, $listed, true)) {
+                        $ranking[] = ['barangay' => $name, 'heat' => 0.0, 'incidentCount' => 0, 'fatalCount' => 0,
+                            'lat' => $centre['lat'], 'lng' => $centre['lng'], 'intensity' => 0.0];
+                    }
+                }
+            }
 
             // An empty/failed run comes back as a bare list rather than the pair.
             return [
                 'peaks' => $result['peaks'] ?? (array_is_list($result) ? $result : []),
-                'barangays' => $result['barangays'] ?? [],
+                'barangays' => $ranking,
             ];
         });
     }

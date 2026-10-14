@@ -57,12 +57,11 @@ if (requireAuth()) {
     document.getElementById('range').textContent =
       `${num(summary.totalIncidents)} accidents • ${fmtDate(summary.range.from)} – ${fmtDate(summary.range.to)}`;
 
-    // Every barangay: the ranked ones from the density model, then any the model had no
-    // mapped accidents for, at 0%, so all of the city's barangays are always listed.
-    const ranked = new Set(ranking.map(b => b.barangay));
-    const rows = ranking.concat((summary.byBarangay || [])
-      .filter(b => !ranked.has(b.barangay))
-      .map(b => ({ barangay: b.barangay, intensity: 0, incidentCount: b.count || 0 })));
+    // The server's ranking already lists all 27 official barangays (any without mapped
+    // accidents at 0%, misspelled names counted under the right one). Only if the density
+    // model returned nothing at all are the plain per-barangay counts shown instead.
+    const rows = ranking.length ? ranking : (summary.byBarangay || [])
+      .map(b => ({ barangay: b.barangay, intensity: 0, incidentCount: b.count || 0 }));
 
     // Red / yellow / green from each barangay's accident count against the city's average
     // and median barangay — see riskLevels() in map.js.

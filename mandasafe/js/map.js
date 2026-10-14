@@ -248,7 +248,8 @@ function plotBarangaySpots(map, ranking, levelOf) {
         { r: 130, o: 0.30, c: '#ef4444' }
     ];
     ranking.forEach((s, n) => {
-        if (s.lat == null || s.lng == null) return;
+        // A barangay with no mapped accidents has no hotspot to draw.
+        if (s.lat == null || s.lng == null || !s.incidentCount) return;
         const level = levelOf ? levelOf(s) : null;
         const weight = Math.max(0.3, Math.sqrt(s.intensity || 0));
         rings.forEach(g => L.circle([s.lat, s.lng], {
