@@ -30,13 +30,17 @@ class Setting extends Model
         static::updateOrCreate(['key' => $key], ['value' => (string) $value]);
     }
 
-    /** Atomically hands out the next id in a sequence, the way nextIncidentSeq() did. */
-    public static function nextSequence(string $key): int
+    /**
+     * Atomically hands out the next id in a sequence, the way nextIncidentSeq() did. With a
+     * $count, reserves that many consecutive ids in one go and returns the first — an import
+     * then costs one round-trip to the database instead of one per row.
+     */
+    public static function nextSequence(string $key, int $count = 1): int
     {
-        return DB::transaction(function () use ($key) {
+        return DB::transaction(function () use ($key, $count) {
             $row = static::lockForUpdate()->find($key);
             $next = $row ? ((int) $row->value) : 1;
-            static::put($key, $next + 1);
+            static::put($key, $next + max(1, $count));
 
             return $next;
         });

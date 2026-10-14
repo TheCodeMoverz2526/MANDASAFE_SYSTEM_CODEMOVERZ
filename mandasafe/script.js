@@ -123,7 +123,7 @@ async function apiRequest(path, options = {}) {
 const api = {
     getIncidents: () => apiRequest('/api/incidents'),
     createIncident: (body) => apiRequest('/api/incidents', { method: 'POST', body: JSON.stringify(body) }),
-    bulkCreateIncidents: (records) => apiRequest('/api/incidents/bulk', { method: 'POST', body: JSON.stringify({ records }) }),
+    bulkCreateIncidents: (records, extra = {}) => apiRequest('/api/incidents/bulk', { method: 'POST', body: JSON.stringify({ records, ...extra }) }),
     bulkDeleteIncidents: (ids) => apiRequest('/api/incidents/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
     updateIncident: (id, body) => apiRequest(`/api/incidents/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deleteIncident: (id) => apiRequest(`/api/incidents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -2880,6 +2880,8 @@ const COL_HEADERS = {
 };
 
 const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+const IMPORT_CHUNK = 500;          // rows per request when saving an import
+const IMPORT_PREVIEW_ROWS = 200;   // rows drawn in the preview table; all of them are imported
 // Ordered so a more specific/less ambiguous field claims a header before a broader one gets
 // a chance at it (e.g. "id" alone is too generic to test first, or it would grab any header
 // that merely contains "id" as a substring, like "Residential Area").
@@ -3052,14 +3054,16 @@ async function processImportRows(headerCells, dataRows) {
     const colMap = mapImportColumns(rawHeaders);
     const columnSummary = summarizeColumnMapping(headerCells, colMap);
     const seenKeys = new Set();
+    // Built once: scanning every stored accident for every imported row froze the page on
+    // files of a few thousand rows.
+    const existingKeys = new Set(incidents.map(inc => `${inc.date}||${inc.time}||${inc.barangay}||${inc.road}||${inc.type}`.toLowerCase()));
     const rows = [];
     const warnings = [];
 
     dataRows.forEach((cols, i) => {
         const row = buildImportRow(cols, colMap, i + 1);
         const dupKey = `${row.date}||${row.time}||${row.barangay}||${row.road}||${row.type}`.toLowerCase();
-        const isDup = seenKeys.has(dupKey) || incidents.some(inc =>
-            `${inc.date}||${inc.time}||${inc.barangay}||${inc.road}||${inc.type}`.toLowerCase() === dupKey);
+        const isDup = seenKeys.has(dupKey) || existingKeys.has(dupKey);
         if (isDup) row._warn = row._warn ? `${row._warn}; Possible duplicate` : 'Possible duplicate of an existing accident';
         seenKeys.add(dupKey);
         if (row._warn) warnings.push(`Row ${i + 1}: ${row._warn}`);
@@ -3113,13 +3117,15 @@ function renderImportPreview(rows, warnings, columnSummary) {
         ).join('');
     }
 
-    document.getElementById('importPreviewCount').textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''} ready to import`;
+    document.getElementById('importPreviewCount').textContent = `${rows.length.toLocaleString()} row${rows.length !== 1 ? 's' : ''} ready to import`
+        + (rows.length > IMPORT_PREVIEW_ROWS ? ` — previewing the first ${IMPORT_PREVIEW_ROWS}` : '');
     document.getElementById('importErrorCount').textContent = warnings.length ? `⚠️ ${warnings.length} warning${warnings.length > 1 ? 's' : ''}` : '';
     document.getElementById('importConfirmBtn').style.display = 'flex';
-    document.getElementById('importBtnCount').textContent = rows.length;
+    document.getElementById('importBtnCount').textContent = rows.length.toLocaleString();
 
+    // Drawing thousands of table rows freezes the page, so only the first few are shown.
     const tbody = document.getElementById('importPreviewBody');
-    tbody.innerHTML = rows.map(r => `
+    tbody.innerHTML = rows.slice(0, IMPORT_PREVIEW_ROWS).map(r => `
                 <tr>
                     <td>${r._warn
             ? `<span title="${escapeMapHtml(r._warn)}" style="color:#d97706;font-size:11px;font-weight:700;cursor:help;">⚠️ WARN</span>`
@@ -3141,16 +3147,49 @@ async function confirmImport() {
     const clean = importedRows.map(r => { const c = { ...r }; delete c._warn; return c; });
     const btn = document.getElementById('importConfirmBtn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importing…'; }
+
+    // A file of thousands of rows is sent IMPORT_CHUNK rows at a time: one huge request runs
+    // into the host's request-size and 60-second limits. Duplicates are still caught across
+    // chunks, since each one is checked against everything the earlier ones saved.
+    const chunks = [];
+    for (let i = 0; i < clean.length; i += IMPORT_CHUNK) chunks.push(clean.slice(i, i + IMPORT_CHUNK));
+    const createdIds = [];
+    let skipped = 0;
+    let sent = 0;
     try {
-        const result = await api.bulkCreateIncidents(clean);
+        for (let c = 0; c < chunks.length; c++) {
+            if (btn && chunks.length > 1) btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Importing ${sent.toLocaleString()} / ${clean.length.toLocaleString()}…`;
+            const last = c === chunks.length - 1;
+            const extra = last ? { priorIds: createdIds, priorSkipped: skipped } : { notify: false };
+            let result;
+            try {
+                result = await api.bulkCreateIncidents(chunks[c], extra);
+            } catch (firstError) {
+                // One retry covers a dropped connection or a cold server start.
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                result = await api.bulkCreateIncidents(chunks[c], extra);
+            }
+            (result.created || []).forEach(r => createdIds.push(r.id));
+            skipped += result.skippedCount || 0;
+            sent += chunks[c].length;
+        }
         closeImportModal();
         await loadIncidentsFromServer();
-        const skippedMsg = result.skippedCount ? `, ${result.skippedCount} skipped (duplicate/invalid)` : '';
-        showToast(`✅ ${result.createdCount} accident${result.createdCount !== 1 ? 's' : ''} imported and saved${skippedMsg}`);
+        const skippedMsg = skipped ? `, ${skipped.toLocaleString()} skipped (duplicate/invalid)` : '';
+        showToast(`✅ ${createdIds.length.toLocaleString()} accident${createdIds.length !== 1 ? 's' : ''} imported and saved${skippedMsg}`);
     } catch (error) {
-        showToast('⚠️ Import failed: ' + error.message);
+        if (sent) {
+            // The earlier chunks are already saved: say so, and drop them from the preview so
+            // pressing Import again sends only the rows that did not go through.
+            importedRows = importedRows.slice(sent);
+            renderImportPreview(importedRows, [], null);
+            loadIncidentsFromServer();
+            showToast(`⚠️ Import stopped after ${createdIds.length.toLocaleString()} saved: ${error.message}. Press Import to send the remaining ${importedRows.length.toLocaleString()}.`);
+        } else {
+            showToast('⚠️ Import failed: ' + error.message);
+        }
     } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-check"></i> Import <span id="importBtnCount">${clean.length}</span> Records`; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-check"></i> Import <span id="importBtnCount">${importedRows.length.toLocaleString()}</span> Records`; }
     }
 }
 

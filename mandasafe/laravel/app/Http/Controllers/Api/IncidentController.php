@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Services\AccountService;
 use App\Services\NotificationService;
 use App\Services\ResidentNotificationService;
+use App\Services\SpatialService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -230,26 +231,40 @@ class IncidentController extends ApiController
             $created = [];
             $skipped = [];
 
-            DB::transaction(function () use ($records, &$existingKeys, &$created, &$skipped, $actorEmail) {
-                $sortKey = $this->nextSortKey();
+            // Validate and de-duplicate in memory first. The database is remote when deployed,
+            // so a query per row (an id, then an insert) ran past the hosting time limit and the
+            // import failed with a 504; the rows are now written in a handful of batched queries.
+            $valid = [];
+            foreach ($records as $index => $body) {
+                try {
+                    if (! is_array($body)) {
+                        throw new \App\Exceptions\RimasException('Row is not a record.');
+                    }
+                    $this->requireFields($body, ['barangay', 'road', 'sev', 'type', 'date']);
 
-                foreach ($records as $index => $body) {
-                    try {
-                        if (! is_array($body)) {
-                            throw new \App\Exceptions\RimasException('Row is not a record.');
-                        }
-                        $this->requireFields($body, ['barangay', 'road', 'sev', 'type', 'date']);
+                    $key = strtolower(implode('||', [$body['date'], $body['time'] ?? '', $body['barangay'], $body['road'], $body['type']]));
+                    if (isset($existingKeys[$key])) {
+                        $skipped[] = ['index' => $index, 'reason' => 'Duplicate of an existing accident'];
 
-                        $key = strtolower(implode('||', [$body['date'], $body['time'] ?? '', $body['barangay'], $body['road'], $body['type']]));
-                        if (isset($existingKeys[$key])) {
-                            $skipped[] = ['index' => $index, 'reason' => 'Duplicate of an existing accident'];
+                        continue;
+                    }
+                    $existingKeys[$key] = true;
+                    $valid[] = $body;
+                } catch (\App\Exceptions\RimasException $exception) {
+                    $skipped[] = ['index' => $index, 'reason' => $exception->getMessage()];
+                }
+            }
 
-                            continue;
-                        }
-                        $existingKeys[$key] = true;
+            if ($valid !== []) {
+                DB::transaction(function () use ($valid, &$created, $actorEmail) {
+                    $firstSeq = Setting::nextSequence('nextIncidentSeq', count($valid));
+                    $sortKey = $this->nextSortKey();
+                    $now = AccountService::isoNow();
+                    $rows = [];
 
-                        $created[] = Incident::create([
-                            'id' => $this->nextIncidentId(),
+                    foreach ($valid as $i => $body) {
+                        $incident = new Incident([
+                            'id' => '#A' . (10000 + $firstSeq + $i),
                             'date' => $body['date'],
                             'time' => $body['time'] ?? '',
                             'loc' => $body['loc'] ?? 'Mandaluyong',
@@ -261,19 +276,46 @@ class IncidentController extends ApiController
                             'lng' => $this->coordinate($body, 'lng'),
                             'status' => $body['status'] ?? 'active',
                             'created_by' => $actorEmail,
-                            'created_at_iso' => AccountService::isoNow(),
+                            'created_at_iso' => $now,
                             'sort_key' => $sortKey++,
-                        ])->toApi(true);
-                    } catch (\App\Exceptions\RimasException $exception) {
-                        $skipped[] = ['index' => $index, 'reason' => $exception->getMessage()];
+                        ]);
+                        // A batched insert skips the model's saving hook, so fill the spatial
+                        // columns the same way it would.
+                        $incident->fill(SpatialService::incidentColumns($incident->lat, $incident->lng, $incident->barangay));
+
+                        $rows[] = $incident->getAttributes();
+                        $created[] = $incident->toApi(true);
                     }
-                }
-            });
+
+                    // Older SQLite builds allow only 999 bound parameters a statement (50 rows);
+                    // MySQL and PostgreSQL take far more, so the hosted database gets fewer trips.
+                    $perStatement = DB::connection()->getDriverName() === 'sqlite' ? 50 : 500;
+                    foreach (array_chunk($rows, $perStatement) as $chunk) {
+                        Incident::insert($chunk);
+                    }
+                });
+            }
 
             Setting::touchDataVersion();
-            $this->notifications->notifyIncidentsImported(count($created), $actorEmail);
-            $this->alerts->notifyIncidentsImported($created);
-            AccountActivity::record($this->actor($request)->id, 'incident_imported', 'Imported ' . count($created) . ' accident record(s), skipped ' . count($skipped) . '.');
+
+            // The console sends a large file in several requests, each marked notify:false
+            // except the last, which lists the ids the earlier ones created — so the admins and
+            // residents get one notification for the whole import rather than one per chunk.
+            $body = $this->body($request);
+            if (($body['notify'] ?? true) !== false) {
+                $all = $created;
+                $priorIds = array_values(array_filter((array) ($body['priorIds'] ?? []), 'is_string'));
+                foreach (array_chunk($priorIds, 500) as $ids) {
+                    foreach (Incident::whereIn('id', $ids)->get() as $incident) {
+                        $all[] = $incident->toApi(true);
+                    }
+                }
+                $skippedTotal = count($skipped) + max(0, (int) ($body['priorSkipped'] ?? 0));
+
+                $this->notifications->notifyIncidentsImported(count($all), $actorEmail);
+                $this->alerts->notifyIncidentsImported($all);
+                AccountActivity::record($this->actor($request)->id, 'incident_imported', 'Imported ' . count($all) . ' accident record(s), skipped ' . $skippedTotal . '.');
+            }
 
             return [
                 'created' => $created,
