@@ -13,6 +13,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        app(AccountService::class)->seedDefaultAdmin();
+        $password = app(AccountService::class)->seedDefaultAdmin();
+
+        if ($password !== null && $this->command) {
+            $this->command->warn('Administrator created: ' . AccountService::DEFAULT_ADMIN['email']);
+            $this->command->warn('Password: ' . $password . '   (shown once; change it with php artisan mandasafe:set-password)');
+        }
     }
 }

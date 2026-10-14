@@ -37,19 +37,54 @@ return [
     | One-time passcode delivery
     |--------------------------------------------------------------------------
     |
-    | Leave OTP_TEST_MODE=true to have the sign-in page accept OTP_TEST_CODE without
-    | contacting a provider. Set the Resend / Twilio credentials to deliver for real.
+    | Leave OTP_TEST_MODE=true and no provider is contacted: the code is generated locally
+    | and shown on the sign-in page, which is how the system runs out of the box. Fill in the
+    | Vocotext credentials (SMS) and/or the Resend or SMTP (MAIL_*) credentials (email) to deliver for real —
+    | test mode must be off for either to be used.
+    |
+    | Vocotext iSMS 2FA generates the code on its side, substitutes it for %OTP% in the
+    | message and verifies it on its side too, so MandaSafe never stores those digits.
     |
     */
 
     'otp' => [
         'test_mode' => env('OTP_TEST_MODE', false),
-        'test_code' => env('OTP_TEST_CODE', '123456'),
+
+        // Email — Appwrite Email OTP (preferred). Appwrite generates, mails and checks the code.
+        'appwrite_endpoint' => env('APPWRITE_ENDPOINT', 'https://cloud.appwrite.io/v1'),
+        'appwrite_project' => env('APPWRITE_PROJECT_ID'),
+        // Optional: lets MandaSafe delete the throwaway Appwrite session once a code is accepted.
+        'appwrite_key' => env('APPWRITE_API_KEY'),
+
+        // Email — Resend
         'resend_key' => env('RESEND_API_KEY'),
         'from_email' => env('OTP_FROM_EMAIL'),
+
+        // SMS — Vocotext iSMS 2FA (preferred)
+        'vocotext_endpoint' => env('VOCOTEXT_ENDPOINT', 'https://smtpapi.vocotext.com/isms_2fa_request.php'),
+        'vocotext_user' => env('VOCOTEXT_USERNAME'),
+        'vocotext_pass' => env('VOCOTEXT_PASSWORD'),
+        'vocotext_sender' => env('VOCOTEXT_SENDER_ID', 'MandaSafe'),
+        'vocotext_type' => env('VOCOTEXT_TYPE', '1'),
+        // %OTP% is replaced by the provider with the code it generated.
+        'vocotext_message' => env('VOCOTEXT_MESSAGE', 'Your MandaSafe verification code is %OTP%. Do not share it with anyone.'),
+        // Minutes the provider keeps the code valid — keep it equal to
+        // VerificationService::CHALLENGE_TTL_SECONDS so both sides expire together.
+        'vocotext_interval' => (int) env('VOCOTEXT_INTERVAL', 10),
+
+        // SMS — Twilio, used only when Vocotext is not configured.
         'twilio_sid' => env('TWILIO_ACCOUNT_SID'),
         'twilio_token' => env('TWILIO_AUTH_TOKEN'),
         'twilio_from' => env('TWILIO_FROM_NUMBER'),
+
+        // Numbers are stored as +639171234567; Vocotext wants the country code separately.
+        'sms_country_code' => (string) env('OTP_SMS_COUNTRY_CODE', '63'),
+        'sms_country_codes' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('OTP_SMS_COUNTRY_CODES', '63,1,44,65,61,971'))
+        ))),
+
+        'http_timeout' => (int) env('OTP_HTTP_TIMEOUT', 20),
     ],
 
     /*
@@ -64,5 +99,41 @@ return [
     */
 
     'analytics_cache_seconds' => (int) env('MANDASAFE_ANALYTICS_CACHE', 86400),
+
+    /*
+    | After a change to the data, recompute the models in the background and keep showing the
+    | previous results until that is done (see App\Services\AnalyticsWarmer). php_cli is the
+    | command-line PHP that runs `artisan mandasafe:warm` when the site runs under PHP-FPM.
+    */
+    'background_warm' => filter_var(env('MANDASAFE_BACKGROUND_WARM', true), FILTER_VALIDATE_BOOLEAN),
+    'php_cli' => env('MANDASAFE_PHP_CLI', 'php'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Machine learning
+    |--------------------------------------------------------------------------
+    |
+    | The severity Random Forest and the KDE hotspot surface are computed by the Python
+    | (scikit-learn) scripts in ml/, one level above this Laravel app. MlBridge shells out
+    | to the interpreter below, feeding it JSON on stdin and reading JSON back from stdout.
+    |
+    */
+
+    'ml_root' => dirname(base_path()) . DIRECTORY_SEPARATOR . 'ml',
+
+    'python_bin' => env('MANDASAFE_PYTHON_BIN', 'python'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Demo notice
+    |--------------------------------------------------------------------------
+    |
+    | When set, this text is shown in a bar at the top of every page. Use it whenever the
+    | system is online as a demo, so no visitor mistakes it for an official City website:
+    |   MANDASAFE_DEMO_NOTICE="Capstone demo — not an official Mandaluyong City website."
+    |
+    */
+
+    'demo_notice' => env('MANDASAFE_DEMO_NOTICE'),
 
 ];

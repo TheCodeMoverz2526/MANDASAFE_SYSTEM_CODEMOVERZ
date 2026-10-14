@@ -154,10 +154,18 @@ img{max-width:100%;display:block}
 .lg{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
 .lg i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-style:normal}
 .lg i svg{width:13px;height:13px}
+.lg i.lg-pin{background:none;border-radius:0}
+.lg i.lg-pin svg{width:22px;height:22px}
 .bg-accident{background:var(--red)} .bg-traffic{background:var(--orange)}
 .bg-hazard{background:var(--amber)} .bg-roadwork{background:var(--blue-500)}
 .bg-others{background:var(--purple)}
 .map-legend .link{margin-left:auto;color:var(--blue-600);font-weight:600;font-size:13px}
+
+/* Red map pin used for every incident marker */
+.map-pin{position:relative;width:26px;height:32px;filter:drop-shadow(0 2px 2px rgba(15,23,42,.3))}
+.map-pin svg{display:block}
+.map-pin b{position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;border-radius:9px;background:#111827;
+  color:#fff;font-size:10.5px;display:grid;place-items:center;border:2px solid #fff;padding:0 3px}
 
 /* Leaflet custom pin */
 .pin{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;
@@ -184,8 +192,8 @@ img{max-width:100%;display:block}
 /* ---------- Tags / badges ---------- */
 .tag{display:inline-flex;align-items:center;padding:3px 11px;border-radius:20px;font-size:11.5px;font-weight:700;border:1px solid transparent;white-space:nowrap}
 .t-high{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
-.t-med{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
-.t-low{background:#fffbeb;color:#b45309;border-color:#fde68a}
+.t-med{background:#fefce8;color:#a16207;border-color:#fde68a}
+.t-low{background:#f0fdf4;color:#15803d;border-color:#bbf7d0}
 .t-review{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
 .t-process{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
 .t-resolved{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
@@ -284,6 +292,9 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .rank.r1{background:#fee2e2;color:#b91c1c}
 .rank.r2{background:#ffedd5;color:#c2410c}
 .rank.r3{background:#fef3c7;color:#b45309}
+.rank.lv-high{background:#fee2e2;color:#b91c1c}
+.rank.lv-medium{background:#fef9c3;color:#a16207}
+.rank.lv-low{background:#dcfce7;color:#15803d}
 .hot-item .n{font-weight:700;font-size:13.5px}
 .hot-item .m{display:flex;gap:9px;align-items:center;margin-top:4px}
 .hot-item .cnt{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}

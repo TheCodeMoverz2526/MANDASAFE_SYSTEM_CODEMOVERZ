@@ -7,6 +7,8 @@ const ICONS = {
   logo:'<path d="M12 2C7.6 2 4 5.6 4 10c0 5.2 7 12 8 12s8-6.8 8-12c0-4.4-3.6-8-8-8z" fill="currentColor" opacity=".25"/><path d="M12 2C7.6 2 4 5.6 4 10c0 5.2 7 12 8 12s8-6.8 8-12c0-4.4-3.6-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z" stroke="currentColor" stroke-width="1.6" fill="none"/>',
   home:'<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
   plus:'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/>',
+  minus:'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12h8"/>',
+  target:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
   pin:'<path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>',
   clipboard:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/>',
   fire:'<path d="M12 3s5 4 5 8a5 5 0 11-10 0c0-2 1-3 1-3s.5 2 2 2c0-3 2-7 2-7z"/>',
@@ -64,21 +66,79 @@ function sevMeta(sev) { return SEVERITY[sev] || { color: '#8b5cf6', tag: 't-revi
 const STATUS_TAG = { active: 't-process', resolved: 't-resolved', pending: 't-review' };
 function statusTag(status) { return STATUS_TAG[status] || 't-review'; }
 
-const RISK_TAG = { high: 't-high', medium: 't-med', low: 't-resolved' };
+// Red / yellow / green, the same three levels the maps colour by.
+const RISK_TAG = { high: 't-high', medium: 't-med', low: 't-low' };
+const RISK_LABEL = { high: 'High', medium: 'Moderate', low: 'Low' };
 
 /* ---------------- Shell ---------------- */
 const NAV = [
     { id: 'dashboard', label: 'Dashboard',     icon: 'home',   href: 'dashboard.html' },
-    { id: 'map',       label: 'Incident Map',  icon: 'pin',    href: 'incident-map.html' },
+    { id: 'map',       label: 'Accident Map',  icon: 'pin',    href: 'incident-map.html' },
     { id: 'hotspots',  label: 'Hotspots',      icon: 'fire',   href: 'hotspots.html' },
+    { id: 'forecast',  label: 'Forecast',      icon: 'trend',  href: 'forecast.html' },
     { id: 'safety',    label: 'Safety Index',  icon: 'shield', href: 'safety-index.html' },
-    { id: 'announce',  label: 'Announcements', icon: 'megaphone', href: 'announcements.html' },
     { id: 'profile',   label: 'My Account',    icon: 'user',   href: 'profile.html' }
 ];
 const NAV_SUPPORT = [
     { id: 'about',   label: 'About Us',        icon: 'info',   href: 'about.html' },
     { id: 'support', label: 'Contact Support', icon: 'headset', href: 'support.html' }
 ];
+
+/* ---------------- navigation drawer ----------------
+   The hamburger means two things, because the sidebar starts from two different
+   places. On a wide screen the navigation is pinned open, so the button collapses
+   it: it slides off to the left and the page spreads into the freed width. Below
+   1024px the sidebar is already off-canvas, so the button opens it over the page.
+
+   The resident side is a set of separate pages rather than one app, so the
+   collapsed state is remembered in localStorage — otherwise every link would push
+   the sidebar back open. */
+const NAV_COLLAPSE_KEY = 'mandasafeNavCollapsed';
+
+function isNarrow() { return window.matchMedia('(max-width:1024px)').matches; }
+
+function navCollapsePreferred() {
+    try { return localStorage.getItem(NAV_COLLAPSE_KEY) === '1'; } catch { return false; }
+}
+
+function applyNavState() {
+    // Narrow layout: the drawer is off-canvas already and 'nav-open' is the one that
+    // matters. Leave it alone — mobile browsers fire resize while scrolling, and
+    // clearing it here would snap the open drawer shut under the reader's finger.
+    if (isNarrow()) {
+        document.body.classList.remove('nav-collapsed');
+        return;
+    }
+    document.body.classList.remove('nav-open');
+    document.body.classList.toggle('nav-collapsed', navCollapsePreferred());
+}
+
+/* Leaflet sizes its canvas to the container it was given, so a map that was on the
+   page while the sidebar moved is left with stale dimensions. Leaflet re-measures on
+   a window resize (trackResize), so one event after the slide finishes is enough. */
+function notifyLayoutChanged() {
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 280);
+}
+
+function wireNav() {
+    applyNavState();
+
+    document.getElementById('ms-burger').onclick = () => {
+        if (isNarrow()) {
+            document.body.classList.toggle('nav-open');
+            return;
+        }
+        const collapsed = document.body.classList.toggle('nav-collapsed');
+        try { localStorage.setItem(NAV_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* private mode */ }
+        notifyLayoutChanged();
+    };
+
+    document.getElementById('ms-backdrop').onclick = () => document.body.classList.remove('nav-open');
+
+    // Crossing the breakpoint (rotating a tablet, resizing a window) must not leave the
+    // page holding the class that belongs to the other layout.
+    window.addEventListener('resize', applyNavState);
+}
 
 function buildShell(active) {
     const u = currentUser() || { name: 'Resident', role: 'user' };
@@ -95,17 +155,24 @@ function buildShell(active) {
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>' +
         '</button>' +
         '<a class="brand" href="dashboard.html">' +
-          '<span class="brand-logo">' + icon('logo') + '</span>' +
+          '<img class="brand-logo" src="assets/logo-192.png" alt="MandaSafe logo">' +
           '<span><span class="brand-name">Manda<span>Safe</span></span>' +
-          '<span class="brand-sub" style="display:block">Road Incident Mapping &amp; Analytics System</span></span>' +
+          '<span class="brand-sub" style="display:block">Road Accident Mapping &amp; Analytics System</span></span>' +
         '</a>' +
         '<div class="topbar-actions">' +
-          '<span class="pill" id="ms-live" title="Data source"><span class="live"></span> Live data</span>' +
-          '<div class="userchip" id="ms-userchip" title="Sign out">' +
+          '<div class="alerts-wrap">' +
+            '<button type="button" class="bell" id="ms-bell" aria-label="Notifications" aria-expanded="false" aria-controls="ms-alerts">' +
+              icon('bell') + '<span class="dot" id="ms-bell-dot" hidden></span>' +
+            '</button>' +
+            '<div class="alerts-panel" id="ms-alerts" hidden>' +
+              '<div class="alerts-head">Notifications</div>' +
+              '<div class="alerts-list" id="ms-alerts-list"><div class="empty">Loading…</div></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="userchip is-static" id="ms-userchip">' +
             '<span class="avatar">' + initials + '</span>' +
             '<span><span class="nm">' + u.name + '</span>' +
             '<span class="rl" style="display:block">' + (u.role === 'admin' ? 'Administrator' : 'Resident') + '</span></span>' +
-            '<svg style="width:16px;height:16px;color:#64748b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>' +
           '</div>' +
         '</div>' +
       '</header>';
@@ -118,18 +185,136 @@ function buildShell(active) {
         '<div class="nav-label">NAVIGATION</div>' + NAV.map(item).join('') + adminLink +
         '<div class="nav-sep"></div>' +
         '<div class="nav-label">SUPPORT</div>' + NAV_SUPPORT.map(item).join('') +
+        '<div class="nav-sep"></div>' +
+        '<button type="button" class="nav-item nav-signout" id="ms-signout">' + icon('logout') + '<span>Sign Out</span></button>' +
         '<div class="side-card">' +
-          '<img class="seal" src="assets/seal.svg" alt="Mandaluyong City seal">' +
+          '<img class="seal" src="assets/logo-192.png" alt="MandaSafe logo">' +
           '<p>Mandaluyong City<br>Traffic Planning and<br>Management Office</p>' +
         '</div>' +
         '<div class="side-copy">&copy; 2026 All rights reserved.</div>' +
       '</aside><div class="backdrop" id="ms-backdrop"></div>';
 
-    document.body.insertAdjacentHTML('afterbegin', topbar + sidebar);
-    document.getElementById('ms-burger').onclick = () => document.body.classList.toggle('nav-open');
-    document.getElementById('ms-backdrop').onclick = () => document.body.classList.remove('nav-open');
-    document.getElementById('ms-userchip').onclick = () => { if (confirm('Sign out of MandaSafe?')) logout(); };
+    // Styled sign-out confirmation, in place of the browser's plain confirm() pop-up.
+    const signOutDialog =
+      '<div class="ms-modal" id="ms-signout-modal" role="dialog" aria-modal="true" aria-labelledby="ms-signout-title" hidden>' +
+        '<div class="ms-modal-card">' +
+          '<span class="ms-modal-ic">' + icon('logout') + '</span>' +
+          '<h3 id="ms-signout-title">Sign out of MandaSafe?</h3>' +
+          '<p>You will need to sign in again to see the dashboard, maps and forecasts.</p>' +
+          '<div class="ms-modal-actions">' +
+            '<button type="button" class="ms-btn ms-btn-ghost" id="ms-signout-cancel">Cancel</button>' +
+            '<button type="button" class="ms-btn ms-btn-danger" id="ms-signout-confirm">Sign Out</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.body.insertAdjacentHTML('afterbegin', topbar + sidebar + signOutDialog);
+    wireNav();
+    wireSignOut();
+    wireAlerts();
     document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.i)));
+}
+
+/* ---------------- notification bell ----------------
+   New accident reports and new hotspots, from /api/alerts. Checked on load, every 30
+   seconds while the tab is visible, and on returning to the tab. Opening the panel marks
+   everything as seen for this account (the badge clears on every device).
+
+   A toast announces an item only once: the highest id already announced is remembered,
+   so moving between pages does not repeat it. */
+const ALERTS_TOASTED_KEY = 'mandasafeAlertsToasted';
+const ALERT_ICONS = { incident_added: 'car', hotspot_new: 'fire' };
+
+function timeAgo(iso) {
+    const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (!Number.isFinite(seconds)) return '';
+    if (seconds < 60) return 'just now';
+    const units = [[86400 * 7, 'w'], [86400, 'd'], [3600, 'h'], [60, 'min']];
+    for (const [size, label] of units) {
+        if (seconds >= size) return Math.floor(seconds / size) + ' ' + label + ' ago';
+    }
+    return '';
+}
+
+function wireAlerts() {
+    const bell = document.getElementById('ms-bell');
+    const dot = document.getElementById('ms-bell-dot');
+    const panel = document.getElementById('ms-alerts');
+    const list = document.getElementById('ms-alerts-list');
+    let feed = null;
+
+    const showBadge = count => {
+        dot.hidden = count <= 0;
+        dot.textContent = count > 9 ? '9+' : String(count);
+        bell.setAttribute('aria-label', count > 0 ? `Notifications, ${count} unread` : 'Notifications');
+    };
+
+    const render = () => {
+        if (!feed.items.length) {
+            list.innerHTML = '<div class="empty">No notifications yet. New accident reports and hotspots will appear here.</div>';
+            return;
+        }
+        list.innerHTML = feed.items.map(n =>
+            `<a class="alert-item${n.unread ? ' is-unread' : ''}" href="${esc(n.link || '#')}">` +
+              `<span class="alert-ic ${n.type === 'hotspot_new' ? 'is-hot' : ''}">${icon(ALERT_ICONS[n.type] || 'bell')}</span>` +
+              `<span class="alert-body"><span class="alert-title">${esc(n.title)}</span>` +
+              `<span class="alert-desc">${esc(n.desc || '')}</span>` +
+              `<span class="alert-time">${esc(timeAgo(n.createdAt))}</span></span>` +
+            '</a>').join('');
+    };
+
+    const announceNew = () => {
+        let toasted = null;
+        try { toasted = localStorage.getItem(ALERTS_TOASTED_KEY); } catch { /* private mode */ }
+        // First visit on this browser: nothing is "new" yet, only remember where we are.
+        const fresh = toasted === null ? [] : feed.items.filter(n => n.unread && n.id > Number(toasted));
+        if (fresh.length) toast(fresh.length === 1 ? fresh[0].title : `${fresh.length} new notifications`, 'bell');
+        try { localStorage.setItem(ALERTS_TOASTED_KEY, String(feed.latest)); } catch { /* private mode */ }
+    };
+
+    const load = async () => {
+        try { feed = await API.alerts(); }
+        catch { return; }   // the bell is extra; a failed check just waits for the next one
+        showBadge(feed.unread);
+        render();
+        announceNew();
+    };
+
+    const close = () => { panel.hidden = true; bell.setAttribute('aria-expanded', 'false'); };
+    bell.onclick = event => {
+        event.stopPropagation();
+        if (!panel.hidden) { close(); return; }
+        panel.hidden = false;
+        bell.setAttribute('aria-expanded', 'true');
+        if (feed && feed.unread > 0) {
+            showBadge(0);
+            feed.unread = 0;
+            API.alertsSeen().catch(() => { /* shown as unread again on the next check */ });
+        }
+    };
+    document.addEventListener('click', event => { if (!panel.hidden && !panel.contains(event.target)) close(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !panel.hidden) close(); });
+
+    load();
+    setInterval(() => { if (!document.hidden) load(); }, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+}
+
+function wireSignOut() {
+    const modal = document.getElementById('ms-signout-modal');
+    const confirmBtn = document.getElementById('ms-signout-confirm');
+    const open = () => { modal.hidden = false; confirmBtn.focus(); };
+    const close = () => { modal.hidden = true; };
+
+    document.getElementById('ms-signout').onclick = open;
+    document.getElementById('ms-signout-cancel').onclick = close;
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });   // click outside the card
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
+    confirmBtn.onclick = () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Signing out…';
+        logout();
+    };
 }
 
 /* ---------------- formatting ---------------- */
@@ -171,10 +356,10 @@ function liveClock(el) {
     };
     tick(); setInterval(tick, 30000);
 }
-function toast(msg) {
+function toast(msg, iconName) {
     let t = document.querySelector('.toast');
     if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
-    t.innerHTML = icon('checkOnly') + '<span>' + esc(msg) + '</span>';
+    t.innerHTML = icon(iconName || 'checkOnly') + '<span>' + esc(msg) + '</span>';
     requestAnimationFrame(() => t.classList.add('show'));
     clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 3200);
 }

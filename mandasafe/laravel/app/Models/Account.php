@@ -19,7 +19,12 @@ class Account extends Authenticatable
 
     protected $guarded = [];
 
-    protected $hidden = ['password'];
+    protected $hidden = ['password', 'totp_secret'];
+
+    protected function casts(): array
+    {
+        return ['totp_secret' => 'encrypted'];
+    }
 
     public function isAdmin(): bool
     {

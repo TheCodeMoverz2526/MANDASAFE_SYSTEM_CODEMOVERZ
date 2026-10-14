@@ -60,6 +60,19 @@ const TYPES = {
   Others  :{ic:'dots',cls:'bg-others',color:'#8b5cf6'}
 };
 const SEVERITY_TAG = {High:'t-high',Medium:'t-med',Low:'t-low'};
+
+/* Hotspot risk from the data: an area's incident count against the busiest hotspot —
+   over two-thirds of it is High (red), over one-third Moderate (yellow), the rest Low (green). */
+const RISK_LEVELS = {
+  high:  {key:'high',  label:'High Risk',     tag:'t-high', color:'#dc2626'},
+  medium:{key:'medium',label:'Moderate Risk', tag:'t-med',  color:'#eab308'},
+  low:   {key:'low',   label:'Low Risk',      tag:'t-low',  color:'#16a34a'}
+};
+function hotspotLevel(h, list){
+  const top = Math.max(1, ...(list||HOTSPOTS).map(x=>x.count||0));
+  const share = (h.count||0)/top;
+  return RISK_LEVELS[share > 2/3 ? 'high' : share > 1/3 ? 'medium' : 'low'];
+}
 const STATUS_TAG   = {'Under Review':'t-review','On Process':'t-process','Resolved':'t-resolved'};
 
 /* ---------------- Seed data ---------------- */

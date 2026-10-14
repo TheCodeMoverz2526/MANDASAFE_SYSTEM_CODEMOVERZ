@@ -12,6 +12,27 @@ class GeoService
 {
     private static ?array $centroids = null;
     private static ?array $bounds = null;
+    private static array $polygons = [];
+
+    /** The outer ring(s) of a Polygon / MultiPolygon as lists of [lng, lat]; holes are ignored. */
+    private static function outerRings(array $geometry): array
+    {
+        $coordinates = $geometry['coordinates'] ?? [];
+
+        return match ($geometry['type'] ?? null) {
+            'Polygon' => isset($coordinates[0]) ? [$coordinates[0]] : [],
+            'MultiPolygon' => array_values(array_filter(array_map(fn ($polygon) => $polygon[0] ?? null, $coordinates))),
+            default => [],
+        };
+    }
+
+    /** @return array<string, array<int, array<int, array{0: float, 1: float}>>> barangay => outer rings */
+    public static function barangayPolygons(): array
+    {
+        self::load();
+
+        return self::$polygons;
+    }
 
     /** Flattens any GeoJSON coordinate nesting down to a flat list of [lng, lat] pairs. */
     private static function walkCoordinates($node, array &$points): void
@@ -71,6 +92,7 @@ class GeoService
                     'lat' => $sumLat / count($points),
                     'lng' => $sumLng / count($points),
                 ];
+                self::$polygons[$name] = self::outerRings($feature['geometry'] ?? []);
             }
         }
 
@@ -106,12 +128,26 @@ class GeoService
         $lat = is_numeric($incident['lat'] ?? null) ? (float) $incident['lat'] : null;
         $lng = is_numeric($incident['lng'] ?? null) ? (float) $incident['lng'] : null;
 
-        if ($lat !== null && $lng !== null && is_finite($lat) && is_finite($lng)) {
+        // Coordinates outside the city are treated like missing ones. The data has a pile of
+        // 232 records from 23 different barangays sharing one point in Quezon City (a
+        // placeholder), which otherwise shows up as a fake hotspot and drags every density
+        // figure toward it. A small margin keeps accidents on the boundary roads.
+        if ($lat !== null && $lng !== null && is_finite($lat) && is_finite($lng) && self::insideCity($lat, $lng)) {
             return ['lat' => $lat, 'lng' => $lng];
         }
 
         $centroid = self::barangayCentroids()[$incident['barangay'] ?? ''] ?? null;
 
         return $centroid ? ['lat' => $centroid['lat'], 'lng' => $centroid['lng']] : null;
+    }
+
+    /** Within Mandaluyong's bounding box, give or take about 300 m. */
+    private static function insideCity(float $lat, float $lng): bool
+    {
+        $b = self::mandaluyongBounds();
+        $margin = 0.003;
+
+        return $lat >= $b['minLat'] - $margin && $lat <= $b['maxLat'] + $margin
+            && $lng >= $b['minLng'] - $margin && $lng <= $b['maxLng'] + $margin;
     }
 }

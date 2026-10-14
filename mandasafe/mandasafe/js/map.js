@@ -49,12 +49,15 @@ function createMandaMap(elId, opts){
   return map;
 }
 
+/* Red map pin with a black outline and white hole; the tip sits on the location. */
+const PIN_SVG = '<svg viewBox="4.3 1.3 15.4 18.8" width="26" height="32">'+
+  '<path d="M12 19.3 6.88 13.77A7 7 0 1 1 17.12 13.77Z" fill="#dc2626" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>'+
+  '<circle cx="12" cy="9" r="3.5" fill="#fff" stroke="#000" stroke-width="1.2"/></svg>';
 function markerIcon(type, count){
-  const m = TYPES[type] || TYPES.Others;
   return L.divIcon({
     className:'',
-    html:'<div class="pin" style="background:'+m.color+'">'+icon(m.ic)+(count>1?'<b>'+count+'</b>':'')+'</div>',
-    iconSize:[30,30], iconAnchor:[15,15], popupAnchor:[0,-16]
+    html:'<div class="map-pin">'+PIN_SVG+(count>1?'<b>'+count+'</b>':'')+'</div>',
+    iconSize:[26,32], iconAnchor:[13,31], popupAnchor:[0,-30]
   });
 }
 
@@ -65,7 +68,7 @@ function plotIncidents(map, list){
      .addTo(layer)
      .bindPopup(
        '<b>'+i.title+'</b>'+
-       '<span>'+i.loc+'</span>'+
+       '<span>'+i.type+' • '+i.loc+'</span>'+
        '<div style="margin-top:7px"><span class="tag '+(SEVERITY_TAG[i.sev]||'')+'">'+i.sev+'</span> '+
        '<span class="tag '+(STATUS_TAG[i.status]||'')+'">'+i.status+'</span></div>'+
        '<div style="margin-top:6px;font-size:11.5px;color:#64748b">'+i.id+' • '+i.time+'</div>'
@@ -75,25 +78,27 @@ function plotIncidents(map, list){
 }
 
 /* Heat-style visualisation built from stacked translucent circles
-   (no plugin needed — keeps the system pure HTML/CSS/JS). */
+   (no plugin needed — keeps the system pure HTML/CSS/JS). Each spot is tinted by its
+   risk level from hotspotLevel(): red high, yellow moderate, green low. */
 function plotHeat(map, spots){
   const layer = L.layerGroup().addTo(map);
   const rings = [
-    {r:520, o:0.10, c:'#f97316'},
-    {r:380, o:0.16, c:'#fb923c'},
-    {r:250, o:0.24, c:'#f59e0b'},
-    {r:150, o:0.34, c:'#ef4444'},
-    {r: 80, o:0.55, c:'#dc2626'}
+    {r:520, o:0.10},
+    {r:380, o:0.16},
+    {r:250, o:0.24},
+    {r:150, o:0.34},
+    {r: 80, o:0.55}
   ];
   spots.forEach(s=>{
+    const level = hotspotLevel(s, spots);
     rings.forEach(g=>{
       L.circle([s.lat,s.lng],{
-        radius:g.r*s.w, stroke:false, fillColor:g.c, fillOpacity:g.o*s.w, interactive:false
+        radius:g.r*s.w, stroke:false, fillColor:level.color, fillOpacity:g.o*s.w, interactive:false
       }).addTo(layer);
     });
-    L.circleMarker([s.lat,s.lng],{radius:6,color:'#fff',weight:2,fillColor:'#b91c1c',fillOpacity:1})
+    L.circleMarker([s.lat,s.lng],{radius:6,color:'#fff',weight:2,fillColor:level.color,fillOpacity:1})
       .addTo(layer)
-      .bindPopup('<b>'+s.name+'</b><span>'+s.risk+' • '+s.count+' incidents</span>');
+      .bindPopup('<b>'+s.name+'</b><span>'+level.label+' • '+s.count+' incidents</span>');
   });
   return layer;
 }

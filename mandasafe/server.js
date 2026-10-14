@@ -126,6 +126,17 @@ function handleAuthApi(request, response, urlPath) {
         return true;
     }
 
+    // The signed-in account editing its own details — the bearer token is the proof.
+    if (action === 'profile' && request.method === 'PUT') {
+        const account = actorFor(request);
+        if (!account) return sendJson(response, 401, { error: 'Not signed in.' }), true;
+        readJson(request).then(body => {
+            requireFields(body, ['name', 'email', 'phone']);
+            sendJson(response, 200, auth.updateOwnProfile(account.id, body));
+        }).catch(error => sendJson(response, 400, { error: error.message }));
+        return true;
+    }
+
     if (action === 'logout' && request.method === 'POST') {
         auth.destroySession(auth.tokenFromRequest(request));
         return sendJson(response, 200, { signedOut: true }), true;
@@ -418,6 +429,7 @@ function computeSummary(store) {
     const byBarangay = new Map();
     const byMonth = new Map();
     const byType = new Map();
+    const byRoad = new Map();
     const bySeverity = new Map();
 
     incidents.forEach(incident => {
@@ -432,6 +444,8 @@ function computeSummary(store) {
         if (/^\d{4}-\d{2}$/.test(month)) byMonth.set(month, (byMonth.get(month) || 0) + 1);
         byType.set(incident.type || 'Unknown', (byType.get(incident.type || 'Unknown') || 0) + 1);
         bySeverity.set(incident.sev || 'Unknown', (bySeverity.get(incident.sev || 'Unknown') || 0) + 1);
+        const road = (incident.road || '').trim();
+        if (road && road !== 'Unknown') byRoad.set(road, (byRoad.get(road) || 0) + 1);
     });
 
     const dates = incidents.map(i => i.date).filter(Boolean).sort();
@@ -446,6 +460,7 @@ function computeSummary(store) {
         byBarangay: [...byBarangay.values()].sort((a, b) => b.count - a.count),
         byMonth: [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, count]) => ({ month, count })),
         byType: [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([type, count]) => ({ type, count })),
+        byRoad: [...byRoad.entries()].sort((a, b) => b[1] - a[1]).map(([road, count]) => ({ road, count })),
         bySeverity: [...bySeverity.entries()].sort((a, b) => b[1] - a[1]).map(([sev, count]) => ({ sev, count })),
         topPredictions: predictions.slice(0, 6),
         recent

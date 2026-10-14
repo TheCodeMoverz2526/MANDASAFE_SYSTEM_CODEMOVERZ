@@ -21,7 +21,12 @@
     <div class="card">
       <div class="card-head"><h2>Heatmap</h2></div>
       <div class="card-body" style="padding:16px"><div id="map" class="map" style="height:470px"></div></div>
-      <div class="heat-scale"><span>Low Risk</span><span class="heat-bar"></span><span>High Risk</span></div>
+      <div class="heat-scale" style="flex-wrap:wrap;gap:16px">
+        <span class="lg"><i style="background:#dc2626"></i>High Risk</span>
+        <span class="lg"><i style="background:#eab308"></i>Moderate Risk</span>
+        <span class="lg"><i style="background:#16a34a"></i>Low Risk</span>
+      </div>
+      <div class="table-foot">Risk compares each area's incidents with the busiest hotspot: over two-thirds is high, over one-third moderate, the rest low.</div>
     </div>
 
     <div class="card">
@@ -53,13 +58,14 @@ document.querySelectorAll('[data-i]').forEach(el=>el.insertAdjacentHTML('afterbe
 const map = createMandaMap('map',{zoom:14});
 plotHeat(map, HOTSPOTS);
 
-document.getElementById('list').innerHTML = HOTSPOTS.map(h=>
-  '<div class="hot-item">'+
-    '<span class="rank r'+h.rank+'">'+h.rank+'</span>'+
+document.getElementById('list').innerHTML = HOTSPOTS.map(h=>{
+  const level = hotspotLevel(h);
+  return '<div class="hot-item">'+
+    '<span class="rank lv-'+level.key+'">'+h.rank+'</span>'+
     '<div><div class="n">'+h.name+'</div>'+
-    '<div class="m"><span class="tag '+h.cls+'">'+h.risk+'</span></div></div>'+
+    '<div class="m"><span class="tag '+level.tag+'">'+level.label+'</span></div></div>'+
     '<span class="cnt">'+h.count+' incidents</span>'+
-  '</div>').join('');
+  '</div>';}).join('');
 </script>
 </body>
 </html>

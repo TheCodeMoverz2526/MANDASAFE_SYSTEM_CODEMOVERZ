@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Services\SpatialService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Incident extends Model
 {
@@ -20,10 +22,81 @@ class Incident extends Model
         'sort_key' => 'integer',
     ];
 
+    /**
+     * Keeps the spatial columns (POINT geometry, geohash, located barangay, location status)
+     * in step with the coordinates and barangay name on every create and edit.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Incident $incident) {
+            if ($incident->isDirty(['lat', 'lng', 'barangay']) || ! $incident->exists) {
+                $incident->fill(SpatialService::incidentColumns($incident->lat, $incident->lng, $incident->barangay));
+            }
+        });
+    }
+
+    /** The barangay this accident's coordinates fall inside (null when outside the city). */
+    public function locatedBarangay(): BelongsTo
+    {
+        return $this->belongsTo(Barangay::class, 'barangay_id');
+    }
+
     /** Newest first — the order the JSON array had, since new records were unshifted. */
     public function scopeNewestFirst($query)
     {
         return $query->orderByDesc('sort_key');
+    }
+
+    /** The audit fields, in the order they appear in the record: API key => column. */
+    private const AUDIT_FIELDS = [
+        'createdBy' => 'created_by',
+        'createdAt' => 'created_at_iso',
+        'updatedBy' => 'updated_by',
+        'updatedAt' => 'updated_at_iso',
+    ];
+
+    /**
+     * Every incident, newest first, in the same shape as toApi().
+     *
+     * The map page asks for all of them — around 8,000 records — and building that list
+     * through Eloquent meant hydrating 8,000 models and then pulling roughly fifteen
+     * attributes out of each one through the magic accessor, casts and all. That was by
+     * far the slowest request in the system. The query builder hands back plain rows and
+     * the shape is assembled here instead, which is the same work without the ceremony.
+     *
+     * Kept next to toApi() deliberately: the two must produce identical records.
+     */
+    public static function listApi(bool $withAudit = false): array
+    {
+        $rows = static::query()->newestFirst()->toBase()->get();
+
+        $records = [];
+
+        foreach ($rows as $row) {
+            $record = [
+                'id' => $row->id,
+                'date' => $row->date,
+                'time' => $row->time,
+                'loc' => $row->loc,
+                'barangay' => $row->barangay,
+                'road' => $row->road,
+                'sev' => $row->sev,
+                'type' => $row->type,
+                'lat' => $row->lat === null ? null : (float) $row->lat,
+                'lng' => $row->lng === null ? null : (float) $row->lng,
+                'status' => $row->status,
+            ];
+
+            foreach ($withAudit ? self::AUDIT_FIELDS : [] as $key => $column) {
+                if ($row->{$column} !== null) {
+                    $record[$key] = $row->{$column};
+                }
+            }
+
+            $records[] = $record;
+        }
+
+        return $records;
     }
 
     /**
@@ -31,7 +104,11 @@ class Incident extends Model
      * left out when they are empty rather than sent as nulls, which is how the records looked
      * before the move to a database — a record only grows an updatedBy once it is edited.
      */
-    public function toApi(): array
+    /**
+     * $withAudit adds who created/edited the record (an administrator's email). Only
+     * administrators get it; the public endpoints (map, summary, nearby) leave it out.
+     */
+    public function toApi(bool $withAudit = false): array
     {
         $record = [
             'id' => $this->id,
@@ -47,7 +124,7 @@ class Incident extends Model
             'status' => $this->status,
         ];
 
-        foreach (['createdBy' => 'created_by', 'createdAt' => 'created_at_iso', 'updatedBy' => 'updated_by', 'updatedAt' => 'updated_at_iso'] as $key => $column) {
+        foreach ($withAudit ? self::AUDIT_FIELDS : [] as $key => $column) {
             if ($this->{$column} !== null) {
                 $record[$key] = $this->{$column};
             }

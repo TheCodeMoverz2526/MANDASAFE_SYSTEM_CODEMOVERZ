@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\RimasException;
 use App\Models\Account;
+use App\Models\AccountActivity;
 use App\Models\RimasSession;
 use App\Models\Setting;
 use Illuminate\Http\Request;
@@ -21,14 +22,27 @@ class AccountService
 {
     public const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 
+    /**
+     * SHA-256 of the demo passwords earlier versions shipped with (the default administrator's
+     * and the sample resident's). They are public, so in production an account still using
+     * one is refused at sign-in until its password is changed. Only the hashes are kept here.
+     */
+    private const RETIRED_PASSWORD_SHA256 = [
+        'a36aef5a11c4073fbe60314fc9df530a9d5f986533594d1f5190742ff9e0e408',
+        '3a7dff96bc6d04fe70470d7ef4335f964546c9e1c0f7ec78c4794bb790bdada4',
+    ];
+
     public const DEFAULT_ADMIN = [
         'name' => 'RIMAS Administrator',
         'email' => 'admin@rimas.gov.ph',
         'phone' => '+639171234567',
         'role' => 'admin',
         'dept' => 'Mandaluyong City TPMO',
-        'password' => 'Admin@2026',
     ];
+
+    public function __construct(private NotificationService $notifications)
+    {
+    }
 
     /** The timestamp format the browser already parses: 2026-09-02T06:53:36.941Z */
     public static function isoNow(): string
@@ -41,10 +55,20 @@ class AccountService
         return 'USR-' . (1000 + Setting::nextSequence('nextAccountSeq'));
     }
 
-    public function seedDefaultAdmin(): void
+    /**
+     * Creates the first administrator when there is none. The password comes from
+     * MANDASAFE_ADMIN_PASSWORD, or is generated at random and returned so the caller can show
+     * it once; nothing is built into the code. Returns null when the account already exists.
+     */
+    public function seedDefaultAdmin(): ?string
     {
         if (Account::where('email', self::DEFAULT_ADMIN['email'])->exists()) {
-            return;
+            return null;
+        }
+
+        $password = (string) env('MANDASAFE_ADMIN_PASSWORD', '');
+        if ($password === '') {
+            $password = \Illuminate\Support\Str::password(20, symbols: false);
         }
 
         Account::create([
@@ -55,10 +79,12 @@ class AccountService
             'role' => 'admin',
             'dept' => self::DEFAULT_ADMIN['dept'],
             'status' => 'active',
-            'password' => Hash::make(self::DEFAULT_ADMIN['password']),
+            'password' => Hash::make($password),
             'created_at_iso' => self::isoNow(),
             'last_login_at_iso' => null,
         ]);
+
+        return $password;
     }
 
     /** Accepts either an email address or a contact number, the way the sign-in page does. */
@@ -72,23 +98,34 @@ class AccountService
             ->first();
     }
 
-    public function registerAccount(array $body): array
+    /**
+     * Everything that can be judged before the account exists: the shape of the details and
+     * whether the email or number is already taken.
+     *
+     * Sign-ups are checked here first and created only once the verification code is
+     * accepted (see VerificationService), so a wrong password or a duplicate address is
+     * reported straight away rather than after an SMS has been sent and paid for.
+     *
+     * @return array  the normalised details, ready for createAccount()
+     */
+    public function validateRegistration(array $body): array
     {
-        $name = $body['name'] ?? '';
+        $name = trim((string) ($body['name'] ?? ''));
         $email = Account::normaliseEmail($body['email'] ?? '');
         $phone = Account::normalisePhone($body['phone'] ?? '');
-        $password = $body['password'] ?? '';
+        $password = (string) ($body['password'] ?? '');
 
-        if (strlen(trim((string) $name)) < 2) {
+        if (strlen($name) < 2) {
             throw new RimasException('Enter your full name.');
         }
-        if (! preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
+        self::assertPlainText($name, 'Your name');
+        if (! preg_match('/^[^\s@<>"`]+@[^\s@<>"`]+\.[^\s@<>"`]+$/', $email)) {
             throw new RimasException('Enter a valid email address.');
         }
         if (strlen($phone) < 9) {
             throw new RimasException('Enter a valid contact number.');
         }
-        if (strlen((string) $password) < 8) {
+        if (strlen($password) < 8) {
             throw new RimasException('Password must be at least 8 characters.');
         }
         if (Account::where('email', $email)->exists()) {
@@ -102,20 +139,111 @@ class AccountService
         // has to be promoted by an existing administrator.
         $role = (($body['role'] ?? null) === 'admin' && Account::count() === 0) ? 'admin' : 'user';
 
-        $account = Account::create([
-            'id' => $this->nextAccountId(),
-            'name' => trim((string) $name),
+        return [
+            'name' => $name,
             'email' => $email,
             'phone' => $phone,
+            'password' => $password,
             'role' => $role,
             'dept' => $body['dept'] ?? 'Mandaluyong City Resident',
+        ];
+    }
+
+    /** Writes an account from details validateRegistration() has already approved. */
+    public function createAccount(array $details): array
+    {
+        $account = Account::create([
+            'id' => $this->nextAccountId(),
+            'name' => $details['name'],
+            'email' => $details['email'],
+            'phone' => $details['phone'],
+            'role' => $details['role'] ?? 'user',
+            'dept' => $details['dept'] ?? 'Mandaluyong City Resident',
             'status' => 'active',
-            'password' => Hash::make($password),
+            'password' => Hash::make($details['password']),
             'created_at_iso' => self::isoNow(),
             'last_login_at_iso' => null,
         ]);
 
-        return $account->toApi();
+        $api = $account->toApi();
+        AccountActivity::record($account->id, 'account_created', 'Account created (' . $account->role . ').');
+
+        // The very first account bootstraps itself as admin, with nobody yet to notify;
+        // every account after that is someone the administrators should know arrived.
+        if ($account->role === 'user') {
+            $this->notifications->notifyAccountCreated($api);
+        }
+
+        return $api;
+    }
+
+    /**
+     * A signed-in account editing its own name, email or contact number — resident or admin,
+     * from the profile page rather than User Management. Role, status and dept stay off
+     * limits here; those remain an administrator's call via updateAccount().
+     */
+    public function updateOwnProfile(Account $account, array $body): array
+    {
+        $changed = [];
+
+        if (array_key_exists('name', $body)) {
+            $name = trim((string) $body['name']);
+            if (strlen($name) < 2) {
+                throw new RimasException('Enter your full name.');
+            }
+            self::assertPlainText($name, 'Your name');
+            if ($name !== $account->name) {
+                $account->name = $name;
+                $changed[] = 'name';
+            }
+        }
+
+        if (array_key_exists('email', $body)) {
+            $email = Account::normaliseEmail($body['email']);
+            if (! preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
+                throw new RimasException('Enter a valid email address.');
+            }
+            if ($email !== $account->email) {
+                if (Account::where('email', $email)->where('id', '!=', $account->id)->exists()) {
+                    throw new RimasException('An account already uses this email address.');
+                }
+                $account->email = $email;
+                $changed[] = 'email';
+            }
+        }
+
+        if (array_key_exists('phone', $body)) {
+            $phone = Account::normalisePhone($body['phone']);
+            if (strlen($phone) < 9) {
+                throw new RimasException('Enter a valid contact number.');
+            }
+            if ($phone !== $account->phone) {
+                if (Account::where('phone', $phone)->where('id', '!=', $account->id)->exists()) {
+                    throw new RimasException('An account already uses this contact number.');
+                }
+                $account->phone = $phone;
+                $changed[] = 'phone';
+            }
+        }
+
+        if ($changed === []) {
+            return $account->toApi();
+        }
+
+        $account->updated_at_iso = self::isoNow();
+        $account->save();
+
+        $api = $account->toApi();
+        AccountActivity::record($account->id, 'profile_updated', 'Changed own ' . implode(', ', $changed) . '.');
+        $this->notifications->notifyProfileUpdated($api, $changed);
+
+        return $api;
+    }
+
+    /** Validate and create in one step — what User Management in the console does. */
+    public function registerAccount(array $body): array
+    {
+        return $this->createAccount($this->validateRegistration($body));
     }
 
     public function verifyCredentials($identifier, $password): Account
@@ -126,10 +254,25 @@ class AccountService
             throw new RimasException('Incorrect email/phone number or password.');
         }
         if ($account->status === 'inactive') {
+            AccountActivity::record($account->id, 'login_failed', 'Sign-in refused: the account is deactivated.');
             throw new RimasException('This account has been deactivated. Contact an administrator.');
         }
         if (! Hash::check((string) $password, $account->password)) {
+            AccountActivity::record($account->id, 'login_failed', 'Wrong password.');
             throw new RimasException('Incorrect email/phone number or password.');
+        }
+        if (app()->environment('production') && in_array(hash('sha256', (string) $password), self::RETIRED_PASSWORD_SHA256, true)) {
+            AccountActivity::record($account->id, 'login_failed', 'Sign-in refused: still using a retired default password.');
+            throw new RimasException($account->isAdmin()
+                ? 'This administrator still uses the old default password. Set a new one on the server: php artisan mandasafe:set-password ' . $account->email
+                : 'This account still uses a sample password that is no longer allowed. Use "Forgot password?" or ask an administrator to reset it.');
+        }
+
+        // Hashes made at an older bcrypt cost are upgraded (or downgraded) to the current one,
+        // so every later sign-in pays only the configured cost. See config/hashing.php.
+        if (Hash::needsRehash($account->password)) {
+            $account->password = Hash::make((string) $password);
+            $account->save();
         }
 
         return $account;
@@ -147,22 +290,28 @@ class AccountService
         return ['email' => $account->email, 'phone' => $account->phone, 'name' => $account->name];
     }
 
-    public function resetPassword($identifier, $password): array
+    /** Password recovery is by registered email only, so the account is matched on that alone. */
+    public function resetPassword($email, $password): array
     {
         if (strlen((string) $password) < 8) {
             throw new RimasException('Password must be at least 8 characters.');
         }
 
-        $account = $this->findAccount($identifier);
+        $account = Account::where('email', Account::normaliseEmail($email))->first();
         if (! $account) {
             throw new RimasException('Account not found.');
         }
 
         $account->password = Hash::make($password);
         $account->updated_at_iso = self::isoNow();
+        $account->password_changed_at_iso = $account->updated_at_iso;
         $account->save();
+        AccountActivity::record($account->id, 'password_changed', 'Password reset through "Forgot password?".');
 
-        return $account->toApi();
+        $api = $account->toApi();
+        $this->notifications->notifyPasswordChanged($api);
+
+        return $api;
     }
 
     public function listAccounts(): array
@@ -170,17 +319,46 @@ class AccountService
         return Account::orderBy('id')->get()->map->toApi()->all();
     }
 
-    private function activeAdminCount(): int
-    {
-        return Account::where('role', 'admin')->where('status', 'active')->count();
-    }
-
-    public function updateAccount(string $id, array $changes): array
+    /**
+     * Everything User Management's details panel shows about one account. The password itself
+     * cannot be shown — only its bcrypt hash is stored — so this reports when it last changed.
+     */
+    public function accountDetails(string $id): array
     {
         $account = Account::find($id);
         if (! $account) {
             throw new RimasException('User not found.');
         }
+
+        $sessions = RimasSession::where('account_id', $id)->where('expires_at_iso', '>', self::isoNow());
+
+        return [
+            'account' => $account->toApi(),
+            'security' => [
+                'passwordChangedAt' => $account->password_changed_at_iso,
+                'twoFactorEnabledAt' => $account->totp_enabled_at_iso,
+                'activeSessions' => (clone $sessions)->count(),
+                'lastSessionStartedAt' => (clone $sessions)->max('created_at_iso'),
+                'updatedAt' => $account->updated_at_iso,
+            ],
+            'activity' => AccountActivity::where('account_id', $id)
+                ->orderByDesc('created_at_iso')->orderByDesc('id')
+                ->limit(200)->get()->map->toApi()->all(),
+        ];
+    }
+
+    private function activeAdminCount(): int
+    {
+        return Account::where('role', 'admin')->where('status', 'active')->count();
+    }
+
+    public function updateAccount(string $id, array $changes, ?Account $actor = null): array
+    {
+        $account = Account::find($id);
+        if (! $account) {
+            throw new RimasException('User not found.');
+        }
+        $made = [];
 
         if (array_key_exists('role', $changes) && $changes['role'] !== null) {
             if (! in_array($changes['role'], ['admin', 'user'], true)) {
@@ -189,6 +367,9 @@ class AccountService
             // Never let the last remaining administrator demote themselves out of the system.
             if ($account->role === 'admin' && $changes['role'] !== 'admin' && $this->activeAdminCount() <= 1) {
                 throw new RimasException('At least one active administrator must remain.');
+            }
+            if ($changes['role'] !== $account->role) {
+                $made[] = 'role changed to ' . $changes['role'];
             }
             $account->role = $changes['role'];
         }
@@ -199,6 +380,9 @@ class AccountService
             }
             if ($account->role === 'admin' && $changes['status'] === 'inactive' && $this->activeAdminCount() <= 1) {
                 throw new RimasException('At least one active administrator must remain.');
+            }
+            if ($changes['status'] !== $account->status) {
+                $made[] = $changes['status'] === 'active' ? 'reactivated' : 'deactivated';
             }
             $account->status = $changes['status'];
         }
@@ -212,10 +396,18 @@ class AccountService
         $account->updated_at_iso = self::isoNow();
         $account->save();
 
+        if ($made !== []) {
+            $what = ucfirst(implode(', ', $made));
+            AccountActivity::record($account->id, 'account_changed', $what . ($actor ? ' by ' . $actor->email : '') . '.');
+            if ($actor && $actor->id !== $account->id) {
+                AccountActivity::record($actor->id, 'admin_action', $what . ' for ' . $account->email . '.');
+            }
+        }
+
         return $account->toApi();
     }
 
-    public function deleteAccount(string $id): array
+    public function deleteAccount(string $id, ?string $actorEmail = null): array
     {
         $account = Account::find($id);
         if (! $account) {
@@ -225,8 +417,14 @@ class AccountService
             throw new RimasException('At least one active administrator must remain.');
         }
 
+        $api = $account->toApi();
+
         RimasSession::where('account_id', $id)->delete();
+        AccountActivity::where('account_id', $id)->delete();
         $account->delete();
+        AccountActivity::recordFor($actorEmail, 'admin_action', 'Removed the account ' . $api['email'] . '.');
+
+        $this->notifications->notifyAccountRemoved($api, $actorEmail);
 
         return ['deleted' => $id];
     }
@@ -254,14 +452,17 @@ class AccountService
 
         $account->last_login_at_iso = self::isoNow();
         $account->save();
+        AccountActivity::record($account->id, 'login', $account->isAdmin() ? 'Signed in (password + authenticator code).' : 'Signed in.');
 
         return ['token' => $token, 'expiresAt' => $expiresAt, 'account' => $account->toApi()];
     }
 
     public function destroySession(?string $token): void
     {
-        if ($token) {
-            RimasSession::where('token', $token)->delete();
+        $session = $token ? RimasSession::find($token) : null;
+        if ($session) {
+            AccountActivity::record($session->account_id, 'logout', 'Signed out.');
+            $session->delete();
         }
     }
 
@@ -291,5 +492,17 @@ class AccountService
         }
 
         return $request->header('x-rimas-token');
+    }
+
+    /**
+     * Names are shown in the administrator's console. Markup characters have no place in a
+     * person's name, and refusing them here keeps a crafted sign-up from ever reaching a page
+     * as HTML (the pages escape it as well).
+     */
+    private static function assertPlainText(string $value, string $label): void
+    {
+        if (preg_match('/[<>"`]/', $value)) {
+            throw new RimasException($label . ' cannot contain < > " or ` characters.');
+        }
     }
 }

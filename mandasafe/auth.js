@@ -19,7 +19,8 @@ const DEFAULT_ADMIN = {
     phone: '+639171234567',
     role: 'admin',
     dept: 'Mandaluyong City TPMO',
-    password: 'Admin@2026'
+    // Legacy Node server only (the site runs on Laravel now). No password is kept in code.
+    password: process.env.MANDASAFE_ADMIN_PASSWORD || require('crypto').randomBytes(12).toString('base64url')
 };
 
 /* ---------- helpers ---------- */
@@ -170,6 +171,41 @@ function listAccounts() {
     return loadStore().accounts.map(publicAccount);
 }
 
+/* A signed-in account editing its own name, email or contact number from the My Account
+   page. Role, status and dept stay off limits here — those remain an administrator's call
+   through updateAccount(). */
+function updateOwnProfile(id, changes) {
+    const store = loadStore();
+    const account = store.accounts.find(a => a.id === id);
+    if (!account) throw new Error('User not found.');
+
+    if (changes.name !== undefined) {
+        const name = String(changes.name).trim();
+        if (name.length < 2) throw new Error('Enter your full name.');
+        account.name = name;
+    }
+    if (changes.email !== undefined) {
+        const email = normaliseEmail(changes.email);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid email address.');
+        if (store.accounts.some(a => a.id !== id && a.email === email)) {
+            throw new Error('An account already uses this email address.');
+        }
+        account.email = email;
+    }
+    if (changes.phone !== undefined) {
+        const phone = normalisePhone(changes.phone);
+        if (phone.length < 9) throw new Error('Enter a valid contact number.');
+        if (store.accounts.some(a => a.id !== id && a.phone === phone)) {
+            throw new Error('An account already uses this contact number.');
+        }
+        account.phone = phone;
+    }
+    account.updatedAt = new Date().toISOString();
+
+    saveStore(store);
+    return publicAccount(account);
+}
+
 function updateAccount(id, changes) {
     const store = loadStore();
     const account = store.accounts.find(a => a.id === id);
@@ -264,7 +300,7 @@ function tokenFromRequest(request) {
 
 module.exports = {
     seedDefaultAdmin, registerAccount, verifyCredentials, contactDetails, resetPassword,
-    listAccounts, updateAccount, deleteAccount, accountExists,
+    listAccounts, updateAccount, updateOwnProfile, deleteAccount, accountExists,
     createSession, destroySession, accountForToken, tokenFromRequest, publicAccount,
     DEFAULT_ADMIN
 };

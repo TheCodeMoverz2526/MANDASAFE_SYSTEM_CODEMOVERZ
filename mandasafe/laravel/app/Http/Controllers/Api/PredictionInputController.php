@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\RimasException;
+use App\Models\AccountActivity;
 use App\Models\PredictionInput;
 use App\Models\Setting;
 use App\Services\AccountService;
@@ -29,16 +30,19 @@ class PredictionInputController extends ApiController
     private function assertCount($value): int
     {
         if (! is_numeric($value) || (float) $value < 0) {
-            throw new RimasException('Incident count must be a non-negative number.');
+            throw new RimasException('Accident count must be a non-negative number.');
         }
 
         return (int) $value;
     }
 
     /** GET /api/prediction-inputs */
-    public function index()
+    /** GET /api/prediction-inputs — open to everyone; who edited each entry is for admins only. */
+    public function index(Request $request)
     {
-        return response()->json(PredictionInput::newestFirst()->get()->map->toApi()->all());
+        $withAudit = $this->requestIsAdmin($request);
+
+        return response()->json(PredictionInput::newestFirst()->get()->map(fn ($input) => $input->toApi($withAudit))->all());
     }
 
     /** POST /api/prediction-inputs */
@@ -64,8 +68,9 @@ class PredictionInputController extends ApiController
             ]);
 
             Setting::touchDataVersion();
+            AccountActivity::record($this->actor($request)->id, 'prediction_input', "Added baseline data {$input->id} ({$input->barangay}, {$input->month}).");
 
-            return $input->toApi();
+            return $input->toApi(true);
         }, 400, 201);
     }
 
@@ -96,13 +101,14 @@ class PredictionInputController extends ApiController
             ])->save();
 
             Setting::touchDataVersion();
+            AccountActivity::record($this->actor($request)->id, 'prediction_input', "Edited baseline data {$input->id} ({$input->barangay}, {$input->month}).");
 
-            return $input->toApi();
+            return $input->toApi(true);
         });
     }
 
     /** DELETE /api/prediction-inputs/{id} */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $input = PredictionInput::find(rawurldecode($id));
         if (! $input) {
@@ -111,6 +117,7 @@ class PredictionInputController extends ApiController
 
         $input->delete();
         Setting::touchDataVersion();
+        AccountActivity::record($this->actor($request)->id, 'prediction_input', "Deleted baseline data {$input->id} ({$input->barangay}, {$input->month}).");
 
         return response()->json(['deleted' => $input->id]);
     }

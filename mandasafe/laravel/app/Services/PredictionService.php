@@ -2,94 +2,127 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Log;
+use Throwable;
+
 /**
  * Road-safety predictions computed purely from data that actually exists in the database:
  * admin-entered baseline monthly counts (prediction inputs) plus logged incidents. No
  * hardcoded or mock prediction values are used anywhere in this class. Port of prediction.js.
  *
  * Two signals feed the final risk score:
- *  - a linear forecast of incident frequency per barangay/road (trend + volume), and
- *  - a Random Forest classifier trained on logged incidents that estimates how likely a
- *    severe outcome (Fatal/Injury) is for that location, from barangay/road/type/time features.
+ *  - a forecast of next month's incident count per barangay/road: a scikit-learn Random
+ *    Forest regressor (ml/forecast_forest.py) trained on every group's monthly history, or a
+ *    straight-line trend when there is too little history or Python is unavailable, and
+ *  - a scikit-learn Random Forest classifier (ml/severity_forest.py), trained on logged
+ *    incidents, that estimates how likely a severe outcome (Fatal/Injury) is for that
+ *    location, from barangay/road/type/time features.
  *
  * The forest needs a minimum amount of labeled, class-diverse history to train at all; until
  * then predictions fall back to the frequency signal alone (mlModel: 'heuristic').
  */
 class PredictionService
 {
-    private const SEVERITY_FEATURES = [
-        ['key' => 'barangay', 'type' => 'categorical'],
-        ['key' => 'road', 'type' => 'categorical'],
-        ['key' => 'type', 'type' => 'categorical'],
-        ['key' => 'hour', 'type' => 'numeric'],
-        ['key' => 'dayOfWeek', 'type' => 'numeric'],
-        ['key' => 'month', 'type' => 'numeric'],
-    ];
-
-    private const SEVERE_CLASSES = ['Fatal', 'Injury'];
-
-    private static function parseHour($time): int
+    /**
+     * Runs every group's own logged incidents through the severity forest in one call.
+     *
+     * @param  array<string, array>  $groupIncidents  group key => that group's incident rows
+     * @param  bool  $degraded  set true only when the fallback was forced by a failure (a
+     *                          crashed/unavailable Python interpreter), never when the forest
+     *                          legitimately has too little class-diverse data to train --
+     *                          that second case is a stable answer, safe to cache normally.
+     * @return array{trained: bool, oobAccuracy: ?float, probabilities: array<string, ?float>}
+     */
+    private static function scoreGroupSeverity(array $incidents, array $groupIncidents, bool &$degraded = false): array
     {
-        if (empty($time)) {
-            return -1;
+        $degraded = false;
+
+        try {
+            $response = MlBridge::run('severity_forest.py', [
+                'incidents' => array_values($incidents),
+                'groups' => array_map(
+                    fn ($key, $rows) => ['key' => $key, 'incidents' => array_values($rows)],
+                    array_keys($groupIncidents),
+                    array_values($groupIncidents)
+                ),
+            ]);
+        } catch (Throwable $e) {
+            // The forest is an enhancement, not a requirement -- computePredictions() already
+            // falls back to the frequency signal alone (mlModel: 'heuristic') whenever the model
+            // isn't trained, so a broken/unavailable Python interpreter degrades to that same
+            // path instead of failing the whole predictions/summary request.
+            Log::warning('severity_forest.py unavailable, falling back to heuristic scoring', [
+                'error' => $e->getMessage(),
+            ]);
+
+            $degraded = true;
+
+            return ['trained' => false, 'oobAccuracy' => null, 'probabilities' => []];
         }
 
-        $stamp = strtotime('2000-01-01 ' . $time);
-
-        return $stamp === false ? -1 : (int) date('G', $stamp);
-    }
-
-    public static function incidentFeatures(array $incident): array
-    {
-        $stamp = empty($incident['date']) ? false : strtotime((string) $incident['date']);
+        $probabilities = [];
+        foreach ($response['results'] ?? [] as $result) {
+            $probabilities[$result['key']] = $result['severeProbability'];
+        }
 
         return [
-            'barangay' => $incident['barangay'] ?: 'Unknown',
-            'road' => $incident['road'] ?: 'Unknown',
-            'type' => $incident['type'] ?: 'Unknown',
-            'hour' => self::parseHour($incident['time'] ?? null),
-            'dayOfWeek' => $stamp === false ? -1 : (int) date('w', $stamp),
-            'month' => $stamp === false ? -1 : ((int) date('n', $stamp)) - 1,
+            'trained' => (bool) ($response['trained'] ?? false),
+            'oobAccuracy' => $response['oobAccuracy'] ?? null,
+            'probabilities' => $probabilities,
         ];
     }
 
-    public static function trainSeverityForest(array $incidents): ?array
-    {
-        $rows = [];
-        foreach ($incidents as $incident) {
-            if (empty($incident['barangay']) || empty($incident['road']) || empty($incident['sev'])) {
-                continue;
-            }
-            $rows[] = self::incidentFeatures($incident) + ['sev' => $incident['sev']];
-        }
-
-        return RandomForest::train($rows, ['features' => self::SEVERITY_FEATURES, 'labelKey' => 'sev']);
-    }
-
     /**
-     * Averages, across a group's own logged incidents, the forest's predicted probability that
-     * the outcome is severe (Fatal or Injury). Returns null when there is nothing to score.
+     * Next-month counts from the Random Forest regressor in ml/forecast_forest.py, trained on
+     * every group's monthly history at once. Falls back to the straight-line forecast (an
+     * untrained result) when Python is unavailable or there is too little history.
+     *
+     * @param  array<string, array<string, int>>  $histories  group key => [month => count]
+     * `paths` holds each group's recursive forecast for the next `horizonMonths`.
+     *
+     * @return array{trained: bool, forecastMonth: ?string, oobR2: ?float, backtest: ?array, predicted: array<string, ?float>, paths: array<string, ?array>, horizonMonths: array, horizonBacktest: ?array}
      */
-    private static function groupSeverityProbability(?array $forest, array $groupIncidents): ?float
+    private static function forecastWithForest(array $histories, bool &$degraded = false): array
     {
-        if ($forest === null || $groupIncidents === []) {
-            return null;
+        $untrained = ['trained' => false, 'forecastMonth' => null, 'oobR2' => null, 'backtest' => null, 'predicted' => [], 'paths' => [], 'horizonMonths' => [], 'horizonBacktest' => null];
+
+        try {
+            $response = MlBridge::run('forecast_forest.py', [
+                'groups' => array_map(
+                    fn ($key, $history) => [
+                        'key' => $key,
+                        'history' => array_map(fn ($month, $count) => ['month' => $month, 'count' => $count], array_keys($history), array_values($history)),
+                    ],
+                    array_keys($histories),
+                    array_values($histories)
+                ),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('forecast_forest.py unavailable, falling back to the linear forecast', [
+                'error' => $e->getMessage(),
+            ]);
+            $degraded = true;
+
+            return $untrained;
         }
 
-        $total = 0.0;
-        foreach ($groupIncidents as $incident) {
-            $result = RandomForest::predictClass($forest, self::incidentFeatures($incident));
-            if ($result === null) {
-                continue;
-            }
-            foreach ($result['probabilities'] as $label => $probability) {
-                if (in_array($label, self::SEVERE_CLASSES, true)) {
-                    $total += $probability;
-                }
-            }
+        $predicted = [];
+        $paths = [];
+        foreach ($response['results'] ?? [] as $result) {
+            $predicted[$result['key']] = $result['predicted'];
+            $paths[$result['key']] = $result['path'] ?? null;
         }
 
-        return $total / count($groupIncidents);
+        return [
+            'trained' => (bool) ($response['trained'] ?? false),
+            'forecastMonth' => $response['forecastMonth'] ?? null,
+            'oobR2' => $response['oobR2'] ?? null,
+            'backtest' => $response['backtest'] ?? null,
+            'predicted' => $predicted,
+            'paths' => $paths,
+            'horizonMonths' => $response['horizonMonths'] ?? [],
+            'horizonBacktest' => $response['horizonBacktest'] ?? null,
+        ];
     }
 
     public static function monthKey($date): ?string
@@ -134,6 +167,27 @@ class PredictionService
         return ['value' => (int) max(0, self::jsRound($forecast)), 'slope' => $slope];
     }
 
+    /** The same least-squares line projected $steps months ahead, for the fallback path. */
+    private static function linearPath(array $counts, int $steps): array
+    {
+        $n = count($counts);
+        if ($n === 0) {
+            return array_fill(0, $steps, 0);
+        }
+        if ($n === 1) {
+            return array_fill(0, $steps, (int) $counts[0]);
+        }
+        $slope = self::linearForecast($counts)['slope'];
+        $xMean = ($n - 1) / 2;
+        $yMean = array_sum($counts) / $n;
+        $path = [];
+        for ($k = 0; $k < $steps; $k++) {
+            $path[] = (int) max(0, self::jsRound($yMean + $slope * ($n + $k - $xMean)));
+        }
+
+        return $path;
+    }
+
     /** JavaScript's Math.round: halves always go up, never away from zero. */
     private static function jsRound(float $value): float
     {
@@ -144,10 +198,9 @@ class PredictionService
      * @param  array  $incidents  plain rows with barangay/road/sev/type/date/time/status keys
      * @param  array  $predictionInputs  plain rows with barangay/road/month/incidentCount keys
      */
-    public static function computePredictions(array $incidents, array $predictionInputs): array
+    public static function computePredictions(array $incidents, array $predictionInputs, bool &$degraded = false): array
     {
         $groups = [];
-        $forest = self::trainSeverityForest($incidents);
 
         foreach ($predictionInputs as $input) {
             if (empty($input['barangay']) || empty($input['month'])) {
@@ -179,6 +232,12 @@ class PredictionService
             }
         }
 
+        $severity = self::scoreGroupSeverity($incidents, array_map(fn ($g) => $g['incidents'], $groups), $degraded);
+
+        $forecastDegraded = false;
+        $forest = self::forecastWithForest(array_map(fn ($g) => $g['history'], $groups), $forecastDegraded);
+        $degraded = $degraded || $forecastDegraded;
+
         $results = [];
         foreach ($groups as $key => $group) {
             $history = $group['history'];
@@ -186,19 +245,34 @@ class PredictionService
             $months = array_keys($history);
             $counts = array_values($history);
 
-            $forecast = self::linearForecast($counts);
-            $predictedNextMonth = $forecast['value'];
-            $slope = $forecast['slope'];
-            $trend = $slope > 0.15 ? 'up' : ($slope < -0.15 ? 'down' : 'stable');
-
             $recentWindow = array_slice($counts, -3);
             $recentAvg = $recentWindow === [] ? 0 : array_sum($recentWindow) / count($recentWindow);
+
+            $forestValue = $forest['trained'] ? ($forest['predicted'][$key] ?? null) : null;
+            $forestPath = $forestValue !== null ? ($forest['paths'][$key] ?? null) : null;
+            $horizon = max(1, count($forest['horizonMonths']));
+            $forecastPath = $forestPath !== null
+                ? array_map(fn ($v) => (int) self::jsRound((float) $v), $forestPath)
+                : self::linearPath($counts, $horizon);
+
+            if ($forestValue !== null) {
+                // The forest's forecast, and whether it sits above or below the recent level.
+                $predictedNextMonth = (int) self::jsRound($forestValue);
+                $change = $recentAvg > 0 ? ($forestValue - $recentAvg) / $recentAvg : ($forestValue > 0 ? 1 : 0);
+                $trend = $change > 0.10 ? 'up' : ($change < -0.10 ? 'down' : 'stable');
+            } else {
+                $forecast = self::linearForecast($counts);
+                $predictedNextMonth = $forecast['value'];
+                $slope = $forecast['slope'];
+                $change = null;
+                $trend = $slope > 0.15 ? 'up' : ($slope < -0.15 ? 'down' : 'stable');
+            }
             $frequencyScore = $recentAvg * 0.55 + $predictedNextMonth * 0.45;
 
             // The forest's severe-outcome probability nudges the frequency score up to +30% or
             // down to -30%; it modulates volume-based risk rather than replacing it, since a
             // busy-but-minor road should not outrank a low-traffic road with a fatal history.
-            $severeProbability = self::groupSeverityProbability($forest, $group['incidents']);
+            $severeProbability = $severity['probabilities'][$key] ?? null;
             $mlAdjustment = $severeProbability === null ? 1 : 0.7 + 0.6 * $severeProbability;
             $rawScore = $frequencyScore * $mlAdjustment;
 
@@ -217,7 +291,28 @@ class PredictionService
                 'trend' => $trend,
                 '_rawScore' => $rawScore,
                 'severeProbability' => $severeProbability === null ? null : self::jsRound($severeProbability * 100) / 100,
-                'mlModel' => $forest ? 'random-forest' : 'heuristic',
+                'mlModel' => $severity['trained'] ? 'random-forest' : 'heuristic',
+                'mlAccuracy' => $severity['trained'] ? self::jsRound($severity['oobAccuracy'] * 100) / 100 : null,
+                // Which model produced predictedNextMonth: the Python forest, or the straight line.
+                'forecastModel' => $forestValue !== null ? 'random-forest' : 'linear',
+                'forecastMonth' => $forest['forecastMonth'],
+                'forecastBacktest' => $forestValue !== null ? $forest['backtest'] : null,
+                // Advance forecast: one rounded count per month in forecastMonths (month +1 first).
+                'forecastMonths' => $forest['horizonMonths'],
+                'forecastPath' => $forest['horizonMonths'] === [] ? [$predictedNextMonth] : $forecastPath,
+                'horizonBacktest' => $forestValue !== null ? $forest['horizonBacktest'] : null,
+                // The unrounded figures behind trend and riskScore, so the Forecast page can
+                // explain them exactly (maxRawScore and riskScore are filled in below).
+                'explain' => [
+                    'forecastRaw' => round($forestValue ?? (float) $predictedNextMonth, 3),
+                    'recentAvg' => round($recentAvg, 3),
+                    'trendChange' => $change === null ? null : round($change, 4),
+                    'trendSlope' => $forestValue === null ? round($slope, 4) : null,
+                    'frequencyScore' => round($frequencyScore, 3),
+                    'severityMultiplier' => round($mlAdjustment, 4),
+                    'rawScore' => round($rawScore, 3),
+                    'maxRawScore' => null,
+                ],
                 'sources' => array_keys($group['sources']),
             ];
         }
@@ -227,6 +322,7 @@ class PredictionService
         foreach ($results as &$result) {
             $result['riskScore'] = self::jsRound(($result['_rawScore'] / $maxScore) * 100) / 10;
             $result['riskLevel'] = $result['riskScore'] >= 7 ? 'high' : ($result['riskScore'] >= 4 ? 'medium' : 'low');
+            $result['explain']['maxRawScore'] = round($maxScore, 3);
             unset($result['_rawScore']);
         }
         unset($result);

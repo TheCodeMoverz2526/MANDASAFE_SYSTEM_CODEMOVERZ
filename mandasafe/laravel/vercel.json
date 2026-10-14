@@ -1,0 +1,16 @@
+{
+  "framework": null,
+  "installCommand": "echo \"Composer runs inside the PHP runtime\"",
+  "buildCommand": "echo \"No front-end build step\"",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.php": {
+      "runtime": "vercel-php@0.8.0",
+      "maxDuration": 60,
+      "excludeFiles": "{node_modules/**,tests/**,storage/**,database/*.sqlite,.env,.env.*,vercel.json}"
+    }
+  },
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.php" }
+  ]
+}

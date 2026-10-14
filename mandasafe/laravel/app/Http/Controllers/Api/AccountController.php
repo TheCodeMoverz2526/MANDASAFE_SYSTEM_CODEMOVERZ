@@ -31,20 +31,26 @@ class AccountController extends ApiController
 
             // An admin adding a user may set the role straight away.
             return ($body['role'] ?? null) === 'admin'
-                ? $this->accounts->updateAccount($created['id'], ['role' => 'admin'])
+                ? $this->accounts->updateAccount($created['id'], ['role' => 'admin'], $this->actor($request))
                 : $created;
         }, 400, 201);
+    }
+
+    /** GET /api/accounts/{id} — profile, security summary and activity history for one account. */
+    public function show(string $id)
+    {
+        return $this->attempt(fn () => $this->accounts->accountDetails(rawurldecode($id)), 404);
     }
 
     /** PUT /api/accounts/{id} */
     public function update(Request $request, string $id)
     {
-        return $this->attempt(fn () => $this->accounts->updateAccount(rawurldecode($id), $this->body($request)));
+        return $this->attempt(fn () => $this->accounts->updateAccount(rawurldecode($id), $this->body($request), $this->actor($request)));
     }
 
     /** DELETE /api/accounts/{id} */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
-        return $this->attempt(fn () => $this->accounts->deleteAccount(rawurldecode($id)));
+        return $this->attempt(fn () => $this->accounts->deleteAccount(rawurldecode($id), $this->actor($request)->email));
     }
 }
