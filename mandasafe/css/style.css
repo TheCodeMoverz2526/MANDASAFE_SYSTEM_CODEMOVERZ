@@ -496,13 +496,17 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .hero::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,rgba(8,42,102,.95) 0%,rgba(11,52,124,.9) 45%,rgba(13,63,148,.78) 100%)}
 .hero-in{position:relative;z-index:2;max-width:1400px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:44px;align-items:center}
 @media(max-width:1000px){.hero-in{grid-template-columns:1fr}}
-.hero-in-solo{grid-template-columns:1fr}
+.hero-in-solo{grid-template-columns:1fr;text-align:center}
+.hero-in-solo .hero-cta{justify-content:center}
 .chip{display:inline-flex;align-items:center;gap:9px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);
   border-radius:30px;padding:8px 17px;font-size:12.5px;font-weight:600}
 .chip svg{width:16px;height:16px}
 .hero h1{font-size:45px;font-weight:800;letter-spacing:-1.4px;line-height:1.13;margin:20px 0 16px}
 .hero .lead{font-size:15.5px;color:#d3e2ff;max-width:560px;line-height:1.65}
 .hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:28px}
+@media(min-width:641px){.hero .hero-in-solo h1{font-size:54px;letter-spacing:-1.6px}.hero .hero-in-solo h1 br{display:none}}
+.hero .hero-in-solo .lead{max-width:920px;margin:0 auto}
+@media(min-width:641px){.hero .hero-in-solo .lead{font-size:17px}}
 .hero-card{background:#fff;color:var(--ink);border-radius:16px;padding:18px;box-shadow:var(--shadow-lg)}
 .hero-card-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .hero-card-head h3{font-size:16px;font-weight:800}
