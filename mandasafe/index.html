@@ -16,18 +16,12 @@
       <span><span class="brand-name">Manda<span>Safe</span></span>
       <span class="brand-sub" style="display:block">Mandaluyong Road Accident Mapping &amp; Analytics System</span></span>
     </a>
-    <div class="pub-links">
-      <a href="index.html" class="on" data-i="home">Home</a>
-      <a href="#map" data-i="pin">Live Map</a>
-      <a href="#predictions" data-i="chart">Predictions</a>
-      <a href="#how" data-i="shield">How it works</a>
-    </div>
     <a class="btn btn-orange" href="login.html" data-i="login">Sign In</a>
   </div>
 </nav>
 
-<section class="hero" id="map">
-  <div class="hero-in">
+<section class="hero">
+  <div class="hero-in hero-in-solo">
     <div>
       <span class="chip" data-i="shield">Making Mandaluyong Roads Safer</span>
       <h1>Road Accident Mapping &amp; <br>Safety System for Mandaluyong</h1>
@@ -38,14 +32,18 @@
         <a class="btn btn-outline-w btn-lg" href="#predictions" data-i="chart">See the forecast</a>
       </div>
     </div>
+  </div>
+</section>
 
-    <div class="hero-card">
+<section class="section" id="predictions">
+  <div class="section-in">
+    <div class="hero-card" id="map" style="margin-bottom:46px">
       <div class="hero-card-head">
         <span style="width:10px;height:10px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.18)"></span>
         <div><h3>Live Accident Map</h3><p id="mapSub">Loading city data…</p></div>
       </div>
       <div class="hero-grid">
-        <div><div id="heroMap" class="map" style="height:300px"></div></div>
+        <div><div id="heroMap" class="map" style="height:400px"></div></div>
         <div>
           <div class="mini-stat"><span class="ic ic-blue" data-i="shield"></span>
             <div><div class="k">Recorded Accidents</div><div class="v" id="hTotal">—</div><div class="s" id="hRange">All time</div></div></div>
@@ -59,11 +57,6 @@
         <span class="lg"><i class="lg-pin"><svg viewBox="0 0 24 24"><path d="M12 19.3 6.88 13.77A7 7 0 1 1 17.12 13.77Z" fill="#dc2626" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="9" r="3.5" fill="#fff" stroke="#000" stroke-width="1.2"/></svg></i>Accident <small style="font-weight:500;color:var(--muted)">— larger pin = more severe</small></span>
       </div>
     </div>
-  </div>
-</section>
-
-<section class="section" id="predictions">
-  <div class="section-in">
     <div class="sec-title"><i></i><h2>Predicted High-Risk Locations</h2><i></i></div>
     <p style="text-align:center;color:var(--muted);font-size:13.5px;max-width:620px;margin:-22px auto 30px">
       Computed from the accidents and baseline data the administrators record — updated the moment new data comes in.</p>

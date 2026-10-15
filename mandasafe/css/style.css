@@ -483,6 +483,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
   padding:10px 14px 10px 16px;display:flex;align-items:center;gap:22px}
 .pub-cta{display:flex;align-items:center;gap:9px;flex-shrink:0}
 .pub-cta .btn{padding:10px 18px}
+.pub-nav-in>.btn{margin-left:auto}
 .pub-links{display:flex;align-items:center;gap:4px;margin-left:auto;flex-wrap:wrap}
 .pub-links a{display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink-2)}
 .pub-links a svg{width:16px;height:16px}
@@ -495,6 +496,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .hero::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,rgba(8,42,102,.95) 0%,rgba(11,52,124,.9) 45%,rgba(13,63,148,.78) 100%)}
 .hero-in{position:relative;z-index:2;max-width:1400px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:44px;align-items:center}
 @media(max-width:1000px){.hero-in{grid-template-columns:1fr}}
+.hero-in-solo{grid-template-columns:1fr}
 .chip{display:inline-flex;align-items:center;gap:9px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);
   border-radius:30px;padding:8px 17px;font-size:12.5px;font-weight:600}
 .chip svg{width:16px;height:16px}
