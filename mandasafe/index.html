@@ -41,6 +41,7 @@
         <label class="mf-field"><span>To</span>
           <input class="input" type="date" id="fTo" aria-label="Show accidents up to this date"></label>
         <button type="button" class="mf-reset" id="fReset" hidden>Clear filters</button>
+        <button type="button" class="map-layer-btn active" id="layerMarkers" aria-pressed="true"><span data-i="pin"></span>Accident Markers</button>
       </div>
       <div class="hero-grid">
         <div><div id="heroMap" class="map" style="height:400px"></div></div>
@@ -56,6 +57,23 @@
       <div class="map-legend" style="border:none;padding:14px 2px 0">
         <span class="lg"><i class="lg-pin"><svg viewBox="0 0 24 24"><path d="M12 19.3 6.88 13.77A7 7 0 1 1 17.12 13.77Z" fill="#dc2626" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="9" r="3.5" fill="#fff" stroke="#000" stroke-width="1.2"/></svg></i>Accident <small style="font-weight:500;color:var(--muted)">— larger pin = more severe</small></span>
       </div>
+      <details class="map-help" open>
+        <summary data-i="info">Paano basahin ang mapa? <small>How to read the map</small></summary>
+        <ul>
+          <li><b>Mga barangay.</b> Bawat may kulay na bahagi ay isang barangay ng Mandaluyong. Ang madilim na
+            area sa labas ay hindi na sakop ng lungsod. <b>I-click ang barangay</b> para makita kung ilang aksidente ang naitala doon.</li>
+          <li><b>Pulang pin = isang aksidente.</b> Kapag mas malaki ang pin, mas malala ang aksidente
+            (<i>Fatal</i> &gt; <i>Injury</i> &gt; <i>Minor</i>). I-click ang pin para makita ang petsa, oras, uri ng aksidente at kalsada.</li>
+          <li><b>Barangay filter.</b> Pumili ng barangay para i-zoom ang mapa doon at makita lang ang mga aksidente sa lugar na iyon.</li>
+          <li><b>From – To.</b> Piliin ang petsa para makita lang ang mga aksidente sa panahong iyon — halimbawa, ngayong buwan o noong nakaraang taon.
+            Pindutin ang <b>Clear filters</b> para bumalik sa lahat.</li>
+          <li><b>Accident Markers.</b> I-on o i-off ang mga pin para mas malinaw na makita ang mga barangay boundary.</li>
+          <li><b>Full screen.</b> Palakihin ang mapa sa buong screen; dito puwede ring mag-zoom gamit ang mouse wheel o ang
+            <b>+ / −</b>. Pindutin ang <b>Esc</b> o <b>Exit full screen</b> para bumalik.</li>
+        </ul>
+        <p>Ang mga numero ay galing sa mga aksidenteng naitala sa MandaSafe, kaya nagbabago ang mapa kapag may bagong datos.
+          Gamitin ito para malaman kung saan mas madalas ang aksidente at mag-ingat sa mga lugar na iyon.</p>
+      </details>
     </div>
     <div class="sec-title"><i></i><h2>Predicted High-Risk Locations</h2><i></i></div>
     <p style="text-align:center;color:var(--muted);font-size:13.5px;max-width:620px;margin:-22px auto 30px">
@@ -182,7 +200,7 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
 function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
   const $ = id => document.getElementById(id);
   const fBarangay = $('fBarangay'), fFrom = $('fFrom'), fTo = $('fTo');
-  let pins = null, focus = null;
+  let pins = null, focus = null, markersOn = true;
 
   const dates = all.map(i => String(i.date || '').slice(0, 10)).filter(Boolean).sort();
   const oldest = dates[0] || '', newest = dates[dates.length - 1] || '';
@@ -216,6 +234,7 @@ function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
     // Oldest drawn first so the newest sit on top.
     if (pins) map.removeLayer(pins);
     pins = plotIncidents(map, [...data].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)));
+    if (!markersOn) map.removeLayer(pins);
 
     const brgyCount = Object.keys(byBrgy).length;
     $('mapSub').textContent = `${num(data.length)} accident${data.length === 1 ? '' : 's'} across ${brgyCount} barangay${brgyCount === 1 ? '' : 's'}` +
@@ -231,6 +250,12 @@ function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
     if (fBarangay.value) focus = focusBarangay(map, geo, fBarangay.value, null);
     else map.flyToBounds(cityBounds, { padding: [10, 10], duration: 0.8 });
     apply();
+  });
+  $('layerMarkers').addEventListener('click', e => {
+    markersOn = !markersOn;
+    e.currentTarget.classList.toggle('active', markersOn);
+    e.currentTarget.setAttribute('aria-pressed', String(markersOn));
+    if (pins) { if (markersOn) map.addLayer(pins); else map.removeLayer(pins); }
   });
   fFrom.addEventListener('change', () => apply());
   fTo.addEventListener('change', () => apply());
