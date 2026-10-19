@@ -67,9 +67,10 @@
           <li><b>Barangay filter.</b> Pumili ng barangay para i-zoom ang mapa doon at makita lang ang mga aksidente sa lugar na iyon.</li>
           <li><b>From – To.</b> Piliin ang petsa para makita lang ang mga aksidente sa panahong iyon — halimbawa, ngayong buwan o noong nakaraang taon.
             Pindutin ang <b>Clear filters</b> para bumalik sa lahat.</li>
+          <li><b>Zoom in / out.</b> Pindutin ang <b>+</b> para lumapit at makita ang mga kalsada, at <b>−</b> para lumayo at makita ang buong lungsod.
+            Puwede ring i-drag ang mapa para ilipat, o mag-pinch sa cellphone.</li>
           <li><b>Accident Markers.</b> I-on o i-off ang mga pin para mas malinaw na makita ang mga barangay boundary.</li>
-          <li><b>Full screen.</b> Palakihin ang mapa sa buong screen; dito puwede ring mag-zoom gamit ang mouse wheel o ang
-            <b>+ / −</b>. Pindutin ang <b>Esc</b> o <b>Exit full screen</b> para bumalik.</li>
+          <li><b>Full screen.</b> Palakihin ang mapa sa buong screen; dito puwede ring mag-zoom gamit ang mouse wheel. Pindutin ang <b>Esc</b> o <b>Exit full screen</b> para bumalik.</li>
         </ul>
         <p>Ang mga numero ay galing sa mga aksidenteng naitala sa MandaSafe, kaya nagbabago ang mapa kapag may bagong datos.
           Gamitin ito para malaman kung saan mas madalas ang aksidente at mag-ingat sa mga lugar na iyon.</p>
@@ -181,6 +182,8 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
   let created;
   try {
     created = await createMandaMap('heroMap', { counts, scroll: false, zoomControl: false });
+    // + / − buttons, always on, for visitors who cannot pinch or use a mouse wheel.
+    L.control.zoom({ position: 'topright', zoomInTitle: 'Zoom in', zoomOutTitle: 'Zoom out' }).addTo(created.map);
   } catch (error) {
     document.getElementById('heroMap').innerHTML = `<div class="empty is-error" style="padding:120px 12px">${esc(error.message)}</div>`;
     return;
@@ -275,7 +278,6 @@ function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
 function setUpFullScreen(map) {
   const card = document.getElementById('map');
   const btn = document.getElementById('mapFullBtn');
-  const zoom = L.control.zoom({ position: 'topright' });
 
   function set(on) {
     if (card.classList.contains('is-full') === on) return;
@@ -284,8 +286,7 @@ function setUpFullScreen(map) {
     btn.setAttribute('aria-pressed', String(on));
     btn.innerHTML = icon(on ? 'shrink' : 'expand') + `<b>${on ? 'Exit full screen' : 'Full screen'}</b>`;
     // Scroll-wheel zoom stays off on the page so it does not hijack scrolling.
-    if (on) { map.scrollWheelZoom.enable(); zoom.addTo(map); }
-    else { map.scrollWheelZoom.disable(); zoom.remove(); }
+    if (on) map.scrollWheelZoom.enable(); else map.scrollWheelZoom.disable();
     setTimeout(() => map.invalidateSize(), 60);
   }
 
