@@ -47,6 +47,8 @@ const ICONS = {
   logout:'<path d="M10 3H5.5A1.5 1.5 0 004 4.5v15A1.5 1.5 0 005.5 21H10"/><path d="M16 8l4 4-4 4M20 12H9"/>',
   file:'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z"/><path d="M14 3v5h5"/>',
   wifi:'<path d="M5 12.5a10 10 0 0114 0"/><path d="M8.2 15.6a5.5 5.5 0 017.6 0"/><circle cx="12" cy="19" r="1.3" fill="currentColor" stroke="none"/>',
+  expand:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  shrink:'<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
   google:''
 };
 function icon(name,cls){

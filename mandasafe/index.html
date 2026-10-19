@@ -9,18 +9,7 @@
 </head>
 <body class="public">
 
-<nav class="pub-nav">
-  <div class="pub-nav-in">
-    <a class="brand" href="index.html">
-      <img class="brand-logo" src="assets/logo-192.png" alt="MandaSafe logo">
-      <span><span class="brand-name">Manda<span>Safe</span></span>
-      <span class="brand-sub" style="display:block">Mandaluyong Road Accident Mapping &amp; Analytics System</span></span>
-    </a>
-    <a class="btn btn-orange" href="login.html" data-i="login">Sign In</a>
-  </div>
-</nav>
-
-<section class="hero">
+<section class="hero hero-nonav">
   <div class="hero-in hero-in-solo">
     <div>
       <span class="chip" data-i="shield">Making Mandaluyong Roads Safer</span>
@@ -41,6 +30,17 @@
       <div class="hero-card-head">
         <span style="width:10px;height:10px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.18)"></span>
         <div><h3>Live Accident Map</h3><p id="mapSub">Loading city data…</p></div>
+        <button type="button" class="btn btn-ghost map-full-btn" id="mapFullBtn" aria-pressed="false">
+          <span data-i="expand"></span><b>Full screen</b></button>
+      </div>
+      <div class="hero-filters" id="heroFilters" hidden>
+        <label class="mf-field"><span>Barangay</span>
+          <select class="input" id="fBarangay" aria-label="Filter by barangay"><option value="">All barangays</option></select></label>
+        <label class="mf-field"><span>From</span>
+          <input class="input" type="date" id="fFrom" aria-label="Show accidents from this date"></label>
+        <label class="mf-field"><span>To</span>
+          <input class="input" type="date" id="fTo" aria-label="Show accidents up to this date"></label>
+        <button type="button" class="mf-reset" id="fReset" hidden>Clear filters</button>
       </div>
       <div class="hero-grid">
         <div><div id="heroMap" class="map" style="height:400px"></div></div>
@@ -160,13 +160,119 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
 
   const counts = {};
   s.byBarangay.forEach(b => { counts[b.barangay] = b.count; });
+  let created;
   try {
-    const { map } = await createMandaMap('heroMap', { counts, scroll: false, zoomControl: false });
-    plotIncidents(map, s.recent, 20);
+    created = await createMandaMap('heroMap', { counts, scroll: false, zoomControl: false });
   } catch (error) {
     document.getElementById('heroMap').innerHTML = `<div class="empty is-error" style="padding:120px 12px">${esc(error.message)}</div>`;
+    return;
   }
+  setUpFullScreen(created.map);
+
+  // The filters need every accident; without the full list the map keeps the 20 most recent.
+  let all;
+  try { all = await API.incidents(); }
+  catch { plotIncidents(created.map, s.recent, 20); return; }
+  setUpFilters(created, all);
 })();
+
+/* ---------------- Filters: barangay + date range ----------------
+   Same rules as the Accident Map page: dates are ISO strings (YYYY-MM-DD), so plain
+   string comparison orders them, and picking a barangay also flies the map to it. */
+function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
+  const $ = id => document.getElementById(id);
+  const fBarangay = $('fBarangay'), fFrom = $('fFrom'), fTo = $('fTo');
+  let pins = null, focus = null;
+
+  const dates = all.map(i => String(i.date || '').slice(0, 10)).filter(Boolean).sort();
+  const oldest = dates[0] || '', newest = dates[dates.length - 1] || '';
+  [fFrom, fTo].forEach(input => { input.min = oldest; input.max = newest; });
+  const names = [...new Set(all.map(i => i.barangay).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  fBarangay.insertAdjacentHTML('beforeend', names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+  $('heroFilters').hidden = false;
+
+  function apply(initial) {
+    if (fFrom.value && fTo.value && fFrom.value > fTo.value) [fFrom.value, fTo.value] = [fTo.value, fFrom.value];
+    const brgy = fBarangay.value, from = fFrom.value, to = fTo.value;
+    const active = !!(brgy || from || to);
+    $('fReset').hidden = !active;
+
+    const data = all.filter(i => {
+      if (brgy && i.barangay !== brgy) return false;
+      const d = String(i.date || '').slice(0, 10);
+      if (from && (!d || d < from)) return false;
+      if (to && (!d || d > to)) return false;
+      return true;
+    });
+
+    const byBrgy = {};
+    data.forEach(i => { byBrgy[i.barangay] = (byBrgy[i.barangay] || 0) + 1; });
+    boundaries.eachLayer(layer => {
+      const name = brgyName(layer.feature);
+      const value = byBrgy[name] || 0;
+      layer.setPopupContent(`<b>${esc(name)}</b><br>${num(value)} accident${value === 1 ? '' : 's'}`);
+    });
+
+    // Oldest drawn first so the newest sit on top.
+    if (pins) map.removeLayer(pins);
+    pins = plotIncidents(map, [...data].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)));
+
+    const brgyCount = Object.keys(byBrgy).length;
+    $('mapSub').textContent = `${num(data.length)} accident${data.length === 1 ? '' : 's'} across ${brgyCount} barangay${brgyCount === 1 ? '' : 's'}` +
+      (active ? ' · filtered' : '');
+    if (!initial) {
+      $('hTotal').textContent = num(data.length);
+      $('hRange').textContent = `${fmtDate(from || oldest)} – ${fmtDate(to || newest)}`;
+    }
+  }
+
+  fBarangay.addEventListener('change', () => {
+    if (focus) { map.removeLayer(focus); focus = null; }
+    if (fBarangay.value) focus = focusBarangay(map, geo, fBarangay.value, null);
+    else map.flyToBounds(cityBounds, { padding: [10, 10], duration: 0.8 });
+    apply();
+  });
+  fFrom.addEventListener('change', () => apply());
+  fTo.addEventListener('change', () => apply());
+  $('fReset').addEventListener('click', () => {
+    fFrom.value = ''; fTo.value = '';
+    if (fBarangay.value) { fBarangay.value = ''; fBarangay.dispatchEvent(new Event('change')); }
+    else apply();
+  });
+
+  apply(true);
+}
+
+/* ---------------- Full screen ----------------
+   The whole card (filters, map and figures) fills the screen. The browser's Fullscreen API
+   is used where it exists; phones without it (iPhone Safari) get the same layout pinned over
+   the page. Either way Esc or the button brings it back. */
+function setUpFullScreen(map) {
+  const card = document.getElementById('map');
+  const btn = document.getElementById('mapFullBtn');
+  const zoom = L.control.zoom({ position: 'topright' });
+
+  function set(on) {
+    if (card.classList.contains('is-full') === on) return;
+    card.classList.toggle('is-full', on);
+    document.body.classList.toggle('map-full-open', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.innerHTML = icon(on ? 'shrink' : 'expand') + `<b>${on ? 'Exit full screen' : 'Full screen'}</b>`;
+    // Scroll-wheel zoom stays off on the page so it does not hijack scrolling.
+    if (on) { map.scrollWheelZoom.enable(); zoom.addTo(map); }
+    else { map.scrollWheelZoom.disable(); zoom.remove(); }
+    setTimeout(() => map.invalidateSize(), 60);
+  }
+
+  btn.addEventListener('click', () => {
+    const on = !card.classList.contains('is-full');
+    if (on && card.requestFullscreen) card.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    set(on);
+  });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) set(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') set(false); });
+}
 </script>
 </body>
 </html>

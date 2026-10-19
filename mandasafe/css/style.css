@@ -492,6 +492,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .pub-links a.on::after{content:'';position:absolute;left:13px;right:13px;bottom:-11px;height:3px;border-radius:3px;background:var(--blue-600)}
 
 .hero{position:relative;color:#fff;padding:34px 26px 70px;overflow:hidden;margin-top:calc(-1 * (66px + 28px));padding-top:120px}
+.hero.hero-nonav{margin-top:0;padding-top:64px}
 .hero::before{content:'';position:absolute;inset:0;background:url('../assets/cityhall.jpg') center 30%/cover no-repeat;transform:scale(1.04)}
 .hero::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,rgba(8,42,102,.95) 0%,rgba(11,52,124,.9) 45%,rgba(13,63,148,.78) 100%)}
 .hero-in{position:relative;z-index:2;max-width:1400px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:44px;align-items:center}
@@ -512,6 +513,17 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .hero-card-head h3{font-size:16px;font-weight:800}
 .hero-card-head p{font-size:11.5px;color:var(--muted)}
 .hero-card-head .link{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--blue-600)}
+/* Home-page map: filters + full screen */
+.map-full-btn{margin-left:auto;padding:8px 14px;font-size:12.5px}
+.hero-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;padding:12px 14px;margin-bottom:14px;
+  border:1px solid var(--line);border-radius:12px;background:#fbfcfe}
+.hero-filters[hidden]{display:none}
+.hero-card.is-full{position:fixed;inset:0;z-index:3000;margin:0!important;border-radius:0;display:flex;flex-direction:column;overflow:auto}
+.hero-card.is-full .hero-grid{flex:1;min-height:0}
+.hero-card.is-full #heroMap{height:100%!important;min-height:360px}
+body.map-full-open{overflow:hidden}
+@media(max-width:700px){.hero-filters .mf-field{flex:1 1 140px}.hero-filters select.input{min-width:0;width:100%}
+  .map-full-btn b{display:none}.map-full-btn{padding:8px 10px}}
 .hero-grid{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(0,1fr);gap:14px}
 @media(max-width:760px){.hero-grid{grid-template-columns:1fr}}
 .mini-stat{border:1px solid var(--line);border-radius:12px;padding:12px 13px;display:flex;gap:11px;align-items:center;margin-bottom:12px}
@@ -708,6 +720,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
   .pub-links a{white-space:nowrap;padding:8px 9px}
   .pub-links a.on::after{left:9px;right:9px;bottom:2px}
   .hero{padding:150px 16px 48px}
+  .hero.hero-nonav{padding-top:44px}
   .hero h1{font-size:30px;letter-spacing:-.8px}
   .hero h1 br{display:none}
   .hero .lead{font-size:14.5px}
