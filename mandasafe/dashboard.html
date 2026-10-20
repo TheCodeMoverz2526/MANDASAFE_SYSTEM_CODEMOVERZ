@@ -59,14 +59,9 @@
     </div>
     <div class="card">
       <div class="card-head"><h2>Most Affected Barangays</h2><a class="link" href="hotspots.html">Hotspots →</a></div>
-      <div id="topBrgy"><div class="empty">Loading…</div></div>
-      <div class="src">Percent = share of all recorded accidents in the city.</div>
+      <div id="topBrgy" class="brgy-scroll" tabindex="0" aria-label="All barangays, most accidents first"><div class="empty">Loading…</div></div>
+      <div class="src" id="topBrgyNote">Percent = share of all recorded accidents in the city.</div>
     </div>
-  </div>
-
-  <div class="card" style="margin-top:18px">
-    <div class="card-head"><h2>Accidents by Barangay (% of total)</h2></div>
-    <div class="card-body" id="brgyShare"><div class="empty">Loading…</div></div>
   </div>
 </main>
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -132,20 +127,17 @@ if (requireAuth()) {
 
     const total = summary.totalIncidents || summary.byBarangay.reduce((a, b) => a + b.count, 0);
     const pct = (count, of) => of ? Math.round(count / of * 1000) / 10 : 0;
-    const top = summary.byBarangay.slice(0, 8);
-    const maxB = Math.max(1, ...top.map(b => b.count));
-    document.getElementById('topBrgy').innerHTML = top.map((b, n) => `
+    // Every barangay, most accidents first; the list scrolls inside the card.
+    const all = summary.byBarangay;
+    const maxB = Math.max(1, ...all.map(b => b.count));
+    document.getElementById('topBrgy').innerHTML = all.map((b, n) => `
       <div class="brgy-row"><span class="rank">${n + 1}</span>
         <span class="n" style="min-width:120px">${esc(b.barangay)}</span>
         <span class="bar"><i style="width:${(b.count / maxB) * 100}%"></i></span>
-        <span class="c">${num(b.count)} · ${pct(b.count, total)}%</span></div>`).join('');
-
-    // Percentage distribution of accidents across barangays.
-    const share = (rows, label) => rows.slice(0, 10).map(r => ({
-      label: `${r[label]} — ${pct(r.count, total)}%`, value: r.count
-    }));
-    barChart(document.getElementById('brgyShare'), share(summary.byBarangay, 'barangay'),
-      { footer: `Top 10 of ${num(summary.barangayCount)} barangays, out of ${num(total)} recorded accidents.` });
+        <span class="c">${num(b.count)} · ${pct(b.count, total)}%</span></div>`).join('')
+      || '<div class="empty">No accidents recorded yet.</div>';
+    document.getElementById('topBrgyNote').textContent =
+      `All ${num(all.length)} barangays — scroll for more. Percent = share of all ${num(total)} recorded accidents in the city.`;
 
     const counts = {};
     summary.byBarangay.forEach(b => { counts[b.barangay] = b.count; });

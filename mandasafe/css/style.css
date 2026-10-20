@@ -535,7 +535,12 @@ body.map-full-open{overflow:hidden}
 @media(max-width:700px){.hero-filters .mf-field{flex:1 1 140px}.hero-filters select.input{min-width:0;width:100%}
   .map-full-btn b{display:none}.map-full-btn{padding:8px 10px}}
 .hero-grid{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(0,1fr);gap:14px}
-@media(max-width:760px){.hero-grid{grid-template-columns:1fr}}
+/* The map fills the full height of its row, so it is as tall as the figures beside it. */
+.hero-map-col{display:flex;flex-direction:column}
+#heroMap{flex:1;min-height:520px}
+.mini-note{margin:8px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
+.mini-note[hidden]{display:none}
+@media(max-width:760px){.hero-grid{grid-template-columns:1fr}#heroMap{min-height:380px}}
 .mini-stat{border:1px solid var(--line);border-radius:12px;padding:12px 13px;display:flex;gap:11px;align-items:center;margin-bottom:12px}
 .mini-stat:last-child{margin-bottom:0}
 .mini-stat .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none}
@@ -564,6 +569,7 @@ body.map-full-open{overflow:hidden}
 .mini-rows .mr-peak + .mr-peak{padding-top:0;border-top:0}
 .mini-rows .mini-empty{display:block;color:var(--muted);font-size:12px}
 .mini-spots{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.mini-spots .mini-rows{gap:9px}
 .mini-spots[hidden]{display:none}
 .mini-spots-head{display:flex;flex-direction:column;margin-bottom:8px}
 .mini-spots-head b{font-size:13px;color:var(--ink)}
@@ -715,6 +721,11 @@ body.map-full-open{overflow:hidden}
 .brgy-row .bar{flex:1;height:7px;border-radius:5px;background:#eef2f7;overflow:hidden;min-width:60px}
 .brgy-row .bar i{display:block;height:100%;background:var(--blue-500);border-radius:5px}
 .brgy-row .c{font-size:12.5px;font-weight:700;min-width:52px;text-align:right}
+/* Dashboard: every barangay, about eight rows tall, scrolling inside the card */
+.brgy-scroll{max-height:392px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
+.brgy-scroll::-webkit-scrollbar{width:8px}
+.brgy-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
+.brgy-scroll:focus-visible{outline:2px solid var(--blue-500);outline-offset:-2px}
 
 .ro-note{display:flex;gap:11px;align-items:flex-start;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:12.5px;color:var(--ink-2)}
 .ro-note svg{width:18px;height:18px;color:var(--blue-600);flex:none;margin-top:1px}

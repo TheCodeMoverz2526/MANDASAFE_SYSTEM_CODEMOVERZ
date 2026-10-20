@@ -44,7 +44,7 @@
         <button type="button" class="map-layer-btn active" id="layerMarkers" aria-pressed="true"><span data-i="pin"></span>Accident Markers</button>
       </div>
       <div class="hero-grid">
-        <div><div id="heroMap" class="map" style="height:400px"></div></div>
+        <div class="hero-map-col"><div id="heroMap" class="map"></div></div>
         <div>
           <div class="mini-stat"><span class="ic ic-blue" data-i="shield"></span>
             <div><div class="k">Recorded Accidents</div><div class="v" id="hTotal">—</div><div class="s" id="hRange">All time</div></div></div>
@@ -52,6 +52,11 @@
             <div class="mini-list-head"><span class="ic ic-purple" data-i="chart"></span>
               <div><div class="k" id="hTopTitle">Top barangays</div><div class="s" id="hTopSub">Most accidents recorded</div></div></div>
             <ol class="mini-rows" id="hTop"><li class="mini-empty">Loading…</li></ol>
+            <div class="mini-spots" id="hCausesWrap" hidden>
+              <div class="mini-spots-head"><b>Top 3 accident causes</b><small>Across Mandaluyong, most common first</small></div>
+              <ol class="mini-rows" id="hCauses"></ol>
+              <p class="mini-note" id="hCausesNote" hidden></p>
+            </div>
             <div class="mini-spots" id="hSpotsWrap" hidden>
               <div class="mini-spots-head"><b>Top 3 accident spots</b><small>Click a spot to see it on the map</small></div>
               <ol class="spot-rows" id="hSpots"></ol>
@@ -198,6 +203,8 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
     return;
   }
   setUpFullScreen(created.map);
+  // The map stretches to the height of the figures beside it, which changes with the filter.
+  if (window.ResizeObserver) new ResizeObserver(() => created.map.invalidateSize()).observe(document.getElementById('heroMap'));
 
   // The filters need every accident; without the full list the map keeps the 20 most recent.
   let all;
@@ -258,6 +265,7 @@ function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
     const ranking = Object.entries(byBrgy).map(([barangay, count]) => ({ barangay, count })).sort((a, b) => b.count - a.count);
     renderTopList(brgy ? data : ranking, brgy);
     renderSpots(brgy ? data : [], map);
+    renderCauses(brgy ? [] : data);
   }
 
   fBarangay.addEventListener('change', () => {
@@ -328,6 +336,25 @@ function renderTopList(rows, brgy) {
   list.innerHTML = Object.entries(sev).map(([k, v]) => row(k, v, max, `sev-${k.toLowerCase()}`)).join('')
     + (peakHour ? `<li class="mr-peak"><span class="mr-label">Peak hour</span><b>${hourLabel(+peakHour[0])} <small>(${num(peakHour[1])})</small></b></li>` : '')
     + (peakDay ? `<li class="mr-peak"><span class="mr-label">Peak day</span><b>${DAYS[+peakDay[0]]} <small>(${num(peakDay[1])})</small></b></li>` : '');
+}
+
+/* ---------------- Top 3 accident causes (All barangays) ----------------
+   Counted from each record's accident type, so it follows the date filter. The list only
+   says what the records say: when they carry a single type, that is all it shows. */
+function renderCauses(rows) {
+  const wrap = document.getElementById('hCausesWrap'), list = document.getElementById('hCauses');
+  const note = document.getElementById('hCausesNote');
+  wrap.hidden = !rows.length;
+  if (!rows.length) return;
+  const counts = {};
+  rows.forEach(i => { const t = String(i.type || '').trim() || 'Not recorded'; counts[t] = (counts[t] || 0) + 1; });
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const top = ranked.slice(0, 3);
+  list.innerHTML = top.map(([type, count], n) => `<li><span class="mr-label">${n + 1}. ${esc(type)}</span>
+      <b>${num(count)} <small>· ${Math.round(count / rows.length * 1000) / 10}%</small></b>
+      <i class="mr-bar"><i style="width:${Math.max(4, count / top[0][1] * 100)}%"></i></i></li>`).join('');
+  note.hidden = ranked.length > 1;
+  note.textContent = 'The accident records only list one cause so far. More will appear here once records with other causes are added.';
 }
 
 /* ---------------- Top 3 accident spots ----------------
