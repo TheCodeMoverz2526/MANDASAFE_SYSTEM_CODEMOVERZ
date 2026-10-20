@@ -102,23 +102,73 @@
     <div class="g-3" id="predGrid" style="display:grid;gap:18px">
       <div class="empty" style="grid-column:1/-1">Loading predictions…</div>
     </div>
+    <details class="map-help" open style="margin-top:22px">
+      <summary data-i="info">Paano basahin ang Predicted High-Risk Locations? <small>How to read these cards</small></summary>
+      <div class="map-purpose">
+        <b>Bakit nandito ito?</b> Ito ang <b>6 na lugar na pinakadelikado sa susunod na buwan</b>, ayon sa forecast ng MandaSafe.
+        Hinuhulaan ito mula sa mga aksidenteng naitala noon at sa baseline data ng TPMO, kaya makikita mo agad kung aling
+        kalsada at barangay ang dapat mong pag-ingatan &mdash; mag-dahan-dahan, maging alerto, o pumili ng ibang ruta. Para sa
+        TPMO, ito ang mga lugar na unang dapat bantayan ng traffic enforcers.
+      </div>
+      <ul>
+        <li><b>Pangalan at kalsada.</b> Ang malaking pangalan ay ang barangay; ang nasa ilalim ay ang kalsada. Puwedeng lumabas
+          nang higit sa isang beses ang isang barangay kung delikado ang ilang kalsada nito.</li>
+        <li><b>Kulay at label.</b> <b style="color:#dc2626">Pula = High</b> (risk score 7 pataas),
+          <b style="color:#ca8a04">dilaw = Moderate</b> (4 pataas), <b style="color:#16a34a">berde = Low</b> (mababa sa 4).
+          Nakaayos ang mga card mula sa pinakadelikado.</li>
+        <li><b>Predicted next month.</b> Ilang aksidente ang inaasahan sa lugar na iyon sa susunod na buwan. Ang simbolo sa harap
+          ay ang direksyon: <b>&#9650;</b> tataas (higit 10%), <b>&#9660;</b> bababa, <b>&#9632;</b> halos pareho lang.</li>
+        <li><b>Risk score / 10.</b> Pinagsasama ang dami ng aksidente kamakailan, ang hula para sa susunod na buwan, at ang kalubhaan
+          ng mga aksidente doon, saka ikinukumpara sa pinakadelikadong lugar &mdash; kaya ang <b>10.0</b> ang pinakadelikado sa buong lungsod.</li>
+      </ul>
+      <p>Ang mga ito ay <b>tantya lamang</b>, hindi siguradong mangyayari. Para sa lahat ng barangay at sa mas malayong forecast,
+        mag-sign in at buksan ang <b>Forecast</b> page.</p>
+    </details>
   </div>
 </section>
 
 <section class="section" id="how" style="padding-top:0">
   <div class="section-in">
-    <div class="sec-title"><i></i><h2>How MandaSafe Works</h2><i></i></div>
-    <div class="g-5">
-      <div class="feat"><div class="ic" data-i="edit"></div><h3>Officers Record</h3>
-        <p>TPMO officers log every road accident in the RIMAS admin console — date, barangay, road, type and severity.</p></div>
-      <div class="feat"><div class="ic" data-i="pin"></div><h3>Mapped by Barangay</h3>
-        <p>Each record is placed inside the city's official barangay boundaries, by coordinates or barangay centroid.</p></div>
-      <div class="feat"><div class="ic" data-i="fire"></div><h3>Hotspots Found</h3>
-        <p>Gaussian kernel density estimation finds true density peaks instead of a simple street count.</p></div>
-      <div class="feat"><div class="ic" data-i="trend"></div><h3>Next Month Forecast</h3>
-        <p>A linear trend per area, adjusted by a Random Forest severity model, projects the month ahead.</p></div>
-      <div class="feat"><div class="ic" data-i="users"></div><h3>Residents Informed</h3>
-        <p>Everything the office records is published here so residents can plan safer routes.</p></div>
+    <div class="sec-title"><i></i><h2>What You Get When You Sign In</h2><i></i></div>
+    <p style="text-align:center;color:var(--muted);font-size:13.5px;max-width:640px;margin:-22px auto 30px">
+      A free MandaSafe account opens the full set of tools the city uses to follow road accidents &mdash; all read-only,
+      all updated as soon as the TPMO records something new.</p>
+    <div class="g-3 signin-feats">
+      <div class="feat"><div class="ic" data-i="home"></div><h3>Dashboard</h3>
+        <p>The city at a glance: total and latest-month accidents, the monthly trend, the latest reports, and every
+          barangay ranked by how many accidents it has.</p></div>
+      <div class="feat"><div class="ic" data-i="pin"></div><h3>Accident Map</h3>
+        <p>Every accident pinned where it happened. Filter by barangay or date, switch on the heatmap, and click a pin
+          for its date, time and severity.</p></div>
+      <div class="feat"><div class="ic" data-i="fire"></div><h3>Hotspots</h3>
+        <p>Where accidents cluster most, found by kernel density estimation, with all 27 barangays ranked from
+          highest to lowest risk.</p></div>
+      <div class="feat"><div class="ic" data-i="trend"></div><h3>Forecast</h3>
+        <p>How many accidents to expect next month &mdash; or up to 12 months ahead &mdash; for the city and for each barangay,
+          with a risk score and the reason behind every prediction.</p></div>
+      <div class="feat"><div class="ic" data-i="shield"></div><h3>Safety Index</h3>
+        <p>One score from 0 to 100 for how safe Mandaluyong&rsquo;s roads are lately, broken down by accident frequency,
+          spread and severity.</p></div>
+      <div class="feat"><div class="ic" data-i="bell"></div><h3>Alerts &amp; My Account</h3>
+        <p>A notification bell for new accidents and new hotspots, and your own profile where you can update your
+          name, email and contact number.</p></div>
+      <div class="feat feat-wide"><div class="ic" data-i="chart"></div>
+        <div><h3>Analytics</h3>
+          <p>Charts that turn the records into answers &mdash; when accidents rise, where they concentrate, how serious they
+            are, and where they are heading. Hover over any chart to see the exact numbers.</p>
+          <ul class="feat-charts">
+            <li><b>Accidents per Month</b><span>Dashboard &middot; the monthly trend, busiest and quietest months</span></li>
+            <li><b>Most Affected Barangays</b><span>Dashboard &middot; all barangays ranked, with their share of the city</span></li>
+            <li><b>City Trend &amp; Forecast</b><span>Forecast &middot; recorded months with the predicted ones after them</span></li>
+            <li><b>Last Month vs. Predicted</b><span>Forecast &middot; every barangay side by side</span></li>
+            <li><b>Severity Mix &amp; Accident Types</b><span>Safety Index &middot; damage, injury and fatal counts</span></li>
+            <li><b>Hotspot Intensity</b><span>Hotspots &middot; how tightly accidents cluster in each barangay</span></li>
+          </ul>
+        </div></div>
+    </div>
+    <div class="signin-cta">
+      <a class="btn btn-primary btn-lg" href="login.html" data-i="login">Sign In</a>
+      <a class="btn btn-ghost btn-lg" href="login.html#signup" data-i="user">Create a free account</a>
     </div>
   </div>
 </section>
