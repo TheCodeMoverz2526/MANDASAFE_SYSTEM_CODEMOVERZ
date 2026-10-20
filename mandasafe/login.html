@@ -145,6 +145,10 @@
                                 aria-label="Digit 4"><input inputmode="numeric" maxlength="1"
                                 aria-label="Digit 5"><input inputmode="numeric" maxlength="1" aria-label="Digit 6">
                         </div>
+                        <div class="otp-expiry" id="otpExpiry" aria-live="polite">
+                            <span class="otp-expiry-text"><i class="fas fa-clock"></i> <span id="otpExpiryText">Code expires in 0:30</span></span>
+                            <span class="otp-expiry-bar"><span id="otpExpiryFill"></span></span>
+                        </div>
                         <div class="demo-otp" id="demoOtp" hidden></div>
                         <div class="auth-error" id="otpError" role="alert"></div>
                         <button class="btn btn-primary auth-submit" type="submit" data-busy="Verifying…"><i class="fas fa-check"></i> Verify

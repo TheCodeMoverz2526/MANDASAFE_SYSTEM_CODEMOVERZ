@@ -2223,6 +2223,15 @@ body {
 .otp-inputs { display: flex; justify-content: center; gap: 8px; margin: 8px 0 17px; }
 .otp-inputs input { width: 39px; height: 48px; border: 1.5px solid var(--gray-200); border-radius: 8px; outline: none; color: var(--navy); text-align: center; font: 700 20px/1 inherit; transition: .2s; }
 .otp-inputs input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,86,219,.12); }
+.otp-expiry { display: grid; gap: 6px; margin: -4px 0 14px; font-size: 12px; font-weight: 600; color: var(--gray-600); text-align: center; }
+.otp-expiry .fa-clock { color: var(--blue); }
+.otp-expiry-bar { height: 4px; border-radius: 99px; background: var(--gray-200); overflow: hidden; }
+.otp-expiry-bar span { display: block; height: 100%; width: 100%; background: var(--blue); border-radius: 99px; transition: width 1s linear, background .2s; }
+.otp-expiry.is-low { color: #b45309; }
+.otp-expiry.is-low .fa-clock { color: #f59e0b; }
+.otp-expiry.is-low .otp-expiry-bar span { background: #f59e0b; }
+.otp-expiry.is-expired { color: #dc2626; }
+.otp-expiry.is-expired .fa-clock { color: #dc2626; }
 .resend-row { display: flex; justify-content: center; gap: 7px; align-items: center; margin-top: 16px; color: var(--gray-400); font-size: 11px; }
 .resend-row button { padding: 0; border: 0; background: none; color: var(--blue); cursor: pointer; font: inherit; font-weight: 700; }
 .resend-row button:disabled { color: var(--gray-400); cursor: default; }

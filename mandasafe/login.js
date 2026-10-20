@@ -258,21 +258,40 @@ function showOtpPanel(sent) {
     if (sent.testCode) document.getElementById('otpDescription').textContent = 'Enter the six-digit code shown below the boxes.';
 
     showPanel('otpPanel');
-    startResendTimer(sent.resendIn || 30);
+    startResendTimer(sent.resendIn || 30, sent.expiresIn || 30);
     setTimeout(() => document.querySelector('.otp-inputs input').focus(), 0);
 }
 
-function startResendTimer(seconds) {
+/* Two countdowns on one tick: until "Resend code" unlocks, and until the code itself stops
+   working (the server refuses it after `expiresIn` seconds). The expiry one is shown above
+   the Verify button so the person knows how long they have to type it. */
+function startResendTimer(seconds, expiresIn = seconds) {
     clearInterval(resendInterval);
     const timer = document.getElementById('resendTimer');
     const button = document.getElementById('resendButton');
+    const expiry = document.getElementById('otpExpiry');
+    const expiryText = document.getElementById('otpExpiryText');
+    const expiryFill = document.getElementById('otpExpiryFill');
+    const endsAt = Date.now() + expiresIn * 1000;
     button.disabled = true;
-    const render = () => { timer.textContent = `Resend code in 00:${String(seconds).padStart(2, '0')}`; };
+
+    const render = () => {
+        if (seconds > 0) timer.textContent = `Resend code in 00:${String(seconds).padStart(2, '0')}`;
+        // Counted from the clock, not from ticks, so a backgrounded tab still shows the truth.
+        const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+        expiry.classList.toggle('is-low', left > 0 && left <= 10);
+        expiry.classList.toggle('is-expired', left === 0);
+        expiryText.textContent = left > 0
+            ? `Code expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
+            : 'Code expired. Click "Resend code" to get a new one.';
+        expiryFill.style.width = `${(left / expiresIn) * 100}%`;
+        return left;
+    };
     render();
     resendInterval = setInterval(() => {
         seconds -= 1;
-        if (seconds <= 0) { clearInterval(resendInterval); timer.textContent = 'Did not receive a code?'; button.disabled = false; return; }
-        render();
+        if (seconds <= 0) { timer.textContent = 'Did not receive a code?'; button.disabled = false; }
+        if (render() === 0 && seconds <= 0) clearInterval(resendInterval);
     }, 1000);
 }
 
