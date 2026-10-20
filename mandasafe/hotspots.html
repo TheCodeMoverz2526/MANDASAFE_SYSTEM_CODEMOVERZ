@@ -16,6 +16,25 @@
     <div class="head-tools"><span class="pill"><span class="live"></span> <span id="range">Loading…</span></span></div>
   </div>
 
+
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-head"><h2>Density Heatmap</h2></div>
+      <div class="card-body" style="padding:16px"><div id="map" class="map" style="height:470px"></div></div>
+      <div class="heat-scale" id="levels" style="flex-wrap:wrap;gap:16px">
+        <span class="lg"><i style="background:#dc2626"></i>High</span>
+        <span class="lg"><i style="background:#eab308"></i>Moderate</span>
+        <span class="lg"><i style="background:#16a34a"></i>Low</span>
+      </div>
+      <div class="src" id="levelNote">Peaks come from a Gaussian KDE over every mapped accident, weighted by severity.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Hotspot Ranking — All Barangays</h2><span class="link" id="listCount"></span></div>
+      <div id="list" style="max-height:520px;overflow-y:auto"><div class="empty">Loading…</div></div>
+      <div class="src">Intensity combines how many accidents a barangay has with how tightly they cluster, compared with the most intense barangay (100%).</div>
+    </div>
+  </div>
   <details class="map-help page-help" open>
     <summary data-i="info">Paano basahin ang Hotspots? <small>How to read this page</small></summary>
     <div class="map-purpose">
@@ -41,25 +60,6 @@
     </ul>
     <p>Ang mga hotspot ay galing sa lahat ng aksidenteng may lokasyon sa mapa, kaya nagbabago ito kapag may bagong datos.</p>
   </details>
-
-  <div class="grid g-main">
-    <div class="card">
-      <div class="card-head"><h2>Density Heatmap</h2></div>
-      <div class="card-body" style="padding:16px"><div id="map" class="map" style="height:470px"></div></div>
-      <div class="heat-scale" id="levels" style="flex-wrap:wrap;gap:16px">
-        <span class="lg"><i style="background:#dc2626"></i>High</span>
-        <span class="lg"><i style="background:#eab308"></i>Moderate</span>
-        <span class="lg"><i style="background:#16a34a"></i>Low</span>
-      </div>
-      <div class="src" id="levelNote">Peaks come from a Gaussian KDE over every mapped accident, weighted by severity.</div>
-    </div>
-
-    <div class="card">
-      <div class="card-head"><h2>Hotspot Ranking — All Barangays</h2><span class="link" id="listCount"></span></div>
-      <div id="list" style="max-height:520px;overflow-y:auto"><div class="empty">Loading…</div></div>
-      <div class="src">Intensity combines how many accidents a barangay has with how tightly they cluster, compared with the most intense barangay (100%).</div>
-    </div>
-  </div>
 </main>
 
 <script src="vendor/leaflet/leaflet.js"></script>

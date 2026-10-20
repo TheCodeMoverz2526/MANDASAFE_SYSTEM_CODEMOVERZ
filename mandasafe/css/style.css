@@ -527,8 +527,8 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .map-purpose{margin-top:10px;padding:10px 14px;border-left:3px solid var(--blue-600);background:var(--blue-50);border-radius:0 8px 8px 0;line-height:1.6;color:var(--ink-2)}
 .map-help ul{margin:10px 0 0;padding-left:20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 28px;line-height:1.55}
 .map-help p{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.55}
-/* The same "how to read" panel at the top of the Safety Index, Forecast, Hotspots and Accident Map pages */
-.page-help{margin:0 0 18px;background:#fff}
+/* The same "how to read" panel at the bottom of the Safety Index, Forecast, Hotspots and Accident Map pages */
+.page-help{margin:18px 0 0;background:#fff}
 @media(max-width:760px){.map-help ul{grid-template-columns:1fr}}
 .hero-card.is-full{position:fixed;inset:0;z-index:3000;margin:0!important;border-radius:0;display:flex;flex-direction:column;overflow:auto}
 .hero-card.is-full .hero-grid{flex:1;min-height:0}
