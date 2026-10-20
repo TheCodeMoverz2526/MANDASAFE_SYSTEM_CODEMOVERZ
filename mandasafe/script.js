@@ -59,8 +59,9 @@ function doLogout() {
     currentUser = null;
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
-    // replace, not assign: the console is taken out of the history, so Back can't reach it.
-    window.location.replace('login.html?as=admin');
+    // Back to the homepage. replace, not assign: the console is taken out of the history,
+    // so Back can't reach it.
+    window.location.replace('index.html');
 }
 
 /* Once signed out, the console must not come back until the person signs in again:

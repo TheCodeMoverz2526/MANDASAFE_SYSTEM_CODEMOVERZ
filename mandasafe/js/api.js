@@ -135,8 +135,9 @@ function logout() {
         .catch(() => { /* signing out locally is enough */ });
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
-    // replace, not href: the signed-in page is taken out of the history, so Back can't reach it.
-    location.replace('login.html');
+    // Back to the homepage. replace, not href: the signed-in page is taken out of the
+    // history, so Back can't reach it.
+    location.replace('index.html');
 }
 
 /* Shows a message inside a card body while data loads / when it fails. */

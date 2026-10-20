@@ -563,6 +563,22 @@ body.map-full-open{overflow:hidden}
 .mini-rows .mr-peak{padding-top:8px;border-top:1px dashed var(--line)}
 .mini-rows .mr-peak + .mr-peak{padding-top:0;border-top:0}
 .mini-rows .mini-empty{display:block;color:var(--muted);font-size:12px}
+.mini-spots{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.mini-spots[hidden]{display:none}
+.mini-spots-head{display:flex;flex-direction:column;margin-bottom:8px}
+.mini-spots-head b{font-size:13px;color:var(--ink)}
+.mini-spots-head small{font-size:11px;color:var(--muted)}
+.spot-rows{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.spot-rows .mini-empty{color:var(--muted);font-size:12px}
+.spot-btn{width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;text-align:left;cursor:pointer;font:inherit;color:inherit;transition:background .15s,border-color .15s}
+.spot-btn:hover,.spot-btn.active{background:var(--blue-50);border-color:#cfe0ff}
+.spot-rank{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:none;font-size:12px;font-weight:800;color:#fff;background:#eab308}
+.spot-rank.sev-injury{background:#f97316}
+.spot-rank.sev-fatal{background:#dc2626}
+.spot-body{display:flex;flex-direction:column;min-width:0;flex:1}
+.spot-body b{font-size:12.5px;font-weight:800}
+.spot-body small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spot-go{color:var(--muted);font-size:18px;line-height:1}
 
 .section{padding:58px 26px}
 .section-in{max-width:1400px;margin:0 auto}

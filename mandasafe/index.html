@@ -52,6 +52,10 @@
             <div class="mini-list-head"><span class="ic ic-purple" data-i="chart"></span>
               <div><div class="k" id="hTopTitle">Top barangays</div><div class="s" id="hTopSub">Most accidents recorded</div></div></div>
             <ol class="mini-rows" id="hTop"><li class="mini-empty">Loading…</li></ol>
+            <div class="mini-spots" id="hSpotsWrap" hidden>
+              <div class="mini-spots-head"><b>Top 3 accident spots</b><small>Click a spot to see it on the map</small></div>
+              <ol class="spot-rows" id="hSpots"></ol>
+            </div>
           </div>
         </div>
       </div>
@@ -253,6 +257,7 @@ function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
     }
     const ranking = Object.entries(byBrgy).map(([barangay, count]) => ({ barangay, count })).sort((a, b) => b.count - a.count);
     renderTopList(brgy ? data : ranking, brgy);
+    renderSpots(brgy ? data : [], map);
   }
 
   fBarangay.addEventListener('change', () => {
@@ -323,6 +328,48 @@ function renderTopList(rows, brgy) {
   list.innerHTML = Object.entries(sev).map(([k, v]) => row(k, v, max, `sev-${k.toLowerCase()}`)).join('')
     + (peakHour ? `<li class="mr-peak"><span class="mr-label">Peak hour</span><b>${hourLabel(+peakHour[0])} <small>(${num(peakHour[1])})</small></b></li>` : '')
     + (peakDay ? `<li class="mr-peak"><span class="mr-label">Peak day</span><b>${DAYS[+peakDay[0]]} <small>(${num(peakDay[1])})</small></b></li>` : '');
+}
+
+/* ---------------- Top 3 accident spots ----------------
+   The records carry no road names, so a "spot" is a small square of the map (about 150 m
+   a side) and the three squares with the most accidents in the picked barangay are listed.
+   Clicking one flies the map there and rings the area. */
+const SPOT_SIZE = 0.0014;   // degrees ≈ 150 m in Mandaluyong
+const SEV_RANK = { Fatal: 3, Injury: 2, Damage: 1 };
+let spotRing = null;
+function renderSpots(rows, map) {
+  const wrap = document.getElementById('hSpotsWrap'), list = document.getElementById('hSpots');
+  if (spotRing) { map.removeLayer(spotRing); spotRing = null; }
+  const cells = {};
+  rows.forEach(i => {
+    if (!Number.isFinite(i.lat) || !Number.isFinite(i.lng)) return;
+    const key = `${Math.floor(i.lat / SPOT_SIZE)}:${Math.floor(i.lng / SPOT_SIZE)}`;
+    const c = cells[key] || (cells[key] = { count: 0, lat: 0, lng: 0, sev: { Damage: 0, Injury: 0, Fatal: 0 }, latest: '' });
+    c.count += 1; c.lat += i.lat; c.lng += i.lng;
+    if (i.sev in c.sev) c.sev[i.sev] += 1;
+    if (String(i.date || '') > c.latest) c.latest = String(i.date || '');
+  });
+  const spots = Object.values(cells).sort((a, b) => b.count - a.count).slice(0, 3)
+    .map(c => ({ ...c, lat: c.lat / c.count, lng: c.lng / c.count }));
+  wrap.hidden = !rows.length;
+  if (!spots.length) { list.innerHTML = '<li class="mini-empty">No mapped accidents in this period.</li>'; return; }
+
+  list.innerHTML = spots.map((s, n) => {
+    const worst = Object.keys(s.sev).filter(k => s.sev[k]).sort((a, b) => SEV_RANK[b] - SEV_RANK[a])[0] || 'Damage';
+    const parts = ['Fatal', 'Injury', 'Damage'].filter(k => s.sev[k]).map(k => `${num(s.sev[k])} ${k.toLowerCase()}`).join(' · ');
+    return `<li><button type="button" class="spot-btn" data-n="${n}">
+      <span class="spot-rank sev-${worst.toLowerCase()}">${n + 1}</span>
+      <span class="spot-body"><b>${num(s.count)} accident${s.count === 1 ? '' : 's'}</b>
+        <small>${parts}${s.latest ? ` — latest ${fmtDate(s.latest)}` : ''}</small></span>
+      <span class="spot-go" aria-hidden="true">›</span></button></li>`;
+  }).join('');
+  list.querySelectorAll('.spot-btn').forEach(btn => btn.addEventListener('click', () => {
+    const s = spots[+btn.dataset.n];
+    if (spotRing) map.removeLayer(spotRing);
+    spotRing = L.circle([s.lat, s.lng], { radius: 110, color: '#1d4ed8', weight: 3, fillColor: '#3b82f6', fillOpacity: .12, dashArray: '6 5' }).addTo(map);
+    map.flyTo([s.lat, s.lng], 17, { duration: 0.8 });
+    list.querySelectorAll('.spot-btn').forEach(b => b.classList.toggle('active', b === btn));
+  }));
 }
 
 /* ---------------- Full screen ----------------
