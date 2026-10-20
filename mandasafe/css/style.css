@@ -524,6 +524,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .map-help summary{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;color:var(--ink)}
 .map-help summary svg{width:17px;height:17px;color:var(--blue-600);flex-shrink:0}
 .map-help summary small{font-weight:500;color:var(--muted)}
+.map-purpose{margin-top:10px;padding:10px 14px;border-left:3px solid var(--blue-600);background:var(--blue-50);border-radius:0 8px 8px 0;line-height:1.6;color:var(--ink-2)}
 .map-help ul{margin:10px 0 0;padding-left:20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 28px;line-height:1.55}
 .map-help p{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.55}
 @media(max-width:760px){.map-help ul{grid-template-columns:1fr}.hero-filters .map-layer-btn{margin-left:0}}
