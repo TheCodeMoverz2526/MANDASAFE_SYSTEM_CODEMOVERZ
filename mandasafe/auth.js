@@ -134,7 +134,7 @@ function registerAccount({ name, email, phone, password, role, dept }) {
         email: cleanEmail,
         phone: cleanPhone,
         role: requestedRole,
-        dept: dept || 'Mandaluyong City Resident',
+        dept: dept || 'Mandaluyong City User',
         status: 'active',
         salt,
         passwordHash: hashPassword(password, salt),

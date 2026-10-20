@@ -143,7 +143,7 @@ function wireNav() {
 }
 
 function buildShell(active) {
-    const u = currentUser() || { name: 'Resident', role: 'user' };
+    const u = currentUser() || { name: 'User', role: 'user' };
     const initials = u.avatar || u.name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
 
     const adminLink = u.role === 'admin'
@@ -174,7 +174,7 @@ function buildShell(active) {
           '<div class="userchip is-static" id="ms-userchip">' +
             '<span class="avatar">' + initials + '</span>' +
             '<span><span class="nm">' + u.name + '</span>' +
-            '<span class="rl" style="display:block">' + (u.role === 'admin' ? 'Administrator' : 'Resident') + '</span></span>' +
+            '<span class="rl" style="display:block">' + (u.role === 'admin' ? 'Administrator' : 'User') + '</span></span>' +
           '</div>' +
         '</div>' +
       '</header>';

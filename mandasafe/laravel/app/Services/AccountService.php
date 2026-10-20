@@ -144,7 +144,7 @@ class AccountService
             'phone' => $phone,
             'password' => $password,
             'role' => $role,
-            'dept' => $body['dept'] ?? 'Mandaluyong City Resident',
+            'dept' => $body['dept'] ?? 'Mandaluyong City User',
         ];
     }
 
@@ -165,7 +165,7 @@ class AccountService
             'email' => $details['email'],
             'phone' => $details['phone'],
             'role' => $details['role'] ?? 'user',
-            'dept' => $details['dept'] ?? 'Mandaluyong City Resident',
+            'dept' => $details['dept'] ?? 'Mandaluyong City User',
             'status' => 'active',
             // A sign-up arrives with the password already hashed (it waited on the challenge).
             'password' => $details['password_hash'] ?? Hash::make($details['password']),

@@ -7,7 +7,7 @@ function applyDashboardUser(acc) {
     const chipName = document.getElementById('chipName');
     const chipRole = document.getElementById('chipRole');
     if (chipName) chipName.textContent = acc.name;
-    if (chipRole) chipRole.textContent = acc.role === 'admin' ? 'Administrator' : 'Resident';
+    if (chipRole) chipRole.textContent = acc.role === 'admin' ? 'Administrator' : 'User';
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = acc.role === 'admin' ? 'flex' : 'none');
     const welcome = document.getElementById('dashWelcome');
     if (welcome) welcome.textContent = `Welcome, ${acc.name.split(' ')[0]} 👋`;
