@@ -15,6 +15,37 @@
     <div class="head-tools"><span class="pill"><span class="live"></span> <span id="range">Loading…</span></span></div>
   </div>
 
+  <details class="map-help page-help" open>
+    <summary data-i="info">Paano basahin ang Forecast? <small>How to read this page</small></summary>
+    <div class="map-purpose">
+      <b>Bakit may Forecast?</b> Hinuhulaan ng page na ito kung <b>ilang aksidente ang posibleng mangyari</b> sa susunod na
+      mga buwan, sa buong lungsod at sa bawat barangay, batay sa mga naitalang aksidente noon. Para sa publiko, ito ay
+      paalala kung saan dapat mag-ingat. Para sa TPMO, nakakatulong ito sa pagplano kung saan maglalagay ng traffic
+      enforcers at road safety measures <i>bago</i> pa tumaas ang aksidente.
+    </div>
+    <ul>
+      <li><b>Forecast horizon.</b> Pumili kung gaano kalayo ang huhulaan: <i>Next month</i>, <i>3</i>, <i>6</i> o <i>12 months</i>.
+        Mas malayo, mas hindi sigurado ang hula.</li>
+      <li><b>From &ndash; To.</b> Puwede ring pumili ng sariling petsa sa loob ng forecast (hal. kalahating buwan lang).
+        Pindutin ang <b>Reset</b> para bumalik sa <i>Next month</i>.</li>
+      <li><b>Barangay.</b> Pumili ng barangay para iyon lang ang makita. Puwede ring <b>i-click ang bar</b> ng barangay sa chart
+        sa kanan; i-click ulit para bumalik sa buong lungsod.</li>
+      <li><b>Mga card sa itaas.</b> Ang buwan na hinuhulaan, ang inaasahang bilang ng aksidente (at ang pagbabago kumpara sa
+        nakaraan), ilang barangay ang <i>trending up</i> (higit 10% na pagtaas), at ang <b>Avg Error per Area</b> &mdash; kung gaano
+        kalayo ang hula noong sinubukan ito sa mga buwang alam na ang sagot. Mas maliit, mas maaasahan.</li>
+      <li><b>City Trend &amp; Next Month.</b> Ang <b style="color:#1d4ed8">asul na linya</b> ay ang totoong naitalang aksidente kada buwan;
+        ang <b style="color:#7c3aed">putol-putol na lila</b> ay ang hula. Itapat ang mouse sa isang punto para makita ang eksaktong bilang.</li>
+      <li><b>Last Month vs. Predicted.</b> Sa bawat barangay, <b style="color:#64748b">abo</b> = naitala noong nakaraang buwan,
+        <b style="color:#7c3aed">lila</b> = hula. Kapag mas mataas ang lila, inaasahang tataas ang aksidente doon.</li>
+      <li><b>Predicted Accidents table.</b> Nakaayos mula sa pinakadelikado. Ang <b>Risk score (0&ndash;10)</b> ay galing sa dami ng
+        aksidente kamakailan at sa hula, inaayos ayon sa kalubhaan, at ikinukumpara sa pinakadelikadong barangay.
+        <b>7 pataas = High</b>, <b>4 pataas = Moderate</b>, mababa sa 4 = Low. <b>I-click ang isang row</b> para makita kung paano nakuha ang hula.</li>
+      <li><b>Model.</b> Nakasulat sa itaas ng table kung anong paraan ang ginamit: <i>Random Forest</i> (machine learning na
+        natuto sa kasaysayan ng bawat barangay) kapag available, o <i>linear trend</i> (pagsunod sa direksyon ng mga nakaraang buwan).</li>
+    </ul>
+    <p>Tandaan: ang forecast ay <b>tantya lamang</b> batay sa nakaraan, hindi siguradong mangyayari. Gamitin ito bilang gabay sa pag-iingat at pagpaplano.</p>
+  </details>
+
   <!-- Advance prediction filters (horizon, dates, barangay), drawn by js/forecast-core.js. -->
   <div class="card" style="margin-bottom:18px;padding:12px 20px" id="fcFilters"></div>
 

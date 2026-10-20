@@ -15,6 +15,36 @@
     <span class="pill"><span class="live"></span> <span id="range">Loading…</span></span>
   </div>
 
+  <details class="map-help page-help" open>
+    <summary data-i="info">Paano basahin ang Safety Index? <small>How to read this page</small></summary>
+    <div class="map-purpose">
+      <b>Bakit may Safety Index?</b> Ito ay <b>isang score mula 0 hanggang 100</b> na nagsasabi kung gaano kaligtas ang mga
+      kalsada ng Mandaluyong nitong mga nakaraang buwan &mdash; <b>mas mataas, mas ligtas</b>. Para sa publiko, mabilis nitong
+      ipinapakita kung bumubuti o lumalala ang sitwasyon. Para sa TPMO, makikita kung aling aspeto (dami, lugar, o
+      kalubhaan ng aksidente) ang kailangang tutukan.
+    </div>
+    <ul>
+      <li><b>Overall Safety Index (gauge).</b> Average ng mga category sa kanan, batay sa huling 3 buong buwan.
+        <b style="color:#16a34a">75 pataas = Good</b>, <b style="color:#d97706">50&ndash;74 = Fair</b>, <b style="color:#dc2626">mababa sa 50 = Low</b>.</li>
+      <li><b>Accident Frequency.</b> Ikinukumpara ang average na aksidente kada buwan sa huling 3 buwan laban sa 6 na buwan bago noon.
+        Walang pagbabago = 50; bawat 1% na <i>pagbaba</i> ay +1 point, bawat 1% na <i>pagtaas</i> ay &minus;1 point.</li>
+      <li><b>Geographic Spread.</b> Sinusukat kung gaano karami sa mga aksidente nitong huling 3 buwan ang nasa
+        iisang barangay lang. Kapag kalahati ay nasa isang barangay, 0 ang score; kapag pantay-pantay sa buong lungsod, mga 93.
+        Mababang score = may isang lugar na kailangang bantayan.</li>
+      <li><b>Accident Severity.</b> Bahagi ng mga aksidente nitong huling 3 buwan na may <i>Injury</i> o <i>Fatal</i>
+        (mas mabigat ang bilang ng Fatal). Mas maraming malubhang aksidente, mas mababa ang score.</li>
+      <li><b>Case Resolution.</b> Kasama lang ito kapag may mga record nang minarkahang <i>resolved</i> ng TPMO.
+        Kung wala pa, nakasulat na <i>&ldquo;not scored&rdquo;</i> at hindi ito nakakaapekto sa overall score.</li>
+      <li><b>What does this mean?</b> Simpleng paliwanag ng score: alin ang pinakamahinang category at aling barangay
+        ang may pinakamalaking pagtaas ng aksidente.</li>
+      <li><b>Accident Types at Severity Mix.</b> Bilang ng lahat ng naitalang aksidente ayon sa uri, at ayon sa
+        kalubhaan (<i>Damage</i> = sira lang sa sasakyan o ari-arian, <i>Injury</i> = may nasaktan, <i>Fatal</i> = may namatay).</li>
+      <li><b>Paano gamitin.</b> Tingnan muna ang kulay ng gauge, saka hanapin ang category na pinakamababa &mdash; iyon ang
+        dahilan kung bakit mababa ang score. <b>Itapat ang mouse</b> sa isang category para makita kung paano ito sinusukat.</li>
+    </ul>
+    <p>Kusang nagbabago ang score kapag may bagong aksidenteng naitala, kaya bumalik dito paminsan-minsan para makita ang pagbabago.</p>
+  </details>
+
   <div class="grid g-main">
     <div class="card">
       <div class="card-head"><h2>Overall Safety Index</h2></div>

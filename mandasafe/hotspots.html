@@ -16,6 +16,32 @@
     <div class="head-tools"><span class="pill"><span class="live"></span> <span id="range">Loading…</span></span></div>
   </div>
 
+  <details class="map-help page-help" open>
+    <summary data-i="info">Paano basahin ang Hotspots? <small>How to read this page</small></summary>
+    <div class="map-purpose">
+      <b>Bakit may Hotspots?</b> Ipinapakita ng page na ito ang mga <b>lugar kung saan nagkukumpol-kumpol ang mga aksidente</b>
+      sa Mandaluyong. Ginagamit nito ang <i>Kernel Density Estimation (KDE)</i> &mdash; tinitingnan kung gaano karami at gaano
+      kalapit-lapit ang mga aksidente sa isa&rsquo;t isa. Para sa publiko, ito ang mga lugar na dapat dagdagan ang ingat. Para sa
+      TPMO, ito ang mga lugar na unang dapat bigyan ng aksyon (enforcers, signages, road improvements).
+    </div>
+    <ul>
+      <li><b>Density Heatmap.</b> Bawat bilog ay isang barangay. Ang <b>kulay</b> ay ayon sa dami ng aksidente; ang <b>laki ng
+        glow</b> sa paligid ay ayon sa <i>intensity</i> &mdash; mas malaki, mas siksik ang aksidente doon.</li>
+      <li><b>Mga kulay.</b> <b style="color:#dc2626">Pula = High</b> (mas marami kaysa average na barangay),
+        <b style="color:#ca8a04">dilaw = Moderate</b> (mas marami kaysa median na barangay), <b style="color:#16a34a">berde = Low</b>.
+        Nakasulat sa ilalim ng mapa ang eksaktong hangganan ng bawat kulay.</li>
+      <li><b>Sa mapa.</b> <b>I-click ang bilog</b> ng isang barangay para makita ang detalye nito. Gamitin ang <b>+</b> at <b>&minus;</b> para
+        mag-zoom, at i-drag ang mapa para ilipat.</li>
+      <li><b>Hotspot Ranking.</b> Lahat ng barangay, nakaayos ayon sa <i>intensity</i> (pinakamatindi sa itaas) &mdash; kaya puwedeng mauna ang barangay na mas kaunti ang aksidente kung mas siksik ang mga ito. Makikita ang risk level, ang <i>intensity</i>, at ang
+        kabuuang bilang ng aksidente. <b>I-scroll</b> ang listahan para makita ang lahat.</li>
+      <li><b>Intensity (%).</b> Pinagsasama ang dami ng aksidente at kung gaano sila magkakalapit. Ang pinakamatinding barangay ang
+        100%, at ang iba ay ikinukumpara doon &mdash; kaya ang 46% ay mga kalahati ng tindi ng nangunguna.</li>
+      <li><b>Hotspots vs. Forecast.</b> Ang Hotspots ay tungkol sa <i>nakaraan</i> (saan na nangyari); ang
+        <a class="link" href="forecast.html">Forecast</a> ay tungkol sa <i>susunod na buwan</i> (saan posibleng mangyari).</li>
+    </ul>
+    <p>Ang mga hotspot ay galing sa lahat ng aksidenteng may lokasyon sa mapa, kaya nagbabago ito kapag may bagong datos.</p>
+  </details>
+
   <div class="grid g-main">
     <div class="card">
       <div class="card-head"><h2>Density Heatmap</h2></div>
