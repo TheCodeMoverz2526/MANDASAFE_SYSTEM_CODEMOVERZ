@@ -11,8 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * The verification step behind signing in and resetting a password, and signing up (which
- * needs no code).
+ * The verification step behind signing in, signing up and resetting a password.
  *
  * Everything that decides the outcome happens here, on the server:
  *
@@ -182,16 +181,25 @@ class VerificationService
     }
 
     /**
-     * Signing up. No verification code: the details are validated in full and the account is
-     * created straight away as a resident. The per-connection limit still applies.
+     * Step one of signing up — the details are validated in full now, so a duplicate address
+     * or a weak password is reported at once, but the account is only created after the code
+     * emailed to that address has been accepted (see completeRegistration()). Until then the
+     * details wait on the challenge, encrypted, with the password already hashed.
      */
     public function register(array $body, string $ip): array
     {
         $this->throttle('register-ip:' . $ip, 10, 3600, 'Too many sign-up attempts from this connection. Please try again later.');
 
-        $account = $this->accounts->createAccount($this->accounts->validateRegistration($body));
+        $details = $this->accounts->validateRegistration($body);
+        $details['password_hash'] = Hash::make($details['password']);
+        unset($details['password']);
 
-        return ['registered' => true, 'account' => $account];
+        return $this->begin('register', [
+            'identifier' => $details['email'],
+            'name' => $details['name'],
+            'email' => $details['email'],
+            'payload' => $details,
+        ], $ip);
     }
 
     /**
@@ -244,6 +252,9 @@ class VerificationService
         if ($challenge->purpose === 'reset' && $channel !== 'email') {
             throw new RimasException('Password reset codes are sent by email only.');
         }
+        if ($challenge->purpose === 'register' && $channel !== 'email') {
+            throw new RimasException('Sign-up codes are sent by email only.');
+        }
 
         $destination = $channel === 'email' ? (string) $challenge->email : (string) $challenge->phone;
 
@@ -271,7 +282,7 @@ class VerificationService
         // With a provider-managed channel the digits are the provider's; we never see them.
         $code = $managed ? null : $this->generateCode();
 
-        $result = $this->otp->send($driver, $destination, $code);
+        $result = $this->otp->send($driver, $destination, $code, (string) $challenge->purpose);
 
         $challenge->channel = $channel;
         $challenge->provider = $driver;
@@ -358,6 +369,7 @@ class VerificationService
         return match ($challenge->purpose) {
             'login' => $this->completeLogin($challenge),
             'reset' => ['verified' => true, 'purpose' => 'reset', 'challengeId' => $challenge->id],
+            'register' => $this->completeRegistration($challenge),
             default => throw new RimasException('This verification is no longer valid. Please start again.'),
         };
     }
@@ -421,6 +433,38 @@ class VerificationService
         $this->consume($challenge);
 
         return $this->accounts->createSession($account);
+    }
+
+    /**
+     * The email address has been proven, so the account is created now. The address (or
+     * number) may have been taken by someone else while the code was on its way, so that is
+     * checked once more first.
+     */
+    private function completeRegistration(OtpChallenge $challenge): array
+    {
+        $details = $challenge->payload ?? [];
+
+        if (empty($details['email']) || empty($details['password_hash'])) {
+            $this->discard($challenge);
+
+            throw new RimasException('This sign-up is no longer valid. Please start again.');
+        }
+        if (Account::where('email', $details['email'])->exists()) {
+            $this->discard($challenge);
+
+            throw new RimasException('An account already uses this email address.');
+        }
+        if (($details['phone'] ?? '') !== '' && Account::where('phone', $details['phone'])->exists()) {
+            $this->discard($challenge);
+
+            throw new RimasException('An account already uses this contact number.');
+        }
+
+        $account = $this->accounts->createAccount($details);
+
+        $this->consume($challenge);
+
+        return ['registered' => true, 'account' => $account];
     }
 
     /* --------------------------------------------------------------------------- helpers */

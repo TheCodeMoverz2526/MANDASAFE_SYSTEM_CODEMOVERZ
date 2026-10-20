@@ -267,7 +267,7 @@ class MandaSafeApiTest extends TestCase
             ->assertJson(['error' => 'At least one active administrator must remain.']);
     }
 
-    public function test_sign_up_creates_the_account_without_a_code_and_never_as_admin(): void
+    public function test_sign_up_needs_the_emailed_code_and_never_makes_an_admin(): void
     {
         // A password missing an uppercase letter or a special character is refused.
         foreach (['testing#2026', 'Testing2026', 'Te#2026'] as $weak) {
@@ -275,14 +275,32 @@ class MandaSafeApiTest extends TestCase
                 ->assertStatus(400);
         }
 
-        // No contact number is needed to sign up.
-        $this->postJson('/api/auth/register', [
+        // No contact number is needed to sign up. Nothing is created until the code is entered.
+        $challengeId = $this->postJson('/api/auth/register', [
             'name' => 'Sneaky User', 'email' => 'sneaky@example.com',
             'password' => 'Testing#2026', 'role' => 'admin',
         ])
             ->assertOk()
-            ->assertJson(['registered' => true, 'account' => ['role' => 'user', 'email' => 'sneaky@example.com']])
-            ->assertJsonMissingPath('challengeId');
+            ->assertJson(['purpose' => 'register', 'channels' => ['email' => true, 'sms' => false]])
+            ->json('challengeId');
+        $this->assertDatabaseMissing('accounts', ['email' => 'sneaky@example.com']);
+        $this->postJson('/api/auth/login', ['identifier' => 'sneaky@example.com', 'password' => 'Testing#2026'])->assertStatus(401);
+
+        $this->postJson('/api/auth/otp/send', ['challengeId' => $challengeId, 'channel' => 'sms'])->assertStatus(400);
+        $code = $this->postJson('/api/auth/otp/send', ['challengeId' => $challengeId, 'channel' => 'email'])
+            ->assertOk()
+            ->json('testCode');
+
+        $wrong = $code === '000000' ? '111111' : '000000';
+        $this->postJson('/api/auth/otp/verify', ['challengeId' => $challengeId, 'code' => $wrong])->assertStatus(400);
+        $this->assertDatabaseMissing('accounts', ['email' => 'sneaky@example.com']);
+
+        $this->postJson('/api/auth/otp/verify', ['challengeId' => $challengeId, 'code' => $code])
+            ->assertOk()
+            ->assertJson(['registered' => true, 'account' => ['role' => 'user', 'email' => 'sneaky@example.com']]);
+
+        // The code is spent: it cannot create the account a second time.
+        $this->postJson('/api/auth/otp/verify', ['challengeId' => $challengeId, 'code' => $code])->assertStatus(400);
 
         $this->postJson('/api/auth/login', ['identifier' => 'sneaky@example.com', 'password' => 'Testing#2026'])
             ->assertOk()

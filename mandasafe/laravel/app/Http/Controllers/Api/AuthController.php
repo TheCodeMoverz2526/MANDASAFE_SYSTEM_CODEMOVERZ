@@ -70,7 +70,7 @@ class AuthController extends ApiController
         }, 401);
     }
 
-    /** POST /api/auth/register — creates a resident account straight away, no verification code. */
+    /** POST /api/auth/register — step one of signing up; the account is created once the emailed code is accepted. */
     public function register(Request $request)
     {
         return $this->attempt(function () use ($request) {

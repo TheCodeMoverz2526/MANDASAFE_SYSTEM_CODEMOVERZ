@@ -153,26 +153,32 @@ async function beginRegistration() {
     if (password !== confirmation) return showError('createError', 'Your password and confirmation do not match.');
     if (!document.getElementById('privacyAgreement').checked) return showError('createError', 'You must agree to the Privacy Policy to create an account.');
 
+    clearErrors();
     setBusy(true);
+    let started;
     try {
-        // No verification code: the server validates the details and creates the account.
-        const result = await api('/api/auth/register', {
+        // The server checks the details now but creates the account only once the code it
+        // emails to this address has been entered (see verifyOtp).
+        started = await api('/api/auth/register', {
             method: 'POST',
             body: JSON.stringify({ name, email, password })
         });
-        document.getElementById('loginIdentifier').value = result.account.email;
-        document.getElementById('loginPassword').value = '';
-        ['createName', 'createEmail', 'createPassword', 'confirmPassword'].forEach(id => document.getElementById(id).value = '');
-        document.getElementById('privacyAgreement').checked = false;
-        updatePasswordRules('createPassword');
-        showPanel('signInPanel');
-        showError('loginError', 'Account created. You can now sign in.');
     } catch (error) {
-        showError('createError', error.message);
+        return showError('createError', error.message);
     } finally {
         setBusy(false);
     }
+
+    challenge = { ...started, id: started.challengeId, channel: null };
+    if (!(started.channels || {}).email) {
+        return showError('createError', 'Email verification is not available right now. Please try again later.');
+    }
+    sendOtp('email');
 }
+
+/* The panel a person goes back to from the code screen: the form they came from. */
+function startPanelFor(current) { return current && current.purpose === 'register' ? 'createPanel' : 'forgotPanel'; }
+function startErrorFor(current) { return current && current.purpose === 'register' ? 'createError' : 'forgotError'; }
 
 async function beginLogin() {
     const identifier = document.getElementById('loginIdentifier').value.trim();
@@ -218,7 +224,7 @@ async function beginPasswordReset() {
 /* ---------- step two: have the code emailed ---------- */
 
 async function sendOtp(channel) {
-    if (!challenge) return showError('forgotError', 'This verification has expired. Please start again.');
+    if (!challenge) return showError(startErrorFor(challenge), 'This verification has expired. Please start again.');
 
     setBusy(true);
     try {
@@ -231,14 +237,15 @@ async function sendOtp(channel) {
     } catch (error) {
         // Stay on whichever panel the person can act from.
         const active = document.querySelector('.auth-panel.active');
-        showError(active && active.id === 'otpPanel' ? 'otpError' : 'forgotError', error.message);
+        showError(active && active.id === 'otpPanel' ? 'otpError' : startErrorFor(challenge), error.message);
     } finally {
         setBusy(false);
     }
 }
 
 function showOtpPanel(sent) {
-    document.getElementById('otpTitle').textContent = challenge.purpose === 'login' ? 'Verify your sign in' : 'Enter verification code';
+    document.getElementById('otpTitle').textContent = challenge.purpose === 'login' ? 'Verify your sign in'
+        : challenge.purpose === 'register' ? 'Verify your email' : 'Enter verification code';
     document.getElementById('otpDescription').textContent =
         `We sent a six-digit ${sent.channel === 'email' ? 'email' : 'SMS'} code to ${sent.destination}.`;
     document.querySelectorAll('.otp-inputs input').forEach(input => input.value = '');
@@ -275,10 +282,11 @@ function resendOtp() { if (challenge && challenge.channel) sendOtp(challenge.cha
    the server first. */
 function leaveOtpPanel() {
     clearInterval(resendInterval);
-    if (!challenge) return showPanel('forgotPanel');
+    const back = startPanelFor(challenge);
+    if (!challenge) return showPanel(back);
     api('/api/auth/otp/cancel', { method: 'POST', body: JSON.stringify({ challengeId: challenge.id }) }).catch(() => { });
     challenge = null;
-    showPanel('forgotPanel');
+    showPanel(back);
 }
 
 function cancelVerification() {
@@ -365,6 +373,18 @@ async function verifyOtp() {
         if (challenge.purpose === 'login') {
             challenge = null;
             return completeLogin(result);
+        }
+
+        // A sign-up: the account exists now, so the form is cleared and the person signs in.
+        if (challenge.purpose === 'register') {
+            challenge = null;
+            document.getElementById('loginIdentifier').value = result.account.email;
+            document.getElementById('loginPassword').value = '';
+            ['createName', 'createEmail', 'createPassword', 'confirmPassword'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('privacyAgreement').checked = false;
+            updatePasswordRules('createPassword');
+            showPanel('signInPanel');
+            return showError('loginError', 'Email verified and account created. You can now sign in.');
         }
 
         // A reset: the challenge stays alive for a few minutes so the new password can be

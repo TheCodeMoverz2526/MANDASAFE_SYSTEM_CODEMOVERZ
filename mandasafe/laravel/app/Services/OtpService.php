@@ -149,14 +149,15 @@ class OtpService
      * Sends a code to one destination.
      *
      * @param  string|null  $code  the digits to deliver — null for a provider that makes its own
+     * @param  string  $purpose  'reset' or 'register' — chooses the wording of our own emails
      * @return array{uuid: ?string, ref: ?string}  what verification will need later
      */
-    public function send(string $driver, string $destination, ?string $code): array
+    public function send(string $driver, string $destination, ?string $code, string $purpose = 'reset'): array
     {
         return match ($driver) {
             'test' => ['uuid' => null, 'ref' => null],
-            'resend' => $this->sendEmail($destination, (string) $code),
-            'smtp' => $this->sendSmtp($destination, (string) $code),
+            'resend' => $this->sendEmail($destination, (string) $code, $purpose),
+            'smtp' => $this->sendSmtp($destination, (string) $code, $purpose),
             'twilio' => $this->sendTwilio($destination, (string) $code),
             'vocotext' => $this->sendVocotext($destination),
             'appwrite' => $this->sendAppwrite($destination),
@@ -427,7 +428,7 @@ class OtpService
 
     /* ------------------------------------------------------------------------- Resend */
 
-    private function sendEmail(string $destination, string $code): array
+    private function sendEmail(string $destination, string $code, string $purpose): array
     {
         $response = Http::withToken((string) $this->config('resend_key'))
             ->timeout((int) $this->config('http_timeout'))
@@ -435,8 +436,8 @@ class OtpService
             ->post('https://api.resend.com/emails', [
                 'from' => $this->config('from_email'),
                 'to' => [$destination],
-                'subject' => self::EMAIL_SUBJECT,
-                'html' => $this->emailBody($code),
+                'subject' => self::EMAIL_SUBJECTS[$purpose] ?? self::EMAIL_SUBJECTS['reset'],
+                'html' => $this->emailBody($code, $purpose),
             ]);
 
         if ($response->failed()) {
@@ -450,11 +451,11 @@ class OtpService
 
     /* --------------------------------------------------------------------------- SMTP */
 
-    private function sendSmtp(string $destination, string $code): array
+    private function sendSmtp(string $destination, string $code, string $purpose): array
     {
         try {
-            Mail::mailer('smtp')->html($this->emailBody($code), function ($message) use ($destination) {
-                $message->to($destination)->subject(self::EMAIL_SUBJECT);
+            Mail::mailer('smtp')->html($this->emailBody($code, $purpose), function ($message) use ($destination, $purpose) {
+                $message->to($destination)->subject(self::EMAIL_SUBJECTS[$purpose] ?? self::EMAIL_SUBJECTS['reset']);
             });
         } catch (Throwable $error) {
             Log::warning('SMTP delivery of a verification code failed', ['error' => $error->getMessage()]);
@@ -467,22 +468,31 @@ class OtpService
 
     /* ------------------------------------------------------------------ email content */
 
-    // Email codes are only sent for "Forgot password?", so the wording is about resetting.
-    private const EMAIL_SUBJECT = 'Your MandaSafe password reset code';
+    // Email codes are sent for "Forgot password?" and for confirming a new account's address.
+    private const EMAIL_SUBJECTS = [
+        'reset' => 'Your MandaSafe password reset code',
+        'register' => 'Verify your email for MandaSafe',
+    ];
 
-    private function emailBody(string $code): string
+    private function emailBody(string $code, string $purpose = 'reset'): string
     {
         $expiry = VerificationService::CODE_TTL_SECONDS . ' seconds';
+        $register = $purpose === 'register';
 
         return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1f2937;line-height:1.6">'
             . '<h2 style="margin:0 0 16px;color:#1e3a8a">MandaSafe</h2>'
             . '<p>Hi there,</p>'
-            . '<p>We see you forgot your password. Here is your verification code so you can change your password. '
+            . ($register
+                ? '<p>Thank you for creating a MandaSafe account. Here is your verification code to confirm your email address. '
+                : '<p>We see you forgot your password. Here is your verification code so you can change your password. ')
             . 'Please do not share this code with anyone &mdash; MandaSafe staff will never ask for it.</p>'
             . '<p style="margin:24px 0;text-align:center">Your verification code is '
             . '<strong style="display:block;margin-top:8px;font-size:32px;letter-spacing:8px;color:#1d4ed8">' . e($code) . '</strong></p>'
-            . '<p>This code expires in ' . $expiry . '. If you did not ask to reset your password, you can ignore this email &mdash; your password will stay the same.</p>'
-            . '<p>Thank you for signing in again to our system.</p>'
+            . ($register
+                ? '<p>This code expires in ' . $expiry . '. If you did not sign up for MandaSafe, you can ignore this email &mdash; no account will be created.</p>'
+                . '<p>Welcome to our system.</p>'
+                : '<p>This code expires in ' . $expiry . '. If you did not ask to reset your password, you can ignore this email &mdash; your password will stay the same.</p>'
+                . '<p>Thank you for signing in again to our system.</p>')
             . '</div>';
     }
 

@@ -48,10 +48,11 @@
         <div>
           <div class="mini-stat"><span class="ic ic-blue" data-i="shield"></span>
             <div><div class="k">Recorded Accidents</div><div class="v" id="hTotal">—</div><div class="s" id="hRange">All time</div></div></div>
-          <div class="mini-stat"><span class="ic ic-orange" data-i="wifi"></span>
-            <div><div class="k">Latest Month</div><div class="v" id="hActive">—</div><div class="s" id="hLatest">Accidents recorded</div></div></div>
-          <div class="mini-stat"><span class="ic ic-purple" data-i="chart"></span>
-            <div><div class="k">High-Risk Areas</div><div class="v" id="hRisk">—</div><div class="s">Identified</div></div></div>
+          <div class="mini-list">
+            <div class="mini-list-head"><span class="ic ic-purple" data-i="chart"></span>
+              <div><div class="k" id="hTopTitle">Top barangays</div><div class="s" id="hTopSub">Most accidents recorded</div></div></div>
+            <ol class="mini-rows" id="hTop"><li class="mini-empty">Loading…</li></ol>
+          </div>
         </div>
       </div>
       <div class="map-legend" style="border:none;padding:14px 2px 0">
@@ -148,9 +149,7 @@ document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('after
   }
 
   countUp(document.getElementById('hTotal'), s.totalIncidents);
-  countUp(document.getElementById('hActive'), s.latestMonth ? s.latestMonth.count : 0);
-  if (s.latestMonth) document.getElementById('hLatest').textContent = `Accidents in ${fmtMonth(s.latestMonth.month)}`;
-  countUp(document.getElementById('hRisk'), s.highRiskLocations);
+  renderTopList(s.byBarangay, '');
   countUp(document.getElementById('bTotal'), s.totalIncidents);
   countUp(document.getElementById('bBrgy'), s.barangayCount);
   countUp(document.getElementById('bMonths'), s.byMonth.length);
@@ -252,6 +251,8 @@ function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
       $('hTotal').textContent = num(data.length);
       $('hRange').textContent = `${fmtDate(from || oldest)} – ${fmtDate(to || newest)}`;
     }
+    const ranking = Object.entries(byBrgy).map(([barangay, count]) => ({ barangay, count })).sort((a, b) => b.count - a.count);
+    renderTopList(brgy ? data : ranking, brgy);
   }
 
   fBarangay.addEventListener('change', () => {
@@ -275,6 +276,53 @@ function setUpFilters({ map, geo, boundaries, cityBounds }, all) {
   });
 
   apply(true);
+}
+
+/* ---------------- Top list beside the map ----------------
+   All barangays: the five with the most accidents (bars sized against the first).
+   One barangay picked: how its accidents break down — by severity, then the hour and the
+   day of the week when most of them happened. Follows the date filter too. */
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function hourLabel(h) {
+  const f = x => `${x % 12 || 12} ${x < 12 ? 'AM' : 'PM'}`;
+  return `${f(h)}–${f((h + 1) % 24)}`;
+}
+function topOf(counts) {
+  let best = null;
+  Object.entries(counts).forEach(([key, count]) => { if (!best || count > best[1]) best = [key, count]; });
+  return best;
+}
+function renderTopList(rows, brgy) {
+  const list = document.getElementById('hTop');
+  const row = (label, count, max, cls = '') => `<li class="${cls}"><span class="mr-label">${esc(label)}</span>
+      <b>${num(count)}</b><i class="mr-bar"><i style="width:${max ? Math.max(4, count / max * 100) : 0}%"></i></i></li>`;
+
+  if (!brgy) {
+    document.getElementById('hTopTitle').textContent = 'Top barangays';
+    document.getElementById('hTopSub').textContent = 'Most accidents recorded — pick a barangay for details';
+    const top = rows.slice(0, 5);
+    list.innerHTML = top.map((b, n) => row(`${n + 1}. ${b.barangay}`, b.count, top[0].count)).join('')
+      || '<li class="mini-empty">No accidents in this period.</li>';
+    return;
+  }
+
+  document.getElementById('hTopTitle').textContent = brgy;
+  document.getElementById('hTopSub').textContent = `${num(rows.length)} accident${rows.length === 1 ? '' : 's'} — top breakdown`;
+  if (!rows.length) { list.innerHTML = '<li class="mini-empty">No accidents in this period.</li>'; return; }
+
+  const sev = { Damage: 0, Injury: 0, Fatal: 0 }, hours = {}, days = {};
+  rows.forEach(i => {
+    if (i.sev in sev) sev[i.sev] += 1;
+    const h = parseInt(String(i.time || '').slice(0, 2), 10);
+    if (!Number.isNaN(h)) hours[h] = (hours[h] || 0) + 1;
+    const d = String(i.date || '').slice(0, 10);
+    if (d) { const day = new Date(`${d}T00:00:00`).getDay(); days[day] = (days[day] || 0) + 1; }
+  });
+  const max = Math.max(...Object.values(sev));
+  const peakHour = topOf(hours), peakDay = topOf(days);
+  list.innerHTML = Object.entries(sev).map(([k, v]) => row(k, v, max, `sev-${k.toLowerCase()}`)).join('')
+    + (peakHour ? `<li class="mr-peak"><span class="mr-label">Peak hour</span><b>${hourLabel(+peakHour[0])} <small>(${num(peakHour[1])})</small></b></li>` : '')
+    + (peakDay ? `<li class="mr-peak"><span class="mr-label">Peak day</span><b>${DAYS[+peakDay[0]]} <small>(${num(peakDay[1])})</small></b></li>` : '');
 }
 
 /* ---------------- Full screen ----------------

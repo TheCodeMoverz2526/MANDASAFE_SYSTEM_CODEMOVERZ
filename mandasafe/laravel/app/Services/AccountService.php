@@ -167,7 +167,8 @@ class AccountService
             'role' => $details['role'] ?? 'user',
             'dept' => $details['dept'] ?? 'Mandaluyong City Resident',
             'status' => 'active',
-            'password' => Hash::make($details['password']),
+            // A sign-up arrives with the password already hashed (it waited on the challenge).
+            'password' => $details['password_hash'] ?? Hash::make($details['password']),
             'created_at_iso' => self::isoNow(),
             'last_login_at_iso' => null,
         ]);
