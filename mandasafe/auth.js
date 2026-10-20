@@ -102,6 +102,14 @@ function accountExists(identifier) {
     return Boolean(findAccount(loadStore(), identifier));
 }
 
+/* At least 8 characters, with a lowercase letter, an uppercase letter and a special character. */
+function assertPasswordRules(password) {
+    const value = String(password || '');
+    if (value.length < 8 || !/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
+        throw new Error('Password must be at least 8 characters with 1 lowercase letter, 1 uppercase letter and 1 special character.');
+    }
+}
+
 function registerAccount({ name, email, phone, password, role, dept }) {
     const store = loadStore();
     const cleanEmail = normaliseEmail(email);
@@ -109,10 +117,11 @@ function registerAccount({ name, email, phone, password, role, dept }) {
 
     if (!name || String(name).trim().length < 2) throw new Error('Enter your full name.');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new Error('Enter a valid email address.');
-    if (cleanPhone.length < 9) throw new Error('Enter a valid contact number.');
-    if (!password || String(password).length < 8) throw new Error('Password must be at least 8 characters.');
+    // The contact number is optional; when one is given it must be valid and unused.
+    if (cleanPhone && cleanPhone.length < 9) throw new Error('Enter a valid contact number.');
+    assertPasswordRules(password);
     if (store.accounts.some(a => a.email === cleanEmail)) throw new Error('An account already uses this email address.');
-    if (store.accounts.some(a => a.phone === cleanPhone)) throw new Error('An account already uses this contact number.');
+    if (cleanPhone && store.accounts.some(a => a.phone === cleanPhone)) throw new Error('An account already uses this contact number.');
 
     // Only the very first account may claim the admin role by itself; every later admin
     // has to be promoted by an existing administrator.
@@ -156,7 +165,7 @@ function contactDetails(identifier) {
 }
 
 function resetPassword(identifier, password) {
-    if (!password || String(password).length < 8) throw new Error('Password must be at least 8 characters.');
+    assertPasswordRules(password);
     const store = loadStore();
     const account = findAccount(store, identifier);
     if (!account) throw new Error('Account not found.');
@@ -194,8 +203,8 @@ function updateOwnProfile(id, changes) {
     }
     if (changes.phone !== undefined) {
         const phone = normalisePhone(changes.phone);
-        if (phone.length < 9) throw new Error('Enter a valid contact number.');
-        if (store.accounts.some(a => a.id !== id && a.phone === phone)) {
+        if (phone && phone.length < 9) throw new Error('Enter a valid contact number.');
+        if (phone && store.accounts.some(a => a.id !== id && a.phone === phone)) {
             throw new Error('An account already uses this contact number.');
         }
         account.phone = phone;

@@ -85,24 +85,18 @@
                         <div class="form-group"><label class="form-label" for="createEmail">Email address</label><input
                                 type="email" class="form-input" id="createEmail" placeholder="name@example.com"
                                 autocomplete="email" required></div>
-                        <div class="form-group"><label class="form-label" for="createPhone">Contact number</label>
-                            <div class="phone-wrap"><select id="countryCode" aria-label="Country code">
-                                    <option value="+63">🇵🇭 +63</option>
-                                    <option value="+1">🇺🇸 +1</option>
-                                    <option value="+44">🇬🇧 +44</option>
-                                </select><input type="tel" class="form-input" id="createPhone"
-                                    placeholder="912 345 6789" autocomplete="tel-national" required></div>
-                        </div>
                         <div class="form-group"><label class="form-label" for="createPassword">Password</label>
                             <div class="password-wrap"><input type="password" class="form-input" id="createPassword"
                                     placeholder="Min. 8 characters" minlength="8" autocomplete="new-password"
                                     required><button type="button" class="password-toggle"
                                     onclick="togglePassword('createPassword', this)" aria-label="Show password"><i
                                         class="fas fa-eye"></i></button></div>
-                            <div class="password-strength" id="passwordStrength" aria-live="polite" hidden>
-                                <div class="strength-bars"><span></span><span></span><span></span></div><span
-                                    class="strength-label">Password strength</span>
-                            </div>
+                            <ul class="password-rules" data-for="createPassword" aria-live="polite">
+                                <li data-rule="length"><i class="fas fa-circle-xmark"></i> At least 8 characters</li>
+                                <li data-rule="lower"><i class="fas fa-circle-xmark"></i> 1 lowercase letter</li>
+                                <li data-rule="upper"><i class="fas fa-circle-xmark"></i> 1 uppercase letter</li>
+                                <li data-rule="special"><i class="fas fa-circle-xmark"></i> 1 special character (e.g. ! @ # $)</li>
+                            </ul>
                         </div>
                         <div class="form-group"><label class="form-label" for="confirmPassword">Confirm password</label>
                             <div class="password-wrap"><input type="password" class="form-input" id="confirmPassword"
@@ -195,6 +189,12 @@
                                     required><button type="button" class="password-toggle"
                                     onclick="togglePassword('newPassword', this)" aria-label="Show password"><i
                                         class="fas fa-eye"></i></button></div>
+                            <ul class="password-rules" data-for="newPassword" aria-live="polite">
+                                <li data-rule="length"><i class="fas fa-circle-xmark"></i> At least 8 characters</li>
+                                <li data-rule="lower"><i class="fas fa-circle-xmark"></i> 1 lowercase letter</li>
+                                <li data-rule="upper"><i class="fas fa-circle-xmark"></i> 1 uppercase letter</li>
+                                <li data-rule="special"><i class="fas fa-circle-xmark"></i> 1 special character (e.g. ! @ # $)</li>
+                            </ul>
                         </div>
                         <div class="form-group"><label class="form-label" for="newPasswordConfirm">Confirm new
                                 password</label>
@@ -248,8 +248,8 @@
 
                 <h3 id="pp-collect">1. Information we collect</h3>
                 <p><b>Account information you give us.</b> When you create an account: your full name, email
-                    address, mobile number and the password you choose. You can update your name, email and mobile
-                    number later from <i>My Account</i>.</p>
+                    address and the password you choose. You can update your name and email, and add a mobile
+                    number, later from <i>My Account</i>.</p>
                 <p><b>Verification information.</b> When you reset your password, we send a one-time code
                     to the email address registered to your account. Administrator accounts also use an
                     authenticator app; for these we keep a secret key that links the account to that app.</p>

@@ -94,7 +94,7 @@ function handleAuthApi(request, response, urlPath) {
 
     if (action === 'register' && request.method === 'POST') {
         readJson(request).then(body => {
-            requireFields(body, ['name', 'email', 'phone', 'password']);
+            requireFields(body, ['name', 'email', 'password']);
             sendJson(response, 201, auth.registerAccount(body));
         }).catch(error => sendJson(response, 400, { error: error.message }));
         return true;

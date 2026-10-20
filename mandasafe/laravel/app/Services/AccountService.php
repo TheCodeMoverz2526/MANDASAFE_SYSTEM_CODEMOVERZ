@@ -122,16 +122,15 @@ class AccountService
         if (! preg_match('/^[^\s@<>"`]+@[^\s@<>"`]+\.[^\s@<>"`]+$/', $email)) {
             throw new RimasException('Enter a valid email address.');
         }
-        if (strlen($phone) < 9) {
+        // The contact number is optional; when one is given it must be valid and unused.
+        if ($phone !== '' && strlen($phone) < 9) {
             throw new RimasException('Enter a valid contact number.');
         }
-        if (strlen($password) < 8) {
-            throw new RimasException('Password must be at least 8 characters.');
-        }
+        self::assertPasswordRules($password);
         if (Account::where('email', $email)->exists()) {
             throw new RimasException('An account already uses this email address.');
         }
-        if (Account::where('phone', $phone)->exists()) {
+        if ($phone !== '' && Account::where('phone', $phone)->exists()) {
             throw new RimasException('An account already uses this contact number.');
         }
 
@@ -147,6 +146,14 @@ class AccountService
             'role' => $role,
             'dept' => $body['dept'] ?? 'Mandaluyong City Resident',
         ];
+    }
+
+    /** At least 8 characters, with a lowercase letter, an uppercase letter and a special character. */
+    public static function assertPasswordRules(string $password): void
+    {
+        if (strlen($password) < 8 || ! preg_match('/[a-z]/', $password) || ! preg_match('/[A-Z]/', $password) || ! preg_match('/[^A-Za-z0-9]/', $password)) {
+            throw new RimasException('Password must be at least 8 characters with 1 lowercase letter, 1 uppercase letter and 1 special character.');
+        }
     }
 
     /** Writes an account from details validateRegistration() has already approved. */
@@ -214,11 +221,11 @@ class AccountService
 
         if (array_key_exists('phone', $body)) {
             $phone = Account::normalisePhone($body['phone']);
-            if (strlen($phone) < 9) {
+            if ($phone !== '' && strlen($phone) < 9) {
                 throw new RimasException('Enter a valid contact number.');
             }
             if ($phone !== $account->phone) {
-                if (Account::where('phone', $phone)->where('id', '!=', $account->id)->exists()) {
+                if ($phone !== '' && Account::where('phone', $phone)->where('id', '!=', $account->id)->exists()) {
                     throw new RimasException('An account already uses this contact number.');
                 }
                 $account->phone = $phone;
@@ -293,9 +300,7 @@ class AccountService
     /** Password recovery is by registered email only, so the account is matched on that alone. */
     public function resetPassword($email, $password): array
     {
-        if (strlen((string) $password) < 8) {
-            throw new RimasException('Password must be at least 8 characters.');
-        }
+        self::assertPasswordRules((string) $password);
 
         $account = Account::where('email', Account::normaliseEmail($email))->first();
         if (! $account) {

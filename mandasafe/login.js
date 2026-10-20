@@ -39,7 +39,6 @@ async function api(path, options = {}) {
 }
 
 /* ---------- helpers ---------- */
-function normalisePhone(value) { return value.replace(/[^+\d]/g, '').replace(/^00/, '+'); }
 function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
 function showError(id, message) { const box = document.getElementById(id); box.textContent = message; box.style.display = 'block'; }
 function clearErrors() { document.querySelectorAll('.auth-error').forEach(error => { error.textContent = ''; error.style.display = 'none'; }); }
@@ -75,13 +74,26 @@ function togglePassword(id, button) {
     button.querySelector('i').className = `fas ${visible ? 'fa-eye' : 'fa-eye-slash'}`;
 }
 
-function updatePasswordStrength(password) {
-    const meter = document.getElementById('passwordStrength'); if (!meter) return;
-    if (!password) { meter.hidden = true; return; }
-    const groups = [/[a-z]/.test(password), /[A-Z]/.test(password), /\d/.test(password), /[^A-Za-z0-9]/.test(password)].filter(Boolean).length;
-    const state = password.length >= 12 && groups >= 3 ? 'strong' : password.length >= 8 && groups >= 2 ? 'moderate' : 'weak';
-    meter.hidden = false; meter.className = `password-strength ${state}`;
-    meter.querySelector('.strength-label').textContent = state === 'strong' ? 'Strong password' : state === 'moderate' ? 'Moderate password' : 'Weak password';
+/* The password rules, the same ones the server enforces. Each one is ticked off in the
+   checklist under the password box as soon as it is met. */
+const PASSWORD_RULES = {
+    length: password => password.length >= 8,
+    lower: password => /[a-z]/.test(password),
+    upper: password => /[A-Z]/.test(password),
+    special: password => /[^A-Za-z0-9]/.test(password)
+};
+function passwordProblem(password) {
+    return Object.values(PASSWORD_RULES).every(rule => rule(password)) ? null
+        : 'Password must be at least 8 characters with 1 lowercase letter, 1 uppercase letter and 1 special character.';
+}
+function updatePasswordRules(inputId) {
+    const list = document.querySelector(`.password-rules[data-for="${inputId}"]`); if (!list) return;
+    const password = document.getElementById(inputId).value;
+    list.querySelectorAll('li').forEach(item => {
+        const met = PASSWORD_RULES[item.dataset.rule](password);
+        item.classList.toggle('met', met);
+        item.querySelector('i').className = `fas ${met ? 'fa-circle-check' : 'fa-circle-xmark'}`;
+    });
 }
 
 function openPrivacyPolicy(event) {
@@ -132,14 +144,12 @@ function completeLogin(session) {
 async function beginRegistration() {
     const name = document.getElementById('createName').value.trim();
     const email = document.getElementById('createEmail').value.trim().toLowerCase();
-    const phone = normalisePhone(`${document.getElementById('countryCode').value}${document.getElementById('createPhone').value}`);
     const password = document.getElementById('createPassword').value;
     const confirmation = document.getElementById('confirmPassword').value;
 
     // Checked again on the server; this is only to answer the obvious mistakes instantly.
     if (!validEmail(email)) return showError('createError', 'Enter a valid email address.');
-    if (phone.length < 9) return showError('createError', 'Enter a valid contact number.');
-    if (password.length < 8) return showError('createError', 'Password must be at least 8 characters.');
+    if (passwordProblem(password)) return showError('createError', passwordProblem(password));
     if (password !== confirmation) return showError('createError', 'Your password and confirmation do not match.');
     if (!document.getElementById('privacyAgreement').checked) return showError('createError', 'You must agree to the Privacy Policy to create an account.');
 
@@ -148,13 +158,13 @@ async function beginRegistration() {
         // No verification code: the server validates the details and creates the account.
         const result = await api('/api/auth/register', {
             method: 'POST',
-            body: JSON.stringify({ name, email, phone, password })
+            body: JSON.stringify({ name, email, password })
         });
         document.getElementById('loginIdentifier').value = result.account.email;
         document.getElementById('loginPassword').value = '';
-        ['createName', 'createEmail', 'createPhone', 'createPassword', 'confirmPassword'].forEach(id => document.getElementById(id).value = '');
+        ['createName', 'createEmail', 'createPassword', 'confirmPassword'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('privacyAgreement').checked = false;
-        updatePasswordStrength('');
+        updatePasswordRules('createPassword');
         showPanel('signInPanel');
         showError('loginError', 'Account created. You can now sign in.');
     } catch (error) {
@@ -372,7 +382,7 @@ async function finishPasswordReset() {
 
     const password = document.getElementById('newPassword').value;
     const confirmation = document.getElementById('newPasswordConfirm').value;
-    if (password.length < 8) return showError('newPasswordError', 'Password must be at least 8 characters.');
+    if (passwordProblem(password)) return showError('newPasswordError', passwordProblem(password));
     if (password !== confirmation) return showError('newPasswordError', 'Your password and confirmation do not match.');
 
     setBusy(true);
@@ -386,6 +396,7 @@ async function finishPasswordReset() {
         document.getElementById('loginPassword').value = '';
         document.getElementById('newPassword').value = '';
         document.getElementById('newPasswordConfirm').value = '';
+        updatePasswordRules('newPassword');
         challenge = null;
         showPanel('signInPanel');
         showError('loginError', 'Password updated. Sign in with your new password.');
@@ -405,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // The homepage links to login.html#signup — open the create-account panel directly.
     if (window.location.hash === '#signup') showPanel('createPanel');
 
-    document.getElementById('createPassword').addEventListener('input', event => updatePasswordStrength(event.target.value));
+    ['createPassword', 'newPassword'].forEach(id => document.getElementById(id).addEventListener('input', () => updatePasswordRules(id)));
     // Each six-box group moves focus within itself only (there is one on the email/SMS panel
     // and one on the authenticator panel).
     document.querySelectorAll('.otp-inputs').forEach(group => group.querySelectorAll('input').forEach((input, index, inputs) => {

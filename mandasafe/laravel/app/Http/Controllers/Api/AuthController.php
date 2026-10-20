@@ -75,7 +75,7 @@ class AuthController extends ApiController
     {
         return $this->attempt(function () use ($request) {
             $body = $this->body($request);
-            $this->requireFields($body, ['name', 'email', 'phone', 'password']);
+            $this->requireFields($body, ['name', 'email', 'password']);
 
             return $this->verification->register($body, (string) $request->ip());
         }, 400);

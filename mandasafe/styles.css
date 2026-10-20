@@ -2188,15 +2188,12 @@ body {
 .password-wrap .form-input::-ms-clear { display: none; }
 .password-toggle { position: absolute; top: 50%; right: 1px; transform: translateY(-50%); width: 40px; height: calc(100% - 2px); background: transparent; border: 0; color: var(--gray-400); cursor: pointer; border-radius: 8px; }
 .password-toggle:hover { color: var(--blue); }
-.password-strength { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; font-weight: 700; }
-.strength-bars { display: flex; gap: 4px; flex: 1; }
-.strength-bars span { height: 4px; flex: 1; border-radius: 99px; background: var(--gray-200); transition: background .2s; }
-.password-strength.weak { color: #dc2626; }
-.password-strength.weak .strength-bars span:first-child { background: #ef4444; }
-.password-strength.moderate { color: #b45309; }
-.password-strength.moderate .strength-bars span:nth-child(-n+2) { background: #f59e0b; }
-.password-strength.strong { color: #15803d; }
-.password-strength.strong .strength-bars span { background: #22c55e; }
+.password-rules { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-size: 11px; color: var(--gray-500); }
+.password-rules li { display: flex; align-items: center; gap: 5px; transition: color .2s; }
+.password-rules li i { color: #ef4444; font-size: 11px; transition: color .2s; }
+.password-rules li.met { color: #15803d; }
+.password-rules li.met i { color: #22c55e; }
+@media (max-width: 420px) { .password-rules { grid-template-columns: 1fr; } }
 .phone-wrap { display: flex; gap: 8px; }
 .phone-wrap select { width: 98px; border: 1.5px solid var(--gray-200); border-radius: 8px; background: white; padding: 0 8px; color: var(--gray-700); font: 13px inherit; }
 .privacy-check { display: flex; gap: 8px; align-items: flex-start; color: var(--gray-600); font-size: 11px; line-height: 1.5; margin: -2px 0 15px; cursor: pointer; }
@@ -2213,7 +2210,7 @@ body {
 #createPanel .form-label { margin-bottom: 4px; }
 #createPanel .form-input { padding-top: 7px; padding-bottom: 7px; }
 #createPanel .password-wrap .form-input { padding-right: 34px; }
-#createPanel .password-strength { gap: 6px; margin-top: 6px; font-size: 10px; }
+#createPanel .password-rules { margin-top: 6px; font-size: 10px; }
 #createPanel .privacy-check { margin: 2px 0 12px; }
 .channel-options { display: grid; gap: 10px; }
 .channel-option { display: flex; align-items: center; gap: 12px; width: 100%; background: white; border: 1.5px solid var(--gray-200); border-radius: 10px; padding: 13px; text-align: left; cursor: pointer; color: var(--gray-600); font-family: inherit; transition: .2s; }

@@ -269,22 +269,29 @@ class MandaSafeApiTest extends TestCase
 
     public function test_sign_up_creates_the_account_without_a_code_and_never_as_admin(): void
     {
+        // A password missing an uppercase letter or a special character is refused.
+        foreach (['testing#2026', 'Testing2026', 'Te#2026'] as $weak) {
+            $this->postJson('/api/auth/register', ['name' => 'Weak', 'email' => 'weak@example.com', 'password' => $weak])
+                ->assertStatus(400);
+        }
+
+        // No contact number is needed to sign up.
         $this->postJson('/api/auth/register', [
             'name' => 'Sneaky User', 'email' => 'sneaky@example.com',
-            'phone' => '+639171110004', 'password' => 'Testing2026', 'role' => 'admin',
+            'password' => 'Testing#2026', 'role' => 'admin',
         ])
             ->assertOk()
             ->assertJson(['registered' => true, 'account' => ['role' => 'user', 'email' => 'sneaky@example.com']])
             ->assertJsonMissingPath('challengeId');
 
-        $this->postJson('/api/auth/login', ['identifier' => 'sneaky@example.com', 'password' => 'Testing2026'])
+        $this->postJson('/api/auth/login', ['identifier' => 'sneaky@example.com', 'password' => 'Testing#2026'])
             ->assertOk()
             ->assertJsonStructure(['token']);
 
         // The same email cannot be registered twice.
         $this->postJson('/api/auth/register', [
             'name' => 'Again', 'email' => 'sneaky@example.com',
-            'phone' => '+639171110005', 'password' => 'Testing2026',
+            'password' => 'Testing#2026',
         ])->assertStatus(400);
     }
 
@@ -312,17 +319,17 @@ class MandaSafeApiTest extends TestCase
         $this->assertMatchesRegularExpression('/^\d{6}$/', (string) $code);
 
         // The new password is refused until the emailed code has been accepted.
-        $this->postJson('/api/auth/reset-password', ['challengeId' => $challengeId, 'password' => 'NewPass2026'])->assertStatus(400);
+        $this->postJson('/api/auth/reset-password', ['challengeId' => $challengeId, 'password' => 'NewPass#2026'])->assertStatus(400);
 
         $this->postJson('/api/auth/otp/verify', ['challengeId' => $challengeId, 'code' => $code])
             ->assertOk()
             ->assertJson(['verified' => true, 'purpose' => 'reset']);
 
-        $this->postJson('/api/auth/reset-password', ['challengeId' => $challengeId, 'password' => 'NewPass2026'])
+        $this->postJson('/api/auth/reset-password', ['challengeId' => $challengeId, 'password' => 'NewPass#2026'])
             ->assertOk()
             ->assertJson(['email' => 'juan@example.com']);
 
-        $this->postJson('/api/auth/login', ['identifier' => 'juan@example.com', 'password' => 'NewPass2026'])->assertOk();
+        $this->postJson('/api/auth/login', ['identifier' => 'juan@example.com', 'password' => 'NewPass#2026'])->assertOk();
         $this->postJson('/api/auth/login', ['identifier' => 'juan@example.com', 'password' => 'Test-Resident#2026'])->assertStatus(401);
 
         // Administrators are told about the change in the notification feed.
