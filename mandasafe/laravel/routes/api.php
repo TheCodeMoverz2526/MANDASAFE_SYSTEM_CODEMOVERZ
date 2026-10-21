@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DataRequestController;
 use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PredictionInputController;
@@ -52,6 +53,9 @@ Route::get('/prediction-inputs', [PredictionInputController::class, 'index']);
 /* ---------- the resident bell: any signed-in account (checked in the controller) ---------- */
 Route::get('/alerts', [AlertController::class, 'index']);
 Route::post('/alerts/read-all', [AlertController::class, 'markAllRead']);
+
+/* ---------- the Request Data form: any signed-in account (checked in the controller) ---------- */
+Route::post('/data-requests', [DataRequestController::class, 'store']);
 
 /* ---------- sign-in ---------- */
 Route::prefix('auth')->group(function () {

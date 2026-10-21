@@ -2754,7 +2754,8 @@ const NOTIF_STYLES = {
     incident_updated: { cssType: 'info', icon: 'fas fa-pen', iconBg: '#dbeafe', iconColor: '#2563eb' },
     incident_deleted: { cssType: 'alert', icon: 'fas fa-trash', iconBg: '#fee2e2', iconColor: '#dc2626' },
     profile_updated: { cssType: 'info', icon: 'fas fa-id-badge', iconBg: '#ede9fe', iconColor: '#7c3aed' },
-    password_changed: { cssType: 'warning', icon: 'fas fa-key', iconBg: '#fef3c7', iconColor: '#d97706' }
+    password_changed: { cssType: 'warning', icon: 'fas fa-key', iconBg: '#fef3c7', iconColor: '#d97706' },
+    data_requested: { cssType: 'info', icon: 'fas fa-file-export', iconBg: '#dbeafe', iconColor: '#2563eb' }
 };
 const NOTIF_STYLE_DEFAULT = { cssType: 'info', icon: 'fas fa-bell', iconBg: '#dbeafe', iconColor: '#2563eb' };
 

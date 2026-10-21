@@ -79,7 +79,8 @@ const NAV = [
     { id: 'hotspots',  label: 'Hotspots',      icon: 'fire',   href: 'hotspots.html' },
     { id: 'forecast',  label: 'Forecast',      icon: 'trend',  href: 'forecast.html' },
     { id: 'safety',    label: 'Safety Index',  icon: 'shield', href: 'safety-index.html' },
-    { id: 'profile',   label: 'My Account',    icon: 'user',   href: 'profile.html' }
+    { id: 'request',   label: 'Request Data',  icon: 'file',   href: 'data-request.html' },
+    { id: 'profile',  label: 'My Account',    icon: 'user',   href: 'profile.html' }
 ];
 const NAV_SUPPORT = [
     { id: 'about',   label: 'About Us',        icon: 'info',   href: 'about.html' },

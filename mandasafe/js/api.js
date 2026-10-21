@@ -80,7 +80,8 @@ const API = {
     alerts:      () => apiGet('/api/alerts'),
     alertsSeen:  () => apiSend('/api/alerts/read-all', 'POST', {}),
     me:          () => apiGet('/api/auth/me'),
-    updateProfile: (body) => apiSend('/api/auth/profile', 'PUT', body)
+    updateProfile: (body) => apiSend('/api/auth/profile', 'PUT', body),
+    requestData: (body) => apiSend('/api/data-requests', 'POST', body)
 };
 
 /* MandaSafe is a served application, not loose files: opening a page straight from the

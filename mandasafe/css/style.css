@@ -371,6 +371,10 @@ select.input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg 
 .seg input:checked + label.sv-high{background:var(--red);border-color:var(--red);color:#fff}
 .seg input:checked + label.sv-med{background:var(--orange);border-color:var(--orange);color:#fff}
 .seg input:checked + label.sv-low{background:var(--amber);border-color:var(--amber);color:#fff}
+.seg input:checked + label.sv-blue{background:var(--blue-600);border-color:var(--blue-600);color:#fff}
+.seg input:focus-visible + label{box-shadow:0 0 0 3px rgba(59,130,246,.25)}
+.seg.seg-stack{flex-direction:column}
+.seg.seg-stack label{text-align:left;font-weight:600}
 
 .dropzone{display:flex;gap:14px;align-items:center}
 .thumb{width:78px;height:62px;border-radius:10px;object-fit:cover;border:1px solid var(--line)}

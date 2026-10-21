@@ -57,6 +57,17 @@ class NotificationService
         );
     }
 
+    /** Raised when a signed-in account sends the Request Data form. */
+    public function notifyDataRequested(array $req): Notification
+    {
+        return $this->create(
+            'data_requested',
+            'Data request',
+            "{$req['name']} ({$req['role']}, {$req['organization']}) requested {$req['dataType']}. "
+            . "Purpose: {$req['purpose']} Send to: {$req['email']} (signed in as {$req['account']})."
+        );
+    }
+
     /** Raised when an administrator logs a new accident report. */
     public function notifyIncidentCreated(array $incident, ?string $actorEmail): Notification
     {
