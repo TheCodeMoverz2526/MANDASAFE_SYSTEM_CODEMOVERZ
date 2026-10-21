@@ -16,6 +16,13 @@
     </div>
     <div class="card-body" id="info"><div class="empty">Loading…</div></div>
   </div>
+
+  <div class="card" id="requestsCard" style="margin-top:20px" hidden>
+    <div class="card-head"><h2>My Data Requests</h2>
+      <a class="btn btn-ghost" href="data-request.html" style="margin-left:auto;padding:8px 16px;font-size:13px;">New Request</a>
+    </div>
+    <div id="requestsList"></div>
+  </div>
 </main>
 
 <script src="js/api.js"></script>
@@ -86,6 +93,29 @@ if (requireAuth()) {
 
     renderView();
     document.getElementById('editProfileBtn').onclick = renderEdit;
+  })();
+
+  // The card stays hidden until the account has sent at least one request.
+  const REQUEST_STATUS = { pending: ['Pending', 't-review'], sent: ['Sent', 't-resolved'], declined: ['Declined', 't-high'] };
+  (async () => {
+    let requests;
+    try { requests = await API.dataRequests(); }
+    catch { return; }
+    if (!requests.length) return;
+
+    document.getElementById('requestsList').innerHTML = requests.map(r => {
+      const [label, tag] = REQUEST_STATUS[r.status] || [r.status, 't-review'];
+      return `<div class="inc">
+        <div class="ic" style="background:var(--blue-600)">${icon('file')}</div>
+        <div>
+          <div class="t">${esc(r.dataType)}</div>
+          <div class="l">${esc(r.purpose)}</div>
+          <div class="d">${new Date(r.createdAt).toLocaleString()} · ${esc(r.role)}, ${esc(r.organization)} · to ${esc(r.email)}</div>
+        </div>
+        <span class="tag ${tag}">${esc(label)}</span>
+      </div>`;
+    }).join('');
+    document.getElementById('requestsCard').hidden = false;
   })();
 }
 </script>

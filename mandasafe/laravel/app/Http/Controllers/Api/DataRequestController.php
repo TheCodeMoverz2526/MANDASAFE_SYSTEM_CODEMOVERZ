@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\RimasException;
+use App\Models\DataRequest;
 use App\Services\AccountService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -19,6 +20,20 @@ class DataRequestController extends ApiController
         private AccountService $accounts,
         private NotificationService $notifications,
     ) {
+    }
+
+    /** GET /api/data-requests — the signed-in account's own requests, newest first. */
+    public function index(Request $request)
+    {
+        $account = $this->accounts->accountForToken($this->accounts->tokenFromRequest($request));
+        if (! $account) {
+            return response()->json(['error' => 'Please sign in to continue.'], 401);
+        }
+
+        return response()->json(
+            DataRequest::where('account_id', $account->id)->orderByDesc('id')->get()
+                ->map(fn (DataRequest $row) => $row->toApi())
+        );
     }
 
     /** POST /api/data-requests — any signed-in account. */
@@ -47,6 +62,18 @@ class DataRequestController extends ApiController
                 throw new RimasException('Please enter a valid email address for the data.');
             }
 
+            $saved = DataRequest::create([
+                'account_id' => $account->id,
+                'name' => $body['name'],
+                'role' => $role,
+                'organization' => $body['organization'],
+                'data_type' => $body['dataType'],
+                'purpose' => $body['purpose'],
+                'email' => $email,
+                'status' => 'pending',
+                'created_at_iso' => AccountService::isoNow(),
+            ]);
+
             $this->notifications->notifyDataRequested([
                 'name' => $body['name'],
                 'role' => $role,
@@ -57,7 +84,7 @@ class DataRequestController extends ApiController
                 'account' => $account->email,
             ]);
 
-            return ['ok' => true, 'email' => $email];
+            return ['ok' => true, 'email' => $email, 'request' => $saved->toApi()];
         }, 400, 201);
     }
 }

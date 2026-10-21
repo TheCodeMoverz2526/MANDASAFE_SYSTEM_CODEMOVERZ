@@ -55,6 +55,7 @@ Route::get('/alerts', [AlertController::class, 'index']);
 Route::post('/alerts/read-all', [AlertController::class, 'markAllRead']);
 
 /* ---------- the Request Data form: any signed-in account (checked in the controller) ---------- */
+Route::get('/data-requests', [DataRequestController::class, 'index']);
 Route::post('/data-requests', [DataRequestController::class, 'store']);
 
 /* ---------- sign-in ---------- */
