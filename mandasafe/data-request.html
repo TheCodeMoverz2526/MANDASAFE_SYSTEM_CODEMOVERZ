@@ -90,12 +90,12 @@ if (requireAuth()) {
   const STEPS = [
     { label: 'Request Submitted', icon: 'file' },
     { label: 'Under Review',      icon: 'search' },
-    { label: 'Approved',          icon: 'checkOnly' },
+    { label: 'Accepted',          icon: 'checkOnly' },
     { label: 'Data Sent',         icon: 'mail' }
   ];
   // How many steps each status has completed; the next one is the current step.
   const STATUS_DONE = { pending: 1, approved: 3, sent: 4, declined: 1 };
-  const STATUS_TAG = { pending: ['Under Review', 't-review'], approved: ['Approved', 't-process'],
+  const STATUS_TAG = { pending: ['Under Review', 't-review'], approved: ['Accepted', 't-process'],
                        sent: ['Data Sent', 't-resolved'], declined: ['Declined', 't-high'] };
   let requestCount = 0;
 

@@ -96,7 +96,7 @@ if (requireAuth()) {
   })();
 
   // The card stays hidden until the account has sent at least one request.
-  const REQUEST_STATUS = { pending: ['Under Review', 't-review'], approved: ['Approved', 't-process'], sent: ['Sent', 't-resolved'], declined: ['Declined', 't-high'] };
+  const REQUEST_STATUS = { pending: ['Under Review', 't-review'], approved: ['Accepted', 't-process'], sent: ['Sent', 't-resolved'], declined: ['Declined', 't-high'] };
   (async () => {
     let requests;
     try { requests = await API.dataRequests(); }

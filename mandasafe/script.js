@@ -2571,7 +2571,7 @@ async function renderUserTable() {
 // tracker the resident sees on their Request Data page and in My Account.
 const DATA_REQ_STATUS = {
     pending: { label: 'Under Review', bg: '#eff6ff', fg: '#1d4ed8' },
-    approved: { label: 'Approved', bg: '#fff7ed', fg: '#c2410c' },
+    approved: { label: 'Accepted', bg: '#fff7ed', fg: '#c2410c' },
     sent: { label: 'Data Sent', bg: '#ecfdf5', fg: '#047857' },
     declined: { label: 'Declined', bg: '#fef2f2', fg: '#b91c1c' }
 };
@@ -2581,15 +2581,15 @@ async function loadDataRequests() {
     const tbody = document.getElementById('dataReqTableBody');
     if (!tbody) return;
     if (!isAdmin()) {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);">Administrator access is required to view data requests.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:26px;text-align:center;color:var(--gray-400);">Administrator access is required to view data requests.</td></tr>';
         return;
     }
 
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);"><i class="fas fa-spinner fa-spin"></i> Loading requests…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:26px;text-align:center;color:var(--gray-400);"><i class="fas fa-spinner fa-spin"></i> Loading requests…</td></tr>';
     try {
         dataRequestList = await api.getDataRequests();
     } catch (error) {
-        tbody.innerHTML = `<tr><td colspan="6" style="padding:26px;text-align:center;color:#dc2626;">${escapeMapHtml(error.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="padding:26px;text-align:center;color:#dc2626;">${escapeMapHtml(error.message)}</td></tr>`;
         return;
     }
     renderDataRequests();
@@ -2622,7 +2622,7 @@ function renderDataRequests() {
         `${dataRequestList.length} total · ${pending} awaiting review`;
 
     if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);">${dataRequestList.length ? 'No requests with this status.' : 'No data requests yet.'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="padding:26px;text-align:center;color:var(--gray-400);">${dataRequestList.length ? 'No requests with this status.' : 'No data requests yet.'}</td></tr>`;
         return;
     }
 
@@ -2630,34 +2630,71 @@ function renderDataRequests() {
     const h = v => escapeMapHtml(v ?? '');
     tbody.innerHTML = rows.map(r => {
         const st = DATA_REQ_STATUS[r.status] || DATA_REQ_STATUS.pending;
-        const options = Object.entries(DATA_REQ_STATUS)
-            .map(([value, s]) => `<option value="${value}"${value === r.status ? ' selected' : ''}>${s.label}</option>`).join('');
+        const id = Number(r.id);
+        // Under Review → Accept or Decline; Accepted → Mark as Sent once the email has gone out.
+        const actions = r.status === 'pending'
+            ? `<button class="btn btn-sm" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="acceptDataRequest(${id})"><i class="fas fa-check"></i> Accept</button>
+               <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" onclick="declineDataRequest(${id})"><i class="fas fa-xmark"></i> Decline</button>`
+            : r.status === 'approved'
+                ? `<button class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;" onclick="markDataRequestSent(${id})"><i class="fas fa-paper-plane"></i> Mark as Sent</button>`
+                : '<span style="font-size:11px;color:var(--gray-400);">No action needed</span>';
+        const reqId = 'REQ-' + String(id).padStart(4, '0');
         return `
                 <tr>
-                    <td><div style="font-weight:700;font-size:13px;">REQ-${String(r.id).padStart(4, '0')}</div><div style="font-size:10px;color:var(--gray-400);">${new Date(r.createdAt).toLocaleString()}</div></td>
+                    <td><div style="font-weight:700;font-size:13px;">${reqId}</div><div style="font-size:10px;color:var(--gray-400);">${new Date(r.createdAt).toLocaleString()}</div></td>
                     <td><div style="font-weight:600;font-size:13px;">${h(r.name)}</div><div style="font-size:11px;color:var(--gray-500);">${h(r.role)} · ${h(r.organization)}</div><div style="font-size:10px;color:var(--gray-400);">${h(r.account || '')}</div></td>
                     <td style="font-size:12px;">${h(r.dataType)}</td>
                     <td style="font-size:12px;color:var(--gray-500);max-width:280px;white-space:normal;">${h(r.purpose)}</td>
-                    <td style="font-size:12px;"><a href="mailto:${h(r.email)}?subject=${encodeURIComponent('MandaSafe data request REQ-' + String(r.id).padStart(4, '0'))}" style="color:var(--blue);">${h(r.email)}</a></td>
-                    <td><select class="filter-select" style="background:${st.bg};color:${st.fg};font-weight:700;font-size:11px;" onchange="setDataRequestStatus(${Number(r.id)}, this)">${options}</select></td>
+                    <td style="font-size:12px;"><a href="mailto:${h(r.email)}?subject=${encodeURIComponent('MandaSafe data request ' + reqId)}" style="color:var(--blue);">${h(r.email)}</a></td>
+                    <td><span class="status-badge" style="background:${st.bg};color:${st.fg};">${st.label}</span></td>
+                    <td><div style="display:flex;gap:5px;flex-wrap:wrap;">${actions}</div></td>
                 </tr>
             `;
     }).join('');
 }
 
-async function setDataRequestStatus(id, select) {
-    const row = dataRequestList.find(r => Number(r.id) === id);
-    const previous = row?.status;
-    select.disabled = true;
+async function setDataRequestStatus(id, status) {
     try {
-        const updated = await api.updateDataRequest(id, select.value);
+        const updated = await api.updateDataRequest(id, status);
+        const row = dataRequestList.find(r => Number(r.id) === id);
         if (row) Object.assign(row, updated);
-        showToast(`REQ-${String(id).padStart(4, '0')} marked ${DATA_REQ_STATUS[updated.status].label}`);
+        showToast(`REQ-${String(id).padStart(4, '0')}: ${DATA_REQ_STATUS[updated.status].label}`);
     } catch (error) {
-        if (row) row.status = previous;
         showToast(error.message);
     }
     renderDataRequests();
+}
+
+function dataRequestById(id) { return dataRequestList.find(r => Number(r.id) === id) || {}; }
+
+function acceptDataRequest(id) {
+    const r = dataRequestById(id);
+    openConfirmModal({
+        title: 'Accept this data request?',
+        message: `${r.name} will see the request as Approved. Send ${r.dataType} to ${r.email}, then mark it as sent.`,
+        icon: 'fas fa-check', danger: false, confirmLabel: 'Accept',
+        onConfirm: () => setDataRequestStatus(id, 'approved')
+    });
+}
+
+function declineDataRequest(id) {
+    const r = dataRequestById(id);
+    openConfirmModal({
+        title: 'Decline this data request?',
+        message: `${r.name} will see the request as Declined and no data will be sent.`,
+        icon: 'fas fa-xmark', danger: true, confirmLabel: 'Decline',
+        onConfirm: () => setDataRequestStatus(id, 'declined')
+    });
+}
+
+function markDataRequestSent(id) {
+    const r = dataRequestById(id);
+    openConfirmModal({
+        title: 'Mark as sent?',
+        message: `Confirm that ${r.dataType} has been emailed to ${r.email}. This completes the request.`,
+        icon: 'fas fa-paper-plane', danger: false, confirmLabel: 'Mark as Sent',
+        onConfirm: () => setDataRequestStatus(id, 'sent')
+    });
 }
 
 // ===== USER DETAILS =====
