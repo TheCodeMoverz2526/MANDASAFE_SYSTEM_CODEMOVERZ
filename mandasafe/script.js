@@ -2708,7 +2708,8 @@ function openDataRequestDetails(id) {
             ${item('Data type', h(r.dataType))}
             ${item('Send to', `<a href="mailto:${h(r.email)}?subject=${encodeURIComponent('MandaSafe data request ' + dataRequestCode(id))}" style="color:var(--blue);">${h(r.email)}</a>`)}
         </div>
-        <div class="ud-item" style="margin-top:8px;"><div class="ud-label">Purpose</div><div class="ud-value" style="font-weight:500;white-space:pre-wrap;">${h(r.purpose)}</div></div>
+        <div class="ud-section">Purpose of Request</div>
+        <div class="ud-item"><div class="ud-value" style="font-weight:500;white-space:pre-wrap;line-height:1.5;">${h(r.purpose)}</div></div>
         <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px;">${dataRequestActions(r)}</div>
     `;
     document.getElementById('dataReqDetailsModal').classList.add('open');
