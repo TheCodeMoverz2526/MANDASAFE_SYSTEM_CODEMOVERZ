@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\RimasException;
+use App\Models\Account;
+use App\Models\AccountActivity;
 use App\Models\DataRequest;
 use App\Services\AccountService;
 use App\Services\NotificationService;
@@ -15,6 +17,7 @@ use Illuminate\Http\Request;
 class DataRequestController extends ApiController
 {
     private const ROLES = ['Student', 'Researcher', 'Employee', 'Others'];
+    private const STATUSES = ['pending', 'approved', 'sent', 'declined'];
 
     public function __construct(
         private AccountService $accounts,
@@ -34,6 +37,40 @@ class DataRequestController extends ApiController
             DataRequest::where('account_id', $account->id)->orderByDesc('id')->get()
                 ->map(fn (DataRequest $row) => $row->toApi())
         );
+    }
+
+    /** GET /api/data-requests/all — administrators: every request, with the account that sent it. */
+    public function all()
+    {
+        $rows = DataRequest::orderByDesc('id')->get();
+        $emails = Account::whereIn('id', $rows->pluck('account_id')->unique())->pluck('email', 'id');
+
+        return response()->json($rows->map(fn (DataRequest $row) => $row->toApi() + [
+            'account' => $emails[$row->account_id] ?? null,
+        ]));
+    }
+
+    /** PUT /api/data-requests/{id} — administrators: move a request along the tracker. */
+    public function update(Request $request, string $id)
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $status = (string) ($this->body($request)['status'] ?? '');
+            if (! in_array($status, self::STATUSES, true)) {
+                throw new RimasException('Unknown status: ' . $status);
+            }
+
+            $row = DataRequest::find($id);
+            if (! $row) {
+                return response()->json(['error' => 'Request not found.'], 404);
+            }
+
+            $row->update(['status' => $status]);
+            AccountActivity::record($row->account_id, 'admin_action',
+                "Data request REQ-" . str_pad((string) $row->id, 4, '0', STR_PAD_LEFT)
+                . " set to {$status} by {$this->actor($request)->email}.");
+
+            return $row->toApi();
+        });
     }
 
     /** POST /api/data-requests — any signed-in account. */

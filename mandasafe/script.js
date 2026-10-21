@@ -50,6 +50,7 @@ async function restoreDashboardSession() {
 
     loadIncidentsFromServer(pendingIncidents);
     loadNotifications().then(startNotificationPolling);
+    if (isAdmin()) refreshDataRequests();
 }
 
 function doLogout() {
@@ -147,6 +148,8 @@ const api = {
     createAccount: (body) => apiRequest('/api/accounts', { method: 'POST', body: JSON.stringify(body) }),
     updateAccount: (id, body) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deleteAccount: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getDataRequests: () => apiRequest('/api/data-requests/all'),
+    updateDataRequest: (id, status) => apiRequest(`/api/data-requests/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ status }) }),
     getNotifications: () => apiRequest('/api/notifications'),
     pollNotifications: (after) => apiRequest(`/api/notifications/poll?after=${encodeURIComponent(after)}`),
     markNotificationRead: (id) => apiRequest(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' }),
@@ -551,7 +554,7 @@ function jumpToIncident(idx) {
 }
 
 // ===== NAVIGATION =====
-const pages = ['home', 'incidents', 'map', 'hotspot', 'forecast', 'safety', 'analytics', 'reports', 'users', 'notifications', 'settings', 'predictdata'];
+const pages = ['home', 'incidents', 'map', 'hotspot', 'forecast', 'safety', 'analytics', 'reports', 'users', 'datarequests', 'notifications', 'settings', 'predictdata'];
 function showPage(page) {
     pages.forEach(p => {
         document.getElementById('page-' + p)?.classList.toggle('active', p === page);
@@ -566,6 +569,7 @@ function showPage(page) {
     if (page === 'home') { setTimeout(initDashCharts, 100); renderDashRecent(); }
     if (page === 'incidents') renderTable(true);
     if (page === 'users') renderUserTable();
+    if (page === 'datarequests') loadDataRequests();
     if (page === 'notifications') renderNotifications();
     if (page === 'settings') populateSettings();
     if (page === 'predictdata') loadPredictionAdminPage();
@@ -2562,6 +2566,100 @@ async function renderUserTable() {
     }).join('');
 }
 
+// ===== DATA REQUESTS =====
+// Requests sent from the resident Request Data form. Changing the status here moves the
+// tracker the resident sees on their Request Data page and in My Account.
+const DATA_REQ_STATUS = {
+    pending: { label: 'Under Review', bg: '#eff6ff', fg: '#1d4ed8' },
+    approved: { label: 'Approved', bg: '#fff7ed', fg: '#c2410c' },
+    sent: { label: 'Data Sent', bg: '#ecfdf5', fg: '#047857' },
+    declined: { label: 'Declined', bg: '#fef2f2', fg: '#b91c1c' }
+};
+let dataRequestList = [];
+
+async function loadDataRequests() {
+    const tbody = document.getElementById('dataReqTableBody');
+    if (!tbody) return;
+    if (!isAdmin()) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);">Administrator access is required to view data requests.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);"><i class="fas fa-spinner fa-spin"></i> Loading requests…</td></tr>';
+    try {
+        dataRequestList = await api.getDataRequests();
+    } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:26px;text-align:center;color:#dc2626;">${escapeMapHtml(error.message)}</td></tr>`;
+        return;
+    }
+    renderDataRequests();
+}
+
+// Keeps the sidebar count current; repaints the table only when that page is open.
+async function refreshDataRequests() {
+    try { dataRequestList = await api.getDataRequests(); } catch { return; }
+    if (document.getElementById('page-datarequests')?.classList.contains('active')) renderDataRequests();
+    else updateDataReqBadge();
+}
+
+function updateDataReqBadge() {
+    const badge = document.getElementById('sbDataReqCount');
+    if (!badge) return;
+    const pending = dataRequestList.filter(r => r.status === 'pending').length;
+    badge.textContent = pending;
+    badge.style.display = pending ? '' : 'none';
+}
+
+function renderDataRequests() {
+    const tbody = document.getElementById('dataReqTableBody');
+    if (!tbody) return;
+    updateDataReqBadge();
+
+    const filter = document.getElementById('dataReqFilter')?.value || 'all';
+    const rows = filter === 'all' ? dataRequestList : dataRequestList.filter(r => r.status === filter);
+    const pending = dataRequestList.filter(r => r.status === 'pending').length;
+    document.getElementById('dataReqSummary').textContent =
+        `${dataRequestList.length} total · ${pending} awaiting review`;
+
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);">${dataRequestList.length ? 'No requests with this status.' : 'No data requests yet.'}</td></tr>`;
+        return;
+    }
+
+    // Everything here was typed by residents, so all of it is escaped.
+    const h = v => escapeMapHtml(v ?? '');
+    tbody.innerHTML = rows.map(r => {
+        const st = DATA_REQ_STATUS[r.status] || DATA_REQ_STATUS.pending;
+        const options = Object.entries(DATA_REQ_STATUS)
+            .map(([value, s]) => `<option value="${value}"${value === r.status ? ' selected' : ''}>${s.label}</option>`).join('');
+        return `
+                <tr>
+                    <td><div style="font-weight:700;font-size:13px;">REQ-${String(r.id).padStart(4, '0')}</div><div style="font-size:10px;color:var(--gray-400);">${new Date(r.createdAt).toLocaleString()}</div></td>
+                    <td><div style="font-weight:600;font-size:13px;">${h(r.name)}</div><div style="font-size:11px;color:var(--gray-500);">${h(r.role)} · ${h(r.organization)}</div><div style="font-size:10px;color:var(--gray-400);">${h(r.account || '')}</div></td>
+                    <td style="font-size:12px;">${h(r.dataType)}</td>
+                    <td style="font-size:12px;color:var(--gray-500);max-width:280px;white-space:normal;">${h(r.purpose)}</td>
+                    <td style="font-size:12px;"><a href="mailto:${h(r.email)}?subject=${encodeURIComponent('MandaSafe data request REQ-' + String(r.id).padStart(4, '0'))}" style="color:var(--blue);">${h(r.email)}</a></td>
+                    <td><select class="filter-select" style="background:${st.bg};color:${st.fg};font-weight:700;font-size:11px;" onchange="setDataRequestStatus(${Number(r.id)}, this)">${options}</select></td>
+                </tr>
+            `;
+    }).join('');
+}
+
+async function setDataRequestStatus(id, select) {
+    const row = dataRequestList.find(r => Number(r.id) === id);
+    const previous = row?.status;
+    select.disabled = true;
+    try {
+        const updated = await api.updateDataRequest(id, select.value);
+        if (row) Object.assign(row, updated);
+        showToast(`REQ-${String(id).padStart(4, '0')} marked ${DATA_REQ_STATUS[updated.status].label}`);
+    } catch (error) {
+        if (row) row.status = previous;
+        showToast(error.message);
+    }
+    renderDataRequests();
+}
+
 // ===== USER DETAILS =====
 // Clicking a row opens everything the server knows about that account: profile, security
 // summary and activity history. The password itself is never shown — only its bcrypt hash is
@@ -2801,7 +2899,7 @@ async function pollNotifications() {
         if (fresh.length) {
             notifications = [...fresh, ...notifications];
             const newest = fresh[0];
-            showToast(fresh.length === 1 ? `🔔 ${newest.title}: ${newest.desc || ''}` : `🔔 ${fresh.length} new notifications`);
+            showToast(fresh.length === 1 ? `🔔 ${newest.title}: ${newest.desc || ''}` : `🔔 ${fresh.length} new notifications`);            if (fresh.some(n => n.type === 'data_requested')) refreshDataRequests();
         }
         notifLatestSeq = Math.max(notifLatestSeq, change.latest || 0);
 

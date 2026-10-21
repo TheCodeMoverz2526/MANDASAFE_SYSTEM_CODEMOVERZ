@@ -100,6 +100,9 @@ Route::middleware('rimas.admin')->group(function () {
     Route::put('/accounts/{id}', [AccountController::class, 'update']);
     Route::delete('/accounts/{id}', [AccountController::class, 'destroy']);
 
+    Route::get('/data-requests/all', [DataRequestController::class, 'all']);
+    Route::put('/data-requests/{id}', [DataRequestController::class, 'update']);
+
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/poll', [NotificationController::class, 'poll']);
     Route::put('/notifications/{id}/read', [NotificationController::class, 'markRead']);

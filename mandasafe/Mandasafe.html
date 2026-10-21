@@ -55,6 +55,9 @@
             <a class="sidebar-item" onclick="showPage('reports')" id="sb-reports"><i class="fas fa-file-alt"></i>
                 Reports</a>
             <div class="sidebar-label">System</div>
+            <a class="sidebar-item admin-only" onclick="showPage('datarequests')" id="sb-datarequests" style="display:none;"><i
+                    class="fas fa-file-export"></i> Data Requests <span id="sbDataReqCount"
+                    style="margin-left:auto;background:#2563eb;color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;display:none;"></span></a>
             <a class="sidebar-item admin-only" onclick="showPage('users')" id="sb-users" style="display:none;"><i
                     class="fas fa-users-cog"></i> User Management</a>
             <a class="sidebar-item" onclick="showPage('notifications')" id="sb-notifications"><i
@@ -943,6 +946,47 @@
                                     </tr>
                                 </thead>
                                 <tbody id="userTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== DATA REQUESTS (Admin) ===== -->
+            <div class="page" id="page-datarequests">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Data Requests</span></div>
+                    <div class="page-actions">
+                        <select class="filter-select" id="dataReqFilter" onchange="renderDataRequests()">
+                            <option value="all">All requests</option>
+                            <option value="pending">Under Review</option>
+                            <option value="approved">Approved</option>
+                            <option value="sent">Data Sent</option>
+                            <option value="declined">Declined</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="loadDataRequests()"><i
+                                class="fas fa-rotate"></i> Refresh</button>
+                    </div>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><i class="fas fa-file-export"
+                                    style="color:var(--blue);margin-right:6px;"></i>Requests from Users</span>
+                            <span id="dataReqSummary" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
+                        <div style="overflow-x:auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Request</th>
+                                        <th>Requester</th>
+                                        <th>Data Type</th>
+                                        <th>Purpose</th>
+                                        <th>Send To</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dataReqTableBody"></tbody>
                             </table>
                         </div>
                     </div>

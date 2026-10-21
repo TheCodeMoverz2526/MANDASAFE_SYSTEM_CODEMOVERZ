@@ -60,21 +60,9 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-head"><h2>What Happens Next</h2></div>
-      <div class="card-body">
-        <div class="notice"><span class="ni" data-i="clock"></span>
-          <div><h4>3–5 working days</h4>
-          <p>The Traffic Planning and Management Office reviews each request and sends the data
-             within 3 to 5 working days.</p></div></div>
-        <div class="notice" style="margin-top:12px"><span class="ni" data-i="mail"></span>
-          <div><h4>Sent by email</h4>
-          <p>The data goes to the email address you choose on the form.</p></div></div>
-        <div class="notice" style="margin-top:12px"><span class="ni" data-i="lock"></span>
-          <div><h4>Personal details are removed</h4>
-          <p>Names and other personal information of the people involved in an accident are not
-             included in released data.</p></div></div>
-      </div>
+    <div class="card" style="align-self:start">
+      <div class="card-head"><h2>Request Status</h2></div>
+      <div id="tracker"><div class="empty">Loading…</div></div>
     </div>
   </div>
 </main>
@@ -98,6 +86,80 @@ if (requireAuth()) {
   });
   $('reqPurpose').oninput = () => { $('purposeCount').textContent = $('reqPurpose').value.length; };
 
+  /* ---------- request tracker: the latest request, step by step ---------- */
+  const STEPS = [
+    { label: 'Request Submitted', icon: 'file' },
+    { label: 'Under Review',      icon: 'search' },
+    { label: 'Approved',          icon: 'checkOnly' },
+    { label: 'Data Sent',         icon: 'mail' }
+  ];
+  // How many steps each status has completed; the next one is the current step.
+  const STATUS_DONE = { pending: 1, approved: 3, sent: 4, declined: 1 };
+  const STATUS_TAG = { pending: ['Under Review', 't-review'], approved: ['Approved', 't-process'],
+                       sent: ['Data Sent', 't-resolved'], declined: ['Declined', 't-high'] };
+  let requestCount = 0;
+
+  const stamp = iso => new Date(iso).toLocaleString([], { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  // 5 working days after the request, skipping weekends.
+  function expectedBy(iso) {
+    const d = new Date(iso);
+    for (let left = 5; left > 0;) {
+      d.setDate(d.getDate() + 1);
+      if (d.getDay() !== 0 && d.getDay() !== 6) left--;
+    }
+    return d.toLocaleDateString([], { month: '2-digit', day: '2-digit', year: 'numeric' });
+  }
+
+  function renderTracker(r) {
+    const done = r ? (STATUS_DONE[r.status] ?? 1) : 0;
+    const declined = r && r.status === 'declined';
+
+    const steps = STEPS.map((s, i) => {
+      let cls = i < done ? 'done' : i === done && r ? 'current' : '';
+      let label = s.label;
+      let date = '';
+      if (declined && i === 1) { cls = 'declined'; label = 'Declined'; }
+      if (r && i === 0) date = stamp(r.createdAt);
+      if (r && i === 3 && done < 4 && !declined) date = 'by ' + expectedBy(r.createdAt);
+      return `<div class="trk-step ${cls}"><div class="dot">${icon(declined && i === 1 ? 'alert' : s.icon)}</div>
+        <div><div class="lb">${label}</div>${date ? `<div class="dt">${date}</div>` : ''}</div></div>`;
+    }).join('');
+
+    if (!r) {
+      $('tracker').innerHTML = `
+        <div class="trk-head">No request yet — submit the form to start tracking it here.</div>
+        <div class="trk">${steps}</div>
+        <div class="trk-row">${icon('clock', 'ri')}<span>The office reviews each request and sends the data within <b>3–5 working days</b>.</span></div>
+        <div class="trk-row">${icon('lock', 'ri')}<span>Names and personal details of the people involved in an accident are not included.</span></div>`;
+      return;
+    }
+
+    const [tagLabel, tag] = STATUS_TAG[r.status] || [r.status, 't-review'];
+    const note = declined
+      ? 'This request was declined. Contact the TPMO or send a new request.'
+      : r.status === 'sent'
+        ? `The data was sent to <b>${esc(r.email)}</b>.`
+        : `Expect the data at <b>${esc(r.email)}</b> by <b>${expectedBy(r.createdAt)}</b> (3–5 working days).`;
+
+    $('tracker').innerHTML = `
+      <div class="trk-head">REQUEST ID <b>REQ-${String(r.id).padStart(4, '0')}</b> · ${esc(r.dataType)}
+        <span class="tag ${tag}">${esc(tagLabel)}</span></div>
+      <div class="trk">${steps}</div>
+      <div class="trk-row">${icon(declined ? 'alert' : 'mail', 'ri')}<span>${note}</span></div>
+      <div class="trk-row">${icon('headset', 'ri')}<span>Questions about this request?</span>
+        <a class="btn btn-ghost" href="support.html">Contact Support</a></div>
+      ${requestCount > 1 ? `<div class="trk-row">${icon('clipboard', 'ri')}<span>You have ${requestCount} requests in total.</span>
+        <a class="btn btn-ghost" href="profile.html">View All Requests</a></div>` : ''}`;
+  }
+
+  (async () => {
+    let requests = [];
+    try { requests = await API.dataRequests(); } catch { /* show the empty tracker */ }
+    requestCount = requests.length;
+    renderTracker(requests[0]);
+  })();
+
   $('requestForm').onsubmit = async (event) => {
     event.preventDefault();
     const errorEl = $('requestError');
@@ -120,6 +182,8 @@ if (requireAuth()) {
       $('reqRoleOther').hidden = true;
       $('reqEmail').hidden = true;
       $('purposeCount').textContent = '0';
+      requestCount++;
+      renderTracker(result.request);
       toast('Request sent — expect the data at ' + result.email + ' in 3–5 working days');
     } catch (error) {
       errorEl.textContent = error.message.startsWith('Missing required')
