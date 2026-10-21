@@ -54,9 +54,19 @@ class DataRequestController extends ApiController
     public function update(Request $request, string $id)
     {
         return $this->attempt(function () use ($request, $id) {
-            $status = (string) ($this->body($request)['status'] ?? '');
+            $body = $this->body($request);
+            $status = (string) ($body['status'] ?? '');
             if (! in_array($status, self::STATUSES, true)) {
                 throw new RimasException('Unknown status: ' . $status);
+            }
+
+            // The resident sees this reason, so a decline without one is refused.
+            $reason = trim((string) ($body['reason'] ?? ''));
+            if ($status === 'declined' && $reason === '') {
+                throw new RimasException('Please give a reason for declining this request.');
+            }
+            if (mb_strlen($reason) > 1000) {
+                throw new RimasException('Please keep the reason under 1000 characters.');
             }
 
             $row = DataRequest::find($id);
@@ -64,10 +74,14 @@ class DataRequestController extends ApiController
                 return response()->json(['error' => 'Request not found.'], 404);
             }
 
-            $row->update(['status' => $status]);
+            $row->update([
+                'status' => $status,
+                'decline_reason' => $status === 'declined' ? $reason : null,
+            ]);
             AccountActivity::record($row->account_id, 'admin_action',
                 "Data request REQ-" . str_pad((string) $row->id, 4, '0', STR_PAD_LEFT)
-                . " set to {$status} by {$this->actor($request)->email}.");
+                . " set to {$status} by {$this->actor($request)->email}."
+                . ($status === 'declined' ? " Reason: {$reason}" : ''));
 
             return $row->toApi();
         });

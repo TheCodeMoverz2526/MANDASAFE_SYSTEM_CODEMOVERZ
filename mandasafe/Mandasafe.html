@@ -1286,6 +1286,41 @@
         </div>
     </div>
 
+    <!-- Data request details: opened by clicking a row in Data Requests -->
+    <div class="modal-overlay" id="dataReqDetailsModal">
+        <div class="modal user-details-modal">
+            <div class="modal-header">
+                <div class="modal-title" id="dataReqDetailsTitle">Data Request</div><button class="modal-close"
+                    onclick="closeDataRequestDetails()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="dataReqDetailsBody"></div>
+        </div>
+    </div>
+
+    <!-- Decline a data request: the reason is shown to the resident -->
+    <div class="modal-overlay" id="declineReqModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Decline this data request?</div><button class="modal-close"
+                    onclick="closeDeclineModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="declineReqMessage" style="font-size:13px;color:var(--gray-500);margin:0 0 14px;"></p>
+                <label class="form-label" for="declineReqReason">Reason for declining <span style="color:#dc2626;">*</span></label>
+                <textarea class="form-textarea" id="declineReqReason" rows="4" maxlength="1000"
+                    placeholder="e.g. The requested data includes personal details that cannot be released."
+                    oninput="updateDeclineCount()"></textarea>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:11px;">
+                    <span id="declineReqError" style="color:#dc2626;"></span>
+                    <span id="declineReqCount" style="color:var(--gray-400);">0/1000</span>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeDeclineModal()">Cancel</button><button
+                    class="btn btn-danger" id="declineReqSubmit" onclick="submitDeclineRequest()"><i
+                        class="fas fa-xmark"></i> Decline Request</button></div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="addUserModal">
         <div class="modal">
             <div class="modal-header">

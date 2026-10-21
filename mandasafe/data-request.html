@@ -137,7 +137,9 @@ if (requireAuth()) {
 
     const [tagLabel, tag] = STATUS_TAG[r.status] || [r.status, 't-review'];
     const note = declined
-      ? 'This request was declined. Contact the TPMO or send a new request.'
+      ? (r.declineReason
+          ? `This request was declined. <b>Reason:</b> ${esc(r.declineReason)}`
+          : 'This request was declined. Contact the TPMO or send a new request.')
       : r.status === 'sent'
         ? `The data was sent to <b>${esc(r.email)}</b>.`
         : `Expect the data at <b>${esc(r.email)}</b> by <b>${expectedBy(r.createdAt)}</b> (3–5 working days).`;

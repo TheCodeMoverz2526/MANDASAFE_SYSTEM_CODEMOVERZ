@@ -23,6 +23,7 @@ class DataRequest extends Model
             'purpose' => $this->purpose,
             'email' => $this->email,
             'status' => $this->status,
+            'declineReason' => $this->decline_reason,
             'createdAt' => $this->created_at_iso,
         ];
     }

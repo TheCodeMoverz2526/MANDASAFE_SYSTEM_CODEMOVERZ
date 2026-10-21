@@ -149,7 +149,7 @@ const api = {
     updateAccount: (id, body) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deleteAccount: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getDataRequests: () => apiRequest('/api/data-requests/all'),
-    updateDataRequest: (id, status) => apiRequest(`/api/data-requests/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ status }) }),
+    updateDataRequest: (id, status, reason) => apiRequest(`/api/data-requests/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ status, reason }) }),
     getNotifications: () => apiRequest('/api/notifications'),
     pollNotifications: (after) => apiRequest(`/api/notifications/poll?after=${encodeURIComponent(after)}`),
     markNotificationRead: (id) => apiRequest(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' }),
@@ -2631,43 +2631,107 @@ function renderDataRequests() {
     tbody.innerHTML = rows.map(r => {
         const st = DATA_REQ_STATUS[r.status] || DATA_REQ_STATUS.pending;
         const id = Number(r.id);
-        // Under Review → Accept or Decline; Accepted → Mark as Sent once the email has gone out.
-        const actions = r.status === 'pending'
-            ? `<button class="btn btn-sm" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="acceptDataRequest(${id})"><i class="fas fa-check"></i> Accept</button>
-               <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" onclick="declineDataRequest(${id})"><i class="fas fa-xmark"></i> Decline</button>`
-            : r.status === 'approved'
-                ? `<button class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;" onclick="markDataRequestSent(${id})"><i class="fas fa-paper-plane"></i> Mark as Sent</button>`
-                : '<span style="font-size:11px;color:var(--gray-400);">No action needed</span>';
-        const reqId = 'REQ-' + String(id).padStart(4, '0');
+        const reqId = dataRequestCode(id);
         return `
-                <tr>
+                <tr class="user-row" title="View details" onclick="openDataRequestDetails(${id})">
                     <td><div style="font-weight:700;font-size:13px;">${reqId}</div><div style="font-size:10px;color:var(--gray-400);">${new Date(r.createdAt).toLocaleString()}</div></td>
                     <td><div style="font-weight:600;font-size:13px;">${h(r.name)}</div><div style="font-size:11px;color:var(--gray-500);">${h(r.role)} · ${h(r.organization)}</div><div style="font-size:10px;color:var(--gray-400);">${h(r.account || '')}</div></td>
                     <td style="font-size:12px;">${h(r.dataType)}</td>
                     <td style="font-size:12px;color:var(--gray-500);max-width:280px;white-space:normal;">${h(r.purpose)}</td>
-                    <td style="font-size:12px;"><a href="mailto:${h(r.email)}?subject=${encodeURIComponent('MandaSafe data request ' + reqId)}" style="color:var(--blue);">${h(r.email)}</a></td>
+                    <td style="font-size:12px;" onclick="event.stopPropagation()"><a href="mailto:${h(r.email)}?subject=${encodeURIComponent('MandaSafe data request ' + reqId)}" style="color:var(--blue);">${h(r.email)}</a></td>
                     <td><span class="status-badge" style="background:${st.bg};color:${st.fg};">${st.label}</span></td>
-                    <td><div style="display:flex;gap:5px;flex-wrap:wrap;">${actions}</div></td>
+                    <td onclick="event.stopPropagation()"><div style="display:flex;gap:5px;flex-wrap:wrap;">${dataRequestActions(r)}</div></td>
                 </tr>
             `;
     }).join('');
 }
 
-async function setDataRequestStatus(id, status) {
+function dataRequestCode(id) { return 'REQ-' + String(id).padStart(4, '0'); }
+
+// Under Review → Accept or Decline; Accepted → Mark as Sent once the email has gone out.
+function dataRequestActions(r) {
+    const id = Number(r.id);
+    return r.status === 'pending'
+        ? `<button class="btn btn-sm" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="acceptDataRequest(${id})"><i class="fas fa-check"></i> Accept</button>
+           <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" onclick="declineDataRequest(${id})"><i class="fas fa-xmark"></i> Decline</button>`
+        : r.status === 'approved'
+            ? `<button class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;" onclick="markDataRequestSent(${id})"><i class="fas fa-paper-plane"></i> Mark as Sent</button>`
+            : '<span style="font-size:11px;color:var(--gray-400);">No action needed</span>';
+}
+
+async function setDataRequestStatus(id, status, reason) {
     try {
-        const updated = await api.updateDataRequest(id, status);
+        const updated = await api.updateDataRequest(id, status, reason);
         const row = dataRequestList.find(r => Number(r.id) === id);
         if (row) Object.assign(row, updated);
-        showToast(`REQ-${String(id).padStart(4, '0')}: ${DATA_REQ_STATUS[updated.status].label}`);
+        showToast(`${dataRequestCode(id)}: ${DATA_REQ_STATUS[updated.status].label}`);
     } catch (error) {
         showToast(error.message);
+        return false;
     }
     renderDataRequests();
+    return true;
 }
 
 function dataRequestById(id) { return dataRequestList.find(r => Number(r.id) === id) || {}; }
 
+// ===== DATA REQUEST DETAILS =====
+// Clicking a row shows the whole request: the table trims long purposes and hides the reason.
+function openDataRequestDetails(id) {
+    const r = dataRequestById(id);
+    if (!r.id) return;
+    const h = v => escapeMapHtml(v ?? '');
+    const st = DATA_REQ_STATUS[r.status] || DATA_REQ_STATUS.pending;
+    const item = (label, value) => `<div class="ud-item"><div class="ud-label">${label}</div><div class="ud-value">${value}</div></div>`;
+
+    document.getElementById('dataReqDetailsTitle').textContent = dataRequestCode(id);
+    document.getElementById('dataReqDetailsBody').innerHTML = `
+        <div class="ud-head">
+            <div class="ud-avatar" style="background:var(--blue);"><i class="fas fa-file-export"></i></div>
+            <div style="flex:1;min-width:0;">
+                <div class="ud-name">${h(r.dataType)}</div>
+                <div class="ud-sub">Sent ${new Date(r.createdAt).toLocaleString()}</div>
+            </div>
+            <span class="status-badge" style="background:${st.bg};color:${st.fg};">${st.label}</span>
+        </div>
+        ${r.status === 'declined' ? `
+        <div class="dr-reason"><div class="ud-label" style="color:#b91c1c;">Reason for declining</div><div>${h(r.declineReason || 'No reason was recorded.')}</div></div>` : ''}
+        <div class="ud-section">Requester</div>
+        <div class="ud-grid">
+            ${item('Name', h(r.name))}
+            ${item('Role', h(r.role))}
+            ${item('Organization', h(r.organization))}
+            ${item('Signed in as', h(r.account || '—'))}
+        </div>
+        <div class="ud-section">Request</div>
+        <div class="ud-grid">
+            ${item('Data type', h(r.dataType))}
+            ${item('Send to', `<a href="mailto:${h(r.email)}?subject=${encodeURIComponent('MandaSafe data request ' + dataRequestCode(id))}" style="color:var(--blue);">${h(r.email)}</a>`)}
+        </div>
+        <div class="ud-item" style="margin-top:8px;"><div class="ud-label">Purpose</div><div class="ud-value" style="font-weight:500;white-space:pre-wrap;">${h(r.purpose)}</div></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px;">${dataRequestActions(r)}</div>
+    `;
+    document.getElementById('dataReqDetailsModal').classList.add('open');
+}
+
+function closeDataRequestDetails() {
+    document.getElementById('dataReqDetailsModal').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('declineReqModal')?.classList.contains('open')) closeDeclineModal();
+    if (document.getElementById('dataReqDetailsModal')?.classList.contains('open')) closeDataRequestDetails();
+});
+document.getElementById('dataReqDetailsModal')?.addEventListener('click', e => {
+    if (e.target.id === 'dataReqDetailsModal') closeDataRequestDetails();
+});
+document.getElementById('declineReqModal')?.addEventListener('click', e => {
+    if (e.target.id === 'declineReqModal') closeDeclineModal();
+});
+
 function acceptDataRequest(id) {
+    closeDataRequestDetails();
     const r = dataRequestById(id);
     openConfirmModal({
         title: 'Accept this data request?',
@@ -2677,17 +2741,49 @@ function acceptDataRequest(id) {
     });
 }
 
+// Declining needs a reason, which the resident sees on their tracker.
+let declineRequestId = null;
+
 function declineDataRequest(id) {
+    closeDataRequestDetails();
     const r = dataRequestById(id);
-    openConfirmModal({
-        title: 'Decline this data request?',
-        message: `${r.name} will see the request as Declined and no data will be sent.`,
-        icon: 'fas fa-xmark', danger: true, confirmLabel: 'Decline',
-        onConfirm: () => setDataRequestStatus(id, 'declined')
-    });
+    declineRequestId = id;
+    document.getElementById('declineReqMessage').textContent =
+        `${r.name} will see ${dataRequestCode(id)} as Declined, together with the reason below. No data will be sent.`;
+    const input = document.getElementById('declineReqReason');
+    input.value = '';
+    document.getElementById('declineReqError').textContent = '';
+    updateDeclineCount();
+    document.getElementById('declineReqModal').classList.add('open');
+    input.focus();
+}
+
+function closeDeclineModal() {
+    document.getElementById('declineReqModal').classList.remove('open');
+    declineRequestId = null;
+}
+
+function updateDeclineCount() {
+    document.getElementById('declineReqCount').textContent =
+        `${document.getElementById('declineReqReason').value.length}/1000`;
+}
+
+async function submitDeclineRequest() {
+    const reason = document.getElementById('declineReqReason').value.trim();
+    if (!reason) {
+        document.getElementById('declineReqError').textContent = 'Please give a reason for declining this request.';
+        document.getElementById('declineReqReason').focus();
+        return;
+    }
+    const btn = document.getElementById('declineReqSubmit');
+    btn.disabled = true;
+    const ok = await setDataRequestStatus(declineRequestId, 'declined', reason);
+    btn.disabled = false;
+    if (ok) closeDeclineModal();
 }
 
 function markDataRequestSent(id) {
+    closeDataRequestDetails();
     const r = dataRequestById(id);
     openConfirmModal({
         title: 'Mark as sent?',

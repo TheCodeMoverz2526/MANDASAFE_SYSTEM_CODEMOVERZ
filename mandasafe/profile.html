@@ -111,6 +111,7 @@ if (requireAuth()) {
           <div class="t">${esc(r.dataType)}</div>
           <div class="l">${esc(r.purpose)}</div>
           <div class="d">${new Date(r.createdAt).toLocaleString()} · ${esc(r.role)}, ${esc(r.organization)} · to ${esc(r.email)}</div>
+          ${r.status === 'declined' && r.declineReason ? `<div class="d" style="color:#b91c1c"><b>Reason declined:</b> ${esc(r.declineReason)}</div>` : ''}
         </div>
         <span class="tag ${tag}">${esc(label)}</span>
       </div>`;
