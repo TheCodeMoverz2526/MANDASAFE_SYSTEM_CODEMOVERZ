@@ -25,6 +25,9 @@ class DataRequest extends Model
             'status' => $this->status,
             'declineReason' => $this->decline_reason,
             'createdAt' => $this->created_at_iso,
+            'approvedAt' => $this->approved_at_iso,
+            'sentAt' => $this->sent_at_iso,
+            'declinedAt' => $this->declined_at_iso,
         ];
     }
 }

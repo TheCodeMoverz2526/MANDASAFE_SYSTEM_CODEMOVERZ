@@ -136,6 +136,24 @@ if (requireAuth()) {
     sent: 'The data was sent to the email address below. Check your spam folder if you cannot find it.'
   };
 
+  // Every step with the date it was reached. Requests that moved along before the dates were
+  // kept have none for the steps they passed, so those read "Done" rather than a blank.
+  function requestSteps(r) {
+    const when = iso => iso ? new Date(iso).toLocaleString() : '';
+    const steps = [{ label: 'Request Submitted', date: when(r.createdAt), state: 'done' }];
+    if (r.status === 'declined') {
+      steps.push({ label: 'Declined', date: when(r.declinedAt) || 'Done', state: 'declined' });
+    } else {
+      const accepted = r.status === 'approved' || r.status === 'sent';
+      steps.push({ label: 'Under Review', date: accepted ? 'Done' : 'In progress', state: accepted ? 'done' : 'current' });
+      steps.push({ label: 'Accepted', date: when(r.approvedAt) || (accepted ? 'Done' : 'Waiting'),
+                   state: accepted ? 'done' : '' });
+      steps.push({ label: 'Data Sent', date: when(r.sentAt) || (r.status === 'sent' ? 'Done' : r.status === 'approved' ? 'Being prepared' : 'Waiting'),
+                   state: r.status === 'sent' ? 'done' : r.status === 'approved' ? 'current' : '' });
+    }
+    return steps.map(s => `<li class="${s.state}"><span class="rq-dot"></span><div><div class="rq-step">${s.label}</div><div class="rq-date">${esc(s.date)}</div></div></li>`).join('');
+  }
+
   function openRequestDetails(r) {
     const [label, tag] = REQUEST_STATUS[r.status] || [r.status, 't-review'];
     const item = (name, value) => `<div class="rq-item"><div class="rq-label">${name}</div><div class="rq-value">${value}</div></div>`;
@@ -149,14 +167,15 @@ if (requireAuth()) {
         <span class="tag ${tag}">${esc(label)}</span>
       </div>
       ${note}
+      <div class="rq-label" style="margin-bottom:8px">Progress</div>
+      <ol class="rq-steps">${requestSteps(r)}</ol>
       <div class="rq-grid">
-        ${item('Submitted', new Date(r.createdAt).toLocaleString())}
-        ${item('Send to', esc(r.email))}
         ${item('Name', esc(r.name))}
         ${item('Role', esc(r.role))}
         ${item('Organization', esc(r.organization))}
         ${item('Data type', esc(r.dataType))}
       </div>
+      <div class="rq-item rq-wide"><div class="rq-label">Send to</div><div class="rq-value">${esc(r.email)}</div></div>
       <div class="rq-item rq-wide"><div class="rq-label">Purpose of Request</div><div class="rq-value rq-purpose">${esc(r.purpose)}</div></div>
       <div class="rq-actions">
         ${r.status === 'declined' ? '<a class="btn btn-ghost" href="data-request.html">Send a New Request</a>' : '<a class="btn btn-ghost" href="support.html">Contact Support</a>'}

@@ -2683,6 +2683,9 @@ function openDataRequestDetails(id) {
     const h = v => escapeMapHtml(v ?? '');
     const st = DATA_REQ_STATUS[r.status] || DATA_REQ_STATUS.pending;
     const item = (label, value) => `<div class="ud-item"><div class="ud-label">${label}</div><div class="ud-value">${value}</div></div>`;
+    // Steps passed before dates were kept have no date: "Done" rather than a blank.
+    const when = (iso, reached = true) => iso ? new Date(iso).toLocaleString()
+        : `<span style="color:var(--gray-400);font-weight:500;">${reached ? 'Done' : 'Not yet'}</span>`;
 
     document.getElementById('dataReqDetailsTitle').textContent = dataRequestCode(id);
     document.getElementById('dataReqDetailsBody').innerHTML = `
@@ -2696,6 +2699,13 @@ function openDataRequestDetails(id) {
         </div>
         ${r.status === 'declined' ? `
         <div class="dr-reason"><div class="ud-label" style="color:#b91c1c;">Reason for declining</div><div>${h(r.declineReason || 'No reason was recorded.')}</div></div>` : ''}
+        <div class="ud-section">Timeline</div>
+        <div class="ud-grid">
+            ${item('Submitted', new Date(r.createdAt).toLocaleString())}
+            ${r.status === 'declined'
+                ? item('Declined', when(r.declinedAt))
+                : item('Accepted', when(r.approvedAt, ['approved', 'sent'].includes(r.status))) + item('Data sent', when(r.sentAt, r.status === 'sent'))}
+        </div>
         <div class="ud-section">Requester</div>
         <div class="ud-grid">
             ${item('Name', h(r.name))}

@@ -74,10 +74,15 @@ class DataRequestController extends ApiController
                 return response()->json(['error' => 'Request not found.'], 404);
             }
 
-            $row->update([
+            $changes = [
                 'status' => $status,
                 'decline_reason' => $status === 'declined' ? $reason : null,
-            ]);
+            ];
+            // Each step keeps the date it was first reached; pending has none of its own.
+            if ($status !== 'pending' && $row->status !== $status) {
+                $changes["{$status}_at_iso"] = AccountService::isoNow();
+            }
+            $row->update($changes);
             AccountActivity::record($row->account_id, 'admin_action',
                 "Data request REQ-" . str_pad((string) $row->id, 4, '0', STR_PAD_LEFT)
                 . " set to {$status} by {$this->actor($request)->email}."

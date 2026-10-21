@@ -121,6 +121,9 @@ if (requireAuth()) {
       let date = '';
       if (declined && i === 1) { cls = 'declined'; label = 'Declined'; }
       if (r && i === 0) date = stamp(r.createdAt);
+      if (declined && i === 1 && r.declinedAt) date = stamp(r.declinedAt);
+      if (r && i === 2 && r.approvedAt) date = stamp(r.approvedAt);
+      if (r && i === 3 && r.sentAt) date = stamp(r.sentAt);
       if (r && i === 3 && done < 4 && !declined) date = 'by ' + expectedBy(r.createdAt);
       return `<div class="trk-step ${cls}"><div class="dot">${icon(declined && i === 1 ? 'alert' : s.icon)}</div>
         <div><div class="lb">${label}</div>${date ? `<div class="dt">${date}</div>` : ''}</div></div>`;
