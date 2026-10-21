@@ -24,3 +24,7 @@ Homestead.yaml
 Thumbs.db
 .env.vercel
 /frontend
+
+# Cache folders used when running artisan against the live database from Windows
+/storage/vtmp
+/storage/vt2
