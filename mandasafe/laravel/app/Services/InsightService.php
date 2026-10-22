@@ -224,6 +224,91 @@ class InsightService
         return $total ? $rush / $total : 0;
     }
 
+    /**
+     * What usually drives road accidents at a given hour, and what the city can do about it.
+     * The records say when and where accidents happened, not why, so these are the common
+     * reasons for the pattern — the pages present them as possible causes, never as findings.
+     *
+     * @return array{period: string, causes: array, solutions: array}
+     */
+    private static function hourContext(int $h): array
+    {
+        if ($h >= 6 && $h <= 9) {
+            return [
+                'period' => 'the morning rush',
+                'causes' => [
+                    ['title' => 'Heavy commuter volume', 'text' => 'Workers and students head to Ortigas, Makati and Manila at the same time, so main roads like EDSA, Shaw Blvd and Boni Ave run at full capacity and small mistakes turn into collisions.'],
+                    ['title' => 'Rushing and aggressive driving', 'text' => 'Drivers running late tailgate, cut lanes and beat red lights; motorcycles weave between slow lanes.'],
+                    ['title' => 'Loading and unloading outside stops', 'text' => 'Jeepneys, buses and tricycles stopping wherever passengers wait force sudden braking and lane changes behind them.'],
+                ],
+                'solutions' => [
+                    'Post traffic enforcers at the busiest intersections from 6 to 10 AM, before queues build up.',
+                    'Enforce designated loading bays for jeepneys and buses, with no-stopping zones at intersections.',
+                    'Review signal timing on the main corridors for morning flows.',
+                ],
+            ];
+        }
+        if ($h >= 10 && $h <= 14) {
+            return [
+                'period' => 'midday',
+                'causes' => [
+                    ['title' => 'Commercial and delivery traffic', 'text' => 'Trucks, delivery vans and riders make their rounds around malls, markets and offices, double-parking and stopping in traffic lanes.'],
+                    ['title' => 'Errands and lunch trips', 'text' => 'Short trips in and out of parking areas and side streets create many conflict points at driveways and corners.'],
+                    ['title' => 'Pedestrians crossing outside lanes', 'text' => 'Foot traffic peaks around commercial areas at midday, and crossings away from pedestrian lanes are common.'],
+                ],
+                'solutions' => [
+                    'Set loading windows and clear no-parking zones for delivery vehicles on busy streets.',
+                    'Paint and light pedestrian crossings near malls, markets and offices; add barriers where people jaywalk.',
+                    'Run roving enforcement against double-parking and obstruction at midday.',
+                ],
+            ];
+        }
+        if ($h >= 15 && $h <= 16) {
+            return [
+                'period' => 'the mid-afternoon',
+                'causes' => [
+                    ['title' => 'School dismissal', 'text' => 'Many schools let out between 3 and 5 PM: school service vans, parents picking up children and students crossing the street crowd the roads near campuses.'],
+                    ['title' => 'Traffic building up before the evening rush', 'text' => 'Early commuters, delivery vehicles finishing routes and PUVs repositioning all overlap, so volume rises fast while drivers still move at midday speeds.'],
+                    ['title' => 'Fatigue and heat', 'text' => 'By mid-afternoon drivers and riders have been on the road for hours; tiredness and the heat slow reactions.'],
+                ],
+                'solutions' => [
+                    'Deploy enforcers and crossing guards at school zones from 2:30 to 5 PM.',
+                    'Enforce school-zone speed limits and drop-off rules for school service vehicles.',
+                    'Start evening-rush enforcement earlier, at 3 PM instead of 5 PM, at the known hotspots.',
+                ],
+            ];
+        }
+        if ($h >= 17 && $h <= 20) {
+            return [
+                'period' => 'the evening rush',
+                'causes' => [
+                    ['title' => 'Peak traffic going home', 'text' => 'The heaviest flows of the day leave the business districts through the city, and stop-and-go queues on main roads produce rear-end and side-swipe collisions.'],
+                    ['title' => 'Fading light and fatigue', 'text' => 'Dusk lowers visibility while drivers are tired after work; pedestrians and riders without lights are harder to see.'],
+                    ['title' => 'Crowded PUV stops', 'text' => 'Long lines for jeepneys and buses spill onto the road, and vehicles stop anywhere to pick up passengers.'],
+                ],
+                'solutions' => [
+                    'Keep enforcers on the main corridors from 5 to 9 PM, focused on the hotspots on the map.',
+                    'Organise PUV loading at designated stops with marshals during the evening peak.',
+                    'Check that street lights and pedestrian crossings on the main roads are working and visible.',
+                ],
+            ];
+        }
+
+        return [
+            'period' => 'late night',
+            'causes' => [
+                ['title' => 'Speeding on empty roads', 'text' => 'With little traffic, drivers and riders go much faster than the limit, which makes any collision more serious.'],
+                ['title' => 'Low visibility', 'text' => 'Dark stretches, unlit vehicles and pedestrians in dark clothing are hard to see in time.'],
+                ['title' => 'Drunk, sleepy or tired driving', 'text' => 'Late-night trips include more drivers who have been drinking or are short on sleep.'],
+            ],
+            'solutions' => [
+                'Run night-time speed and drunk-driving checkpoints at the hotspots.',
+                'Repair and add street lights on dark stretches where accidents cluster.',
+                'Install rumble strips and reflective markings before dangerous intersections.',
+            ],
+        ];
+    }
+
     /* ------------------------------------------------------------------ city */
 
     private static function cityTrend(array $city, array $months): array
@@ -258,6 +343,23 @@ class InsightService
                 ['label' => 'All recorded', 'value' => number_format($city['total'])],
             ],
             'charts' => [self::monthChart($city['byMonth'], 'Accidents per month, citywide')],
+            'causes' => array_values(array_filter([
+                in_array((int) substr($latest, 5, 2), [6, 7, 8, 9, 10, 11], true)
+                    ? ['title' => 'Rainy season', 'text' => 'June to November brings wet, slippery roads, flooding and poor visibility, which raise stopping distances and cause skids — and push more people into cars and onto crowded roads.']
+                    : null,
+                in_array((int) substr($latest, 5, 2), [11, 12, 1], true)
+                    ? ['title' => 'Holiday season', 'text' => 'Shopping, parties and year-end travel put more vehicles and pedestrians around malls and markets, often late at night.']
+                    : null,
+                $quarterPct !== null && $quarterPct > 0
+                    ? ['title' => 'More traffic or new disruptions', 'text' => 'A rise across several months usually follows more vehicles on the road, road works or closures that push traffic onto side streets, or new developments that draw crowds.']
+                    : ['title' => 'Enforcement, works finished or fewer trips', 'text' => 'A fall can follow stricter enforcement, finished road works, holidays or class breaks that take trips off the road — or records still being added for the latest month.'],
+                ['title' => 'Through-traffic', 'text' => 'Mandaluyong sits between Ortigas, Makati, San Juan and Manila, so much of its traffic only passes through on EDSA, Shaw Blvd, Boni Ave and Ortigas Ave.'],
+            ])),
+            'solutions' => [
+                'Review this trend every month and move enforcers to the barangays where accidents are rising (see the barangay insights).',
+                'Schedule road works and closures outside the busiest months, and announce reroutes early.',
+                'Clear drainage and repaint lane markings before the rainy season starts.',
+            ],
             'tips' => $quarterPct !== null && $quarterPct > 0
                 ? ['Accidents are rising citywide — leave earlier and avoid rushing through intersections.', 'Check the barangay insights to see which areas drive the increase.']
                 : ['Keep it up: follow speed limits and traffic signs even on familiar routes.', 'Check the barangay insights for areas that still need extra care.'],
@@ -314,6 +416,17 @@ class InsightService
                 'highlight' => count($tail),
                 'forecastFrom' => count($tail),
             ]],
+            'causes' => [
+                ['title' => 'Recent months carry forward', 'text' => 'The forecast learns from each barangay\'s recent months, its long-run trend and the season. If the last few months were busy, it expects the next one to be busy too.'],
+                ['title' => 'Where the risk is concentrated', 'text' => sprintf('Most of the expected accidents come from a few barangays: %s.',
+                    implode(', ', array_map(fn ($p) => sprintf('%s (~%d)', $p['barangay'], $p['predictedNextMonth']), array_slice($predictions, 0, 3))))],
+                ['title' => 'What the forecast cannot see', 'text' => 'It does not know about planned road works, events or new enforcement, so the real number can differ.'],
+            ],
+            'solutions' => [
+                'Assign enforcers for next month in proportion to each barangay\'s forecast, starting with the high-risk ones.',
+                'Plan road works, events and closures away from the high-risk barangays during the forecast month.',
+                'Compare the forecast with the actual count each month to see whether actions taken are working.',
+            ],
             'tips' => ['Sign in and open the Forecast page for every barangay and up to 12 months ahead.',
                 'Plan trips through high-risk barangays outside rush hour when you can.'],
         ];
@@ -349,6 +462,8 @@ class InsightService
                 ['label' => 'Late-night share', 'value' => self::share($night, $total)],
             ],
             'charts' => [self::hourChart($city['byHour'], $h)],
+            'causes' => self::hourContext($h)['causes'],
+            'solutions' => self::hourContext($h)['solutions'],
             'tips' => ['Give yourself extra travel time during the rush hours.', 'At night, slow down and watch for pedestrians and unlit vehicles.'],
         ];
     }
@@ -382,6 +497,16 @@ class InsightService
                 ['label' => 'Weekend share', 'value' => self::share($weekend, $total)],
             ],
             'charts' => [self::dayChart($city['byDay'], $d)],
+            'causes' => [
+                ['title' => 'Work and school days', 'text' => 'Weekdays carry commuting, school runs and business deliveries all at once, while Sundays have the fewest trips.'],
+                $d >= 5
+                    ? ['title' => 'Weekend outings', 'text' => 'Malls, churches, markets and night spots draw heavy weekend traffic, with more drinking and late-night driving.']
+                    : ['title' => 'Mid-week peak', 'text' => sprintf('Office attendance, meetings and deliveries tend to peak mid-week, so %s gathers the most vehicles on the road.', self::DAYS[$d])],
+            ],
+            'solutions' => [
+                sprintf('Schedule the most enforcers on %ss and the fewest on %ss, instead of the same strength every day.', self::DAYS[$d], self::DAYS[$quiet]),
+                sprintf('Avoid planned road works and closures on %ss.', self::DAYS[$d]),
+            ],
             'tips' => [sprintf('Be extra careful on %ss, especially during the rush hours.', self::DAYS[$d])],
         ];
     }
@@ -418,6 +543,16 @@ class InsightService
                 'values' => array_column($top, 'total'),
                 'highlight' => 0,
             ]],
+            'causes' => [
+                ['title' => 'Business districts and malls', 'text' => sprintf('The busiest barangays, led by %s, hold business districts, malls and offices that draw people from all over Metro Manila every day.', $first)],
+                ['title' => 'Major roads', 'text' => 'They are crossed by EDSA, Shaw Blvd, Ortigas Ave and Boni Ave, where through-traffic, buses and motorcycles mix with local trips.'],
+                ['title' => 'Many conflict points', 'text' => 'Mall entrances, parking exits, U-turn slots and PUV stops close together create constant merging and crossing.'],
+            ],
+            'solutions' => [
+                sprintf('Concentrate enforcement and road-safety audits on %s and the other top barangays.', $first),
+                'Fix the worst intersections first: signal phasing, clear lane markings, protected pedestrian crossings.',
+                'Work with malls and offices on traffic marshals at their entrances during peak hours.',
+            ],
             'tips' => ['Busy commercial barangays see the most traffic — and the most accidents. Stay alert there.'],
         ];
     }
@@ -456,6 +591,17 @@ class InsightService
                 ['kind' => 'hbars', 'title' => 'Accidents by severity', 'labels' => ['Damage only', 'Injury', 'Fatal'],
                     'values' => [$sev['Damage'], $sev['Injury'], $sev['Fatal']], 'highlight' => 2],
                 self::monthChart($city['severeByMonth'], 'Injury and fatal accidents per month'),
+            ],
+            'causes' => [
+                ['title' => 'Unprotected road users', 'text' => 'Motorcycle riders, cyclists and pedestrians have no protection in a crash, so collisions involving them are far more likely to cause injury or death.'],
+                ['title' => 'Speed', 'text' => 'The faster a vehicle goes, the harder the impact — which is why late-night accidents on empty roads are often the most serious.'],
+                ['title' => 'No helmet or seatbelt', 'text' => 'Riding without a proper helmet or not buckling up turns minor crashes into injuries.'],
+            ],
+            'solutions' => [
+                'Strictly enforce helmet and seatbelt laws, with regular checkpoints.',
+                'Build safer crossings — pedestrian lanes with signals, refuge islands, footbridges where needed.',
+                'Lower and enforce speed limits near schools, markets and residential streets.',
+                'Keep emergency response quick: ambulances and responders stationed near the barangays with the most injuries.',
             ],
             'tips' => ['Always wear a helmet and seatbelt — they turn many injuries into damage-only accidents.',
                 'Slow down near schools, markets and crossings, where pedestrians are most at risk.'],
@@ -496,6 +642,15 @@ class InsightService
                 'highlight' => null,
                 'max' => 100,
             ]],
+            'causes' => array_map(fn ($c) => [
+                'title' => sprintf('%s: %d / 100', $c['name'], $c['score']),
+                'text' => trim($c['why'] . ($c['detail'] !== '' ? ' — ' . $c['detail'] : '') . '.'),
+            ], $categories),
+            'solutions' => array_values(array_filter([
+                $categories === [] ? null : sprintf('Start with the weakest measure, %s, since it pulls the overall score down the most.',
+                    strtolower(array_reduce($categories, fn ($low, $c) => $low === null || $c['score'] < $low['score'] ? $c : $low)['name'])),
+                'Track the index every month after each action to see whether it is working.',
+            ])),
             'tips' => ['Sign in and open the Safety Index page to see each barangay\'s score.'],
         ];
     }
@@ -530,6 +685,15 @@ class InsightService
                 'values' => array_map(fn ($b) => round($b['recentAvg'] - $b['earlierAvg'], 1), $rising),
                 'highlight' => 0,
             ]],
+            'causes' => [
+                ['title' => 'Something changed on the ground', 'text' => 'A steady rise in one barangay usually follows a local change: road works or a closure diverting traffic there, a new development or business drawing crowds, or a new route used by PUVs.'],
+                ['title' => 'Less enforcement', 'text' => 'Enforcers moved elsewhere can leave a barangay with more violations and more crashes.'],
+            ],
+            'solutions' => [
+                'Inspect the rising barangays on the ground to find what changed, using the accident spots on the GIS map.',
+                'Put temporary enforcement there until the monthly count comes back down.',
+                'Check whether any road closure or reroute sent traffic into these barangays, and adjust it.',
+            ],
             'tips' => ['Take extra care when passing through these barangays until the numbers come back down.'],
         ];
     }
@@ -584,6 +748,24 @@ class InsightService
         }
         $tips[] = 'Use the GIS map below to see exactly where these accidents happened.';
 
+        $context = $h === null ? null : self::hourContext($h);
+        $causes = $context ? array_slice($context['causes'], 0, 2) : [];
+        if ($p['total'] / max(1, $cityTotal) >= 0.08) {
+            array_unshift($causes, ['title' => 'A busy part of the city', 'text' => sprintf('%s has %s of all the city\'s accidents — a sign of heavy traffic from major roads, commercial areas or both passing through it.', $name, self::share($p['total'], $cityTotal))]);
+        }
+        if ($pct !== null && $pct >= 25 && $p['recent'] - $p['earlier'] >= 5) {
+            $causes[] = ['title' => 'A recent jump', 'text' => sprintf('Accidents rose %d%% in the last three months. A rise this sharp usually follows a local change such as road works, a closure, a new development or a new PUV route.', $pct)];
+        }
+        if ($p['bySev']['Fatal'] > 0) {
+            $causes[] = ['title' => 'Serious crashes', 'text' => sprintf('Fatal accidents on record here (%s) point to high speeds or unprotected road users — riders and pedestrians.', number_format($p['bySev']['Fatal']))];
+        }
+        $solutions = array_values(array_filter([
+            $h === null ? null : sprintf('Deploy enforcers in %s around %s, the hour with the most accidents here.', $name, self::hourLabel($h)),
+            'Inspect the accident spots on the GIS map: check signs, lane markings, street lights and pedestrian crossings there.',
+            $context['solutions'][1] ?? null,
+            $pct !== null && $pct >= 25 ? 'Find out what changed recently (works, closures, new routes) and correct it while the rise is still fresh.' : null,
+        ]));
+
         return [
             'id' => 'brgy-' . trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($name)), '-'),
             'scope' => 'barangay',
@@ -609,6 +791,8 @@ class InsightService
                 self::monthChart($p['byMonth'], 'Accidents per month in ' . $name),
                 self::hourChart($p['byHour'], $h),
             ],
+            'causes' => $causes,
+            'solutions' => $solutions,
             'tips' => $tips,
         ];
     }

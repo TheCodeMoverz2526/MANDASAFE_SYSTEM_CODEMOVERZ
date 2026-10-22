@@ -21,6 +21,7 @@ const INS_LEVEL = {
   good:  { label: 'Low risk',        cls: 'lv-good' },
   info:  { label: 'Good to know',    cls: 'lv-info' }
 };
+const ACTION_STATUS = { planned: 'Planned', ongoing: 'Ongoing', completed: 'Completed' };
 const SLIDE_MS = 8000;
 const CAROUSEL_INSIGHTS = 12;
 
@@ -280,7 +281,21 @@ function insDetail(s) {
       <div class="ux-text"><p>${esc(s.body)}</p></div>
       <div class="ux-stats">${s.stats.map(x => `<div><span>${esc(x.label)}</span><b>${esc(x.value)}</b></div>`).join('')}</div>
       ${s.charts.map(c => `<figure class="ux-fig"><figcaption>${esc(c.title)}</figcaption>${insightChart(c, false)}</figure>`).join('')}
-      ${s.tips.length ? `<div class="ux-callout ux-callout-tips">${icon('bulb')}<div><b>What you can do</b><ul>${s.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div></div>` : ''}
+      ${(s.causes || []).length ? `
+      <h3>${icon('search')}Why this happens</h3>
+      <p class="ux-note">The accident records say when and where each accident happened, not why. These are the common reasons behind this pattern.</p>
+      <ol class="ux-causes">${s.causes.map(c => `<li><b>${esc(c.title)}</b><span>${esc(c.text)}</span></li>`).join('')}</ol>` : ''}
+      <h3>${icon('bulb')}Possible solutions</h3>
+      <div class="ux-solutions">
+        ${(s.solutions || []).length ? `<div class="ux-sol ux-sol-city"><b>${icon('shield')}What the TPMO and the city can do</b><ul>${s.solutions.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
+        ${s.tips.length ? `<div class="ux-sol ux-sol-you"><b>${icon('user')}What you can do</b><ul>${s.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
+      </div>
+      <h3>${icon('clipboard')}What the TPMO / LGU is doing</h3>
+      ${(s.actions || []).length ? `<ol class="ux-actions-list">${s.actions.map(a => `
+        <li class="act-${esc(a.status)}"><span class="ux-act-dot"></span>
+          <div><div class="ux-act-head"><span class="ux-act-status">${esc(ACTION_STATUS[a.status] || a.status)}</span>${a.date ? `<small>${esc(fmtDate(a.date))}</small>` : ''}</div>
+            <b>${esc(a.title)}</b><div class="ux-act-text">${paragraphs(a.details)}</div></div></li>`).join('')}</ol>`
+        : `<div class="ux-act-empty">${icon('clock')}<span>The TPMO has not posted an action for this yet. Actions taken by the city will be listed here.</span></div>`}
       <p class="ux-foot">Written automatically from ${g ? `${num(g.records)} accident records, ${esc(fmtMonthLong(g.from))} – ${esc(fmtMonthLong(g.to))}` : 'the accident records'}.
         It updates by itself when the TPMO adds new records.</p>
       ${detailActions(s.barangay)}

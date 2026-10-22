@@ -154,6 +154,11 @@ const api = {
     createAnnouncement: (body) => apiRequest('/api/announcements', { method: 'POST', body: JSON.stringify(body) }),
     updateAnnouncement: (id, body) => apiRequest(`/api/announcements/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
     deleteAnnouncement: (id) => apiRequest(`/api/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getInsights: () => apiRequest('/api/insights'),
+    getInsightActions: () => apiRequest('/api/insight-actions'),
+    createInsightAction: (body) => apiRequest('/api/insight-actions', { method: 'POST', body: JSON.stringify(body) }),
+    updateInsightAction: (id, body) => apiRequest(`/api/insight-actions/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
+    deleteInsightAction: (id) => apiRequest(`/api/insight-actions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getNotifications: () => apiRequest('/api/notifications'),
     pollNotifications: (after) => apiRequest(`/api/notifications/poll?after=${encodeURIComponent(after)}`),
     markNotificationRead: (id) => apiRequest(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' }),
@@ -558,7 +563,7 @@ function jumpToIncident(idx) {
 }
 
 // ===== NAVIGATION =====
-const pages = ['home', 'incidents', 'map', 'hotspot', 'forecast', 'safety', 'analytics', 'reports', 'users', 'datarequests', 'announcements', 'notifications', 'settings', 'predictdata'];
+const pages = ['home', 'incidents', 'map', 'hotspot', 'forecast', 'safety', 'analytics', 'reports', 'users', 'datarequests', 'announcements', 'insightactions', 'notifications', 'settings', 'predictdata'];
 function showPage(page) {
     pages.forEach(p => {
         document.getElementById('page-' + p)?.classList.toggle('active', p === page);
@@ -575,6 +580,7 @@ function showPage(page) {
     if (page === 'users') renderUserTable();
     if (page === 'datarequests') loadDataRequests();
     if (page === 'announcements') loadAnnouncements();
+    if (page === 'insightactions') loadInsightActions();
     if (page === 'notifications') renderNotifications();
     if (page === 'settings') populateSettings();
     if (page === 'predictdata') loadPredictionAdminPage();
@@ -4246,6 +4252,198 @@ function deleteAnnouncement(id) {
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.getElementById('announcementModal')?.classList.contains('open')) closeAnnouncementModal();
+});
+
+// ===== INSIGHT ACTIONS =====
+// The homepage insights are written by the server; this page lets the office record what it
+// has done about each one. Actions are keyed by the insight's id (city-hours, brgy-hulo…).
+const IA_LEVEL = {
+    alert: { label: 'Needs attention', bg: '#fef2f2', fg: '#b91c1c' },
+    watch: { label: 'Keep watch', bg: '#fefce8', fg: '#a16207' },
+    good: { label: 'Low risk', bg: '#ecfdf5', fg: '#047857' },
+    info: { label: 'Good to know', bg: '#eff6ff', fg: '#1d4ed8' }
+};
+const IA_STATUS = {
+    planned: { label: 'Planned', bg: '#dbeafe', fg: '#1d4ed8' },
+    ongoing: { label: 'Ongoing', bg: '#fef3c7', fg: '#b45309' },
+    completed: { label: 'Completed', bg: '#dcfce7', fg: '#15803d' }
+};
+let insightList = [];
+let insightActionsById = {};
+let iaInsightId = null;
+let iaEditingId = null;
+
+async function loadInsightActions() {
+    const tbody = document.getElementById('iaTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:26px;text-align:center;color:var(--gray-400);">Loading insights…</td></tr>';
+    try {
+        const [insights, actions] = await Promise.all([api.getInsights(), api.getInsightActions()]);
+        insightList = insights.insights || [];
+        insightActionsById = actions || {};
+    } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="5" style="padding:26px;text-align:center;color:#dc2626;">${escapeMapHtml(error.message)}</td></tr>`;
+        return;
+    }
+    renderInsightActions();
+}
+
+function renderInsightActions() {
+    const tbody = document.getElementById('iaTableBody');
+    if (!tbody) return;
+    const filter = document.getElementById('iaFilter')?.value || 'all';
+    const q = (document.getElementById('iaSearch')?.value || '').trim().toLowerCase();
+    const count = s => (insightActionsById[s.id] || []).length;
+    const rows = insightList.filter(s =>
+        (filter === 'all' || s.scope === filter || (filter === 'none' && !count(s)) || (filter === 'some' && count(s)))
+        && (!q || s.title.toLowerCase().includes(q) || (s.barangay || 'citywide').toLowerCase().includes(q)));
+    const covered = insightList.filter(count).length;
+    document.getElementById('iaSummary').textContent = `${insightList.length} insights · ${covered} with actions posted`;
+
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:26px;text-align:center;color:var(--gray-400);">No insights match.</td></tr>';
+        return;
+    }
+    const h = v => escapeMapHtml(v ?? '');
+    tbody.innerHTML = rows.map(s => {
+        const lv = IA_LEVEL[s.level] || IA_LEVEL.info;
+        const list = insightActionsById[s.id] || [];
+        const latest = list[0];
+        return `
+                <tr class="user-row" title="Manage actions" onclick="openInsightActionModal('${h(s.id)}')">
+                    <td><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--gray-400);">${h(s.topic)}</div>
+                        <div style="font-weight:700;font-size:13px;">${h(s.title)}</div>
+                        <div style="font-size:11px;color:var(--gray-500);">${h(s.headline)}</div></td>
+                    <td style="font-size:12px;">${h(s.scope === 'city' ? 'Citywide' : s.barangay)}</td>
+                    <td><span class="status-badge" style="background:${lv.bg};color:${lv.fg};">${lv.label}</span></td>
+                    <td style="font-size:12px;">${list.length
+                        ? `<b>${list.length}</b><div style="font-size:11px;color:var(--gray-400);max-width:220px;white-space:normal;">Latest: ${h(latest.title)}</div>`
+                        : '<span style="color:var(--gray-400);">None yet</span>'}</td>
+                    <td onclick="event.stopPropagation()"><button class="btn btn-sm btn-primary" onclick="openInsightActionModal('${h(s.id)}')"><i class="fas fa-plus"></i> ${list.length ? 'Manage' : 'Add action'}</button></td>
+                </tr>`;
+    }).join('');
+}
+
+function openInsightActionModal(id) {
+    const s = insightList.find(x => x.id === id);
+    if (!s) return;
+    iaInsightId = id;
+    const h = v => escapeMapHtml(v ?? '');
+    const lv = IA_LEVEL[s.level] || IA_LEVEL.info;
+    document.getElementById('iaModalTitle').textContent = s.scope === 'city' ? 'Citywide insight' : `${s.barangay} insight`;
+    document.getElementById('iaInsight').innerHTML = `
+        <span class="status-badge" style="background:${lv.bg};color:${lv.fg};">${lv.label}</span>
+        <div style="font-weight:800;font-size:15px;margin-top:6px;">${h(s.title)}</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">${h(s.headline)}</div>
+        ${(s.solutions || []).length ? `<div style="margin-top:10px;font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;">Suggested solutions</div>
+        <ul style="margin:4px 0 0 18px;font-size:12px;color:var(--gray-600);">${s.solutions.map(t => `<li>${h(t)}</li>`).join('')}</ul>` : ''}`;
+    renderInsightActionList();
+    resetInsightActionForm();
+    document.getElementById('insightActionModal').classList.add('open');
+}
+
+function closeInsightActionModal() {
+    document.getElementById('insightActionModal').classList.remove('open');
+}
+
+function renderInsightActionList() {
+    const list = insightActionsById[iaInsightId] || [];
+    const h = v => escapeMapHtml(v ?? '');
+    document.getElementById('iaList').innerHTML = list.length ? list.map(a => {
+        const st = IA_STATUS[a.status] || IA_STATUS.ongoing;
+        return `<div class="ia-item">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span class="status-badge" style="background:${st.bg};color:${st.fg};">${st.label}</span>
+                ${a.date ? `<span style="font-size:11px;color:var(--gray-400);">${h(a.date)}</span>` : ''}
+                <div style="margin-left:auto;display:flex;gap:5px;">
+                    <button class="btn btn-sm btn-secondary" title="Edit" onclick="editInsightAction(${Number(a.id)})"><i class="fas fa-pen"></i></button>
+                    <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" title="Delete" onclick="deleteInsightAction(${Number(a.id)})"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>
+            <div style="font-weight:700;font-size:13px;margin-top:6px;">${h(a.title)}</div>
+            <div style="font-size:12px;color:var(--gray-600);white-space:pre-wrap;margin-top:2px;">${h(a.details)}</div>
+            <div style="font-size:10px;color:var(--gray-400);margin-top:4px;">Posted by ${h(a.createdBy || '—')}${a.updatedBy ? ` · edited by ${h(a.updatedBy)}` : ''}</div>
+        </div>`;
+    }).join('') : '<div style="font-size:12px;color:var(--gray-400);padding:6px 0 4px;">No action posted yet. The public sees "The TPMO has not posted an action for this yet."</div>';
+}
+
+function resetInsightActionForm() {
+    iaEditingId = null;
+    ['iaTitle', 'iaDetails', 'iaDate'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('iaStatus').value = 'ongoing';
+    document.getElementById('iaError').textContent = '';
+    document.getElementById('iaFormLabel').textContent = 'Post a new action';
+    document.getElementById('iaCancelEdit').style.display = 'none';
+    document.getElementById('iaSaveBtn').innerHTML = '<i class="fas fa-paper-plane"></i> Post Action';
+}
+
+function editInsightAction(id) {
+    const a = (insightActionsById[iaInsightId] || []).find(x => Number(x.id) === id);
+    if (!a) return;
+    iaEditingId = id;
+    document.getElementById('iaTitle').value = a.title;
+    document.getElementById('iaDetails').value = a.details;
+    document.getElementById('iaDate').value = a.date || '';
+    document.getElementById('iaStatus').value = a.status;
+    document.getElementById('iaFormLabel').textContent = 'Edit action';
+    document.getElementById('iaCancelEdit').style.display = '';
+    document.getElementById('iaSaveBtn').innerHTML = '<i class="fas fa-save"></i> Save Changes';
+    document.getElementById('iaTitle').focus();
+}
+
+async function saveInsightAction() {
+    const body = {
+        insightId: iaInsightId,
+        title: document.getElementById('iaTitle').value.trim(),
+        details: document.getElementById('iaDetails').value.trim(),
+        status: document.getElementById('iaStatus').value,
+        date: document.getElementById('iaDate').value
+    };
+    const error = document.getElementById('iaError');
+    if (!body.title || !body.details) { error.textContent = 'Please say what was done and add the details.'; return; }
+    const btn = document.getElementById('iaSaveBtn');
+    btn.disabled = true;
+    try {
+        const wasEditing = iaEditingId !== null;
+        const saved = wasEditing ? await api.updateInsightAction(iaEditingId, body) : await api.createInsightAction(body);
+        const list = (insightActionsById[iaInsightId] || []).filter(a => Number(a.id) !== Number(saved.id));
+        list.push(saved);
+        // Newest date first, as the homepage lists them.
+        list.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.id - a.id);
+        insightActionsById[iaInsightId] = list;
+        renderInsightActionList();
+        renderInsightActions();
+        resetInsightActionForm();
+        showToast(wasEditing ? '✅ Action updated' : '✅ Action posted — it now shows on the homepage');
+    } catch (e) {
+        error.textContent = e.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function deleteInsightAction(id) {
+    const a = (insightActionsById[iaInsightId] || []).find(x => Number(x.id) === id);
+    if (!a) return;
+    openConfirmModal({
+        title: 'Delete this action?',
+        message: `"${a.title}" will be removed from the homepage insight.`,
+        icon: 'fas fa-trash-alt', danger: true, confirmLabel: 'Delete',
+        onConfirm: async () => {
+            try {
+                await api.deleteInsightAction(id);
+                insightActionsById[iaInsightId] = (insightActionsById[iaInsightId] || []).filter(x => Number(x.id) !== id);
+                renderInsightActionList();
+                renderInsightActions();
+                if (iaEditingId === id) resetInsightActionForm();
+                showToast('🗑️ Action deleted');
+            } catch (e) { showToast(e.message); }
+        }
+    });
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('insightActionModal')?.classList.contains('open')) closeInsightActionModal();
 });
 
 // ===== INIT =====

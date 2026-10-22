@@ -2717,3 +2717,7 @@ a.auth-back:hover { text-decoration: underline; }
 .ann-publish b { display: block; font-size: 12.5px; }
 .ann-publish small { display: block; font-size: 11px; color: var(--gray-400); }
 @media (max-width: 600px) { .ann-types { grid-template-columns: 1fr; } }
+
+/* ===== INSIGHT ACTIONS (admin) ===== */
+.ia-insight { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px; padding: 12px 14px; }
+.ia-item { border: 1px solid var(--gray-200); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }

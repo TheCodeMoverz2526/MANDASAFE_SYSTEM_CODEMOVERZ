@@ -52,10 +52,25 @@ class AnalyticsController extends ApiController
         return response()->json($this->analytics->summary());
     }
 
-    /** GET /api/insights — the homepage Insight card: findings for the city and each barangay. */
+    /**
+     * GET /api/insights — the homepage Insight card: findings for the city and each barangay,
+     * each with what the TPMO has posted about it. The findings are cached with the data; the
+     * actions are read fresh, so one an administrator just posted shows straight away.
+     */
     public function insights()
     {
-        return response()->json($this->analytics->insights());
+        $result = $this->analytics->insights();
+        // A database not yet migrated has no actions table; the insights still show without them.
+        try {
+            $actions = \App\Models\InsightAction::byInsight();
+        } catch (\Illuminate\Database\QueryException) {
+            $actions = [];
+        }
+        foreach ($result['insights'] as &$insight) {
+            $insight['actions'] = $actions[$insight['id']] ?? [];
+        }
+
+        return response()->json($result);
     }
 
     /** GET /api/hotspots/barangays — every barangay ranked by accident density. */

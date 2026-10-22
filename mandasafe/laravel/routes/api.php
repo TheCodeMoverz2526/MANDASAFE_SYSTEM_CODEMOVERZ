@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DataRequestController;
 use App\Http\Controllers\Api\IncidentController;
+use App\Http\Controllers\Api\InsightActionController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PredictionInputController;
 use Illuminate\Support\Facades\Route;
@@ -106,6 +107,11 @@ Route::middleware('rimas.admin')->group(function () {
     Route::get('/accounts/{id}', [AccountController::class, 'show']);
     Route::put('/accounts/{id}', [AccountController::class, 'update']);
     Route::delete('/accounts/{id}', [AccountController::class, 'destroy']);
+
+    Route::get('/insight-actions', [InsightActionController::class, 'index']);
+    Route::post('/insight-actions', [InsightActionController::class, 'store']);
+    Route::put('/insight-actions/{id}', [InsightActionController::class, 'update']);
+    Route::delete('/insight-actions/{id}', [InsightActionController::class, 'destroy']);
 
     Route::get('/announcements/all', [AnnouncementController::class, 'all']);
     Route::post('/announcements', [AnnouncementController::class, 'store']);

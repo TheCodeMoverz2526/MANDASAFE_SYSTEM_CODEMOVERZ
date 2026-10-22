@@ -60,6 +60,8 @@
                     style="margin-left:auto;background:#2563eb;color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;display:none;"></span></a>
             <a class="sidebar-item admin-only" onclick="showPage('announcements')" id="sb-announcements" style="display:none;"><i
                     class="fas fa-bullhorn"></i> Announcements</a>
+            <a class="sidebar-item admin-only" onclick="showPage('insightactions')" id="sb-insightactions" style="display:none;"><i
+                    class="fas fa-clipboard-check"></i> Insight Actions</a>
             <a class="sidebar-item admin-only" onclick="showPage('users')" id="sb-users" style="display:none;"><i
                     class="fas fa-users-cog"></i> User Management</a>
             <a class="sidebar-item" onclick="showPage('notifications')" id="sb-notifications"><i
@@ -1041,6 +1043,49 @@
                 </div>
             </div>
 
+            <!-- ===== INSIGHT ACTIONS (Admin) ===== -->
+            <div class="page" id="page-insightactions">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Insight Actions</span></div>
+                    <div class="page-actions">
+                        <input class="filter-select" id="iaSearch" placeholder="Search insight or barangay…" oninput="renderInsightActions()" style="min-width:200px;">
+                        <select class="filter-select" id="iaFilter" onchange="renderInsightActions()">
+                            <option value="all">All insights</option>
+                            <option value="city">Citywide</option>
+                            <option value="barangay">Barangays</option>
+                            <option value="none">No action posted yet</option>
+                            <option value="some">With actions</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="loadInsightActions()"><i class="fas fa-rotate"></i> Refresh</button>
+                    </div>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><i class="fas fa-clipboard-check"
+                                    style="color:var(--blue);margin-right:6px;"></i>What the TPMO / LGU Is Doing</span>
+                            <span id="iaSummary" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
+                        <p style="font-size:12px;color:var(--gray-500);margin:0;padding:10px 18px 0;">Insights are written automatically from the
+                            accident records. Post here what the office or the city has done about each one — it appears under
+                            "What the TPMO / LGU is doing" when the public opens that insight on the homepage.</p>
+                        <div style="overflow-x:auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Insight</th>
+                                        <th>Area</th>
+                                        <th>Level</th>
+                                        <th>Actions posted</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="iaTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- ===== NOTIFICATIONS ===== -->
             <div class="page" id="page-notifications">
                 <div class="page-header">
@@ -1393,6 +1438,51 @@
             </div>
             <div class="modal-footer"><button class="btn btn-secondary" onclick="closeAnnouncementModal()">Cancel</button><button
                     class="btn btn-primary" id="annSaveBtn" onclick="saveAnnouncement()"><i class="fas fa-paper-plane"></i> Publish</button></div>
+        </div>
+    </div>
+
+    <!-- Actions taken for one insight: list + add/edit form -->
+    <div class="modal-overlay" id="insightActionModal">
+        <div class="modal ann-modal">
+            <div class="modal-header">
+                <div class="modal-title" id="iaModalTitle">Insight Actions</div><button class="modal-close"
+                    onclick="closeInsightActionModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="iaInsight" class="ia-insight"></div>
+                <div class="section-label">Actions posted</div>
+                <div id="iaList"></div>
+                <div class="section-label" id="iaFormLabel">Post a new action</div>
+                <div class="form-group">
+                    <label class="form-label" for="iaTitle">What was done <span style="color:#dc2626;">*</span></label>
+                    <input class="form-input" id="iaTitle" maxlength="150" placeholder="e.g. Traffic enforcers posted at school zones from 2:30 to 5 PM">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="iaStatus">Status <span style="color:#dc2626;">*</span></label>
+                        <select class="form-select" id="iaStatus">
+                            <option value="planned">Planned</option>
+                            <option value="ongoing" selected>Ongoing</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="iaDate">Date started / done</label>
+                        <input type="date" class="form-input" id="iaDate">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="iaDetails">Details <span style="color:#dc2626;">*</span></label>
+                    <textarea class="form-textarea" id="iaDetails" rows="4" maxlength="3000"
+                        placeholder="Where, who is involved (TPMO, barangay, PNP, DPWH…), and what the public should expect. Leave a blank line between paragraphs."></textarea>
+                </div>
+                <div id="iaError" style="color:#dc2626;font-size:12px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="iaCancelEdit" style="display:none;margin-right:auto;" onclick="resetInsightActionForm()">Cancel edit</button>
+                <button class="btn btn-secondary" onclick="closeInsightActionModal()">Close</button>
+                <button class="btn btn-primary" id="iaSaveBtn" onclick="saveInsightAction()"><i class="fas fa-paper-plane"></i> Post Action</button>
+            </div>
         </div>
     </div>
 

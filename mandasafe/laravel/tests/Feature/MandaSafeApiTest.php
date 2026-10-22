@@ -970,6 +970,28 @@ class MandaSafeApiTest extends TestCase
         foreach ($result['insights'] as $insight) {
             $this->assertNotEmpty($insight['charts']);
             $this->assertContains($insight['level'], ['alert', 'watch', 'good', 'info']);
+            $this->assertSame([], $insight['actions']);
         }
+        // 5 PM falls in the evening rush, so that is what the causes describe.
+        $this->assertContains('Peak traffic going home', array_column($byId['city-hours']['causes'], 'title'));
+        $this->assertNotEmpty($byId['city-hours']['solutions']);
+        $this->assertNotEmpty($byId['brgy-plainview']['solutions']);
+
+        // An action the office posts appears inside its insight straight away.
+        $admin = $this->adminHeaders();
+        $this->postJson('/api/insight-actions', ['insightId' => 'city-hours', 'title' => 'Enforcers at 5 PM', 'details' => 'At Shaw–Boni.', 'status' => 'ongoing'])
+            ->assertStatus(401);
+        $this->postJson('/api/insight-actions', ['insightId' => 'nope', 'title' => 'x', 'details' => 'y', 'status' => 'ongoing'], $admin)->assertStatus(400);
+        $action = $this->postJson('/api/insight-actions', ['insightId' => 'city-hours', 'title' => 'Enforcers at 5 PM',
+            'details' => 'At Shaw–Boni.', 'status' => 'ongoing', 'date' => '2026-10-01'], $admin)->assertStatus(201)->json();
+
+        $hours = collect($this->getJson('/api/insights')->json('insights'))->firstWhere('id', 'city-hours');
+        $this->assertSame(['Enforcers at 5 PM'], array_column($hours['actions'], 'title'));
+        $this->assertArrayNotHasKey('createdBy', $hours['actions'][0]);
+
+        $this->putJson("/api/insight-actions/{$action['id']}", ['insightId' => 'city-hours', 'title' => 'Enforcers at 5 PM',
+            'details' => 'Done.', 'status' => 'completed'], $admin)->assertOk()->assertJson(['status' => 'completed']);
+        $this->deleteJson("/api/insight-actions/{$action['id']}", [], $admin)->assertOk();
+        $this->assertSame(0, \App\Models\InsightAction::count());
     }
 }

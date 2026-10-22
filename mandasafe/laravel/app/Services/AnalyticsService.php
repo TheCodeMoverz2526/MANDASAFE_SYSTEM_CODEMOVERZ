@@ -22,7 +22,7 @@ class AnalyticsService
      * Bumped whenever the shape of a cached result changes (e.g. predictions gaining the
      * 24-month forecastPath), so old cache entries are ignored instead of served for a day.
      */
-    private const CACHE_SCHEMA = 7;
+    private const CACHE_SCHEMA = 8;
 
     /** Incidents as plain rows, newest first — the shape the ported algorithms expect. */
     public function incidents(): array
