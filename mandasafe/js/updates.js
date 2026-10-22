@@ -255,12 +255,11 @@ function annDetail(a) {
       ${a.photos.length ? `<button type="button" class="ux-gal-main" aria-label="View photo at full size">
           <img src="${esc(a.photos[0].url)}" alt="${esc(a.photos[0].caption || a.title)}"><span class="ux-zoom">${icon('expand')}</span></button>
         ${many ? `<button type="button" class="ux-nav ux-prev" aria-label="Previous photo">${icon('chevL')}</button>
-          <button type="button" class="ux-nav ux-next" aria-label="Next photo">${icon('chevR')}</button>` : ''}
+          <button type="button" class="ux-nav ux-next" aria-label="Next photo">${icon('chevR')}</button>
+          <span class="ux-gal-count">1 / ${a.photos.length}</span>` : ''}
         <p class="ux-gal-cap"${a.photos[0].caption ? '' : ' hidden'}>${esc(a.photos[0].caption || '')}</p>`
       : `<div class="ux-noimg ${cat.cls}">${icon(cat.icon)}<small>No photo attached</small></div>`}
     </div>
-    ${many ? `<div class="ux-thumbs">${a.photos.map((p, i) => `<button type="button" data-n="${i}" aria-label="Photo ${i + 1}"${i ? '' : ' class="on"'}>
-        <img src="${esc(p.url)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
     <div class="ux-detail-in">
       <div class="ux-tags-row"><span class="ux-tag ${cat.cls}">${icon(cat.icon)}${cat.label}</span>
         <span class="ux-tag st-${a.state}">${ANN_STATE[a.state] || ''}</span></div>
@@ -317,18 +316,17 @@ function setUpGallery(root, a) {
   if (!a.photos.length) return;
   let at = 0;
   const img = root.querySelector('.ux-gal-main img'), cap = root.querySelector('.ux-gal-cap');
-  const thumbs = [...root.querySelectorAll('.ux-thumbs button')];
+  const count = root.querySelector('.ux-gal-count');
   const show = n => {
     at = (n + a.photos.length) % a.photos.length;
     img.src = a.photos[at].url;
     img.alt = a.photos[at].caption || a.title;
     cap.textContent = a.photos[at].caption || '';
     cap.hidden = !a.photos[at].caption;
-    thumbs.forEach((t, i) => t.classList.toggle('on', i === at));
+    if (count) count.textContent = `${at + 1} / ${a.photos.length}`;
   };
   root.querySelector('.ux-gallery .ux-prev')?.addEventListener('click', () => show(at - 1));
   root.querySelector('.ux-gallery .ux-next')?.addEventListener('click', () => show(at + 1));
-  thumbs.forEach(t => t.addEventListener('click', () => show(+t.dataset.n)));
   root.querySelector('.ux-gal-main').addEventListener('click', () => openLightbox(a.photos, at));
 }
 
