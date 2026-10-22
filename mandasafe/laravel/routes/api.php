@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AnalyticsController;
+use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DataRequestController;
 use App\Http\Controllers\Api\IncidentController;
@@ -21,7 +22,8 @@ use Illuminate\Support\Facades\Route;
 | Reading is open, writing is not:
 |
 |   GET  /api/summary, /api/incidents, /api/predictions, /api/hotspots, /api/stats  everyone
-|   POST/PUT/DELETE incidents, prediction inputs, accounts                          admins
+|   GET  /api/insights, /api/announcements                                          everyone
+|   POST/PUT/DELETE incidents, prediction inputs, accounts, announcements           admins
 |
 | A resident who types the admin URL is sent back to their dashboard, and the server rejects
 | the write anyway — the role is read from the database on every request, not from the browser.
@@ -33,6 +35,7 @@ Route::get('/predictions', [AnalyticsController::class, 'predictions']);
 Route::get('/predictions/barangays', [AnalyticsController::class, 'barangayPredictions']);
 Route::get('/stats', [AnalyticsController::class, 'stats']);
 Route::get('/summary', [AnalyticsController::class, 'summary']);
+Route::get('/insights', [AnalyticsController::class, 'insights']);
 Route::get('/data-version', [AnalyticsController::class, 'dataVersion']);
 Route::get('/hotspots', [AnalyticsController::class, 'hotspots']);
 Route::get('/hotspots/barangays', [AnalyticsController::class, 'barangayHotspots']);
@@ -49,6 +52,10 @@ Route::post('/send-otp', [AnalyticsController::class, 'sendOtp']);
 
 Route::get('/incidents', [IncidentController::class, 'index']);
 Route::get('/prediction-inputs', [PredictionInputController::class, 'index']);
+
+/* ---------- homepage announcements: road closures, reroutes, warnings ---------- */
+Route::get('/announcements', [AnnouncementController::class, 'index']);
+Route::get('/announcements/photos/{id}', [AnnouncementController::class, 'photo'])->whereNumber('id');
 
 /* ---------- the resident bell: any signed-in account (checked in the controller) ---------- */
 Route::get('/alerts', [AlertController::class, 'index']);
@@ -99,6 +106,11 @@ Route::middleware('rimas.admin')->group(function () {
     Route::get('/accounts/{id}', [AccountController::class, 'show']);
     Route::put('/accounts/{id}', [AccountController::class, 'update']);
     Route::delete('/accounts/{id}', [AccountController::class, 'destroy']);
+
+    Route::get('/announcements/all', [AnnouncementController::class, 'all']);
+    Route::post('/announcements', [AnnouncementController::class, 'store']);
+    Route::put('/announcements/{id}', [AnnouncementController::class, 'update']);
+    Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
 
     Route::get('/data-requests/all', [DataRequestController::class, 'all']);
     Route::put('/data-requests/{id}', [DataRequestController::class, 'update']);

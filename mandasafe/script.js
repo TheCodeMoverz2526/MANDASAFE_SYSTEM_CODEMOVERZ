@@ -150,6 +150,10 @@ const api = {
     deleteAccount: (id) => apiRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getDataRequests: () => apiRequest('/api/data-requests/all'),
     updateDataRequest: (id, status, reason) => apiRequest(`/api/data-requests/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ status, reason }) }),
+    getAnnouncements: () => apiRequest('/api/announcements/all'),
+    createAnnouncement: (body) => apiRequest('/api/announcements', { method: 'POST', body: JSON.stringify(body) }),
+    updateAnnouncement: (id, body) => apiRequest(`/api/announcements/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
+    deleteAnnouncement: (id) => apiRequest(`/api/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     getNotifications: () => apiRequest('/api/notifications'),
     pollNotifications: (after) => apiRequest(`/api/notifications/poll?after=${encodeURIComponent(after)}`),
     markNotificationRead: (id) => apiRequest(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' }),
@@ -554,7 +558,7 @@ function jumpToIncident(idx) {
 }
 
 // ===== NAVIGATION =====
-const pages = ['home', 'incidents', 'map', 'hotspot', 'forecast', 'safety', 'analytics', 'reports', 'users', 'datarequests', 'notifications', 'settings', 'predictdata'];
+const pages = ['home', 'incidents', 'map', 'hotspot', 'forecast', 'safety', 'analytics', 'reports', 'users', 'datarequests', 'announcements', 'notifications', 'settings', 'predictdata'];
 function showPage(page) {
     pages.forEach(p => {
         document.getElementById('page-' + p)?.classList.toggle('active', p === page);
@@ -570,6 +574,7 @@ function showPage(page) {
     if (page === 'incidents') renderTable(true);
     if (page === 'users') renderUserTable();
     if (page === 'datarequests') loadDataRequests();
+    if (page === 'announcements') loadAnnouncements();
     if (page === 'notifications') renderNotifications();
     if (page === 'settings') populateSettings();
     if (page === 'predictdata') loadPredictionAdminPage();
@@ -3980,6 +3985,268 @@ function today() {
     const d = new Date();
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
+
+// ===== ANNOUNCEMENTS =====
+// Road closures, reroutes and warnings for the public homepage's Announcement card.
+// Photos are shrunk in the browser before upload (longest side 1600 px, JPEG), so a
+// phone photo of several megabytes goes up as a few hundred kilobytes.
+const ANN_TYPES = {
+    closure: { label: 'Road Closure', icon: 'fa-ban', bg: '#fef2f2', fg: '#b91c1c' },
+    reroute: { label: 'Rerouting', icon: 'fa-route', bg: '#fff7ed', fg: '#c2410c' },
+    warning: { label: 'Road Warning', icon: 'fa-triangle-exclamation', bg: '#fefce8', fg: '#a16207' }
+};
+const ANN_STATES = {
+    active: { label: 'In effect', bg: '#ecfdf5', fg: '#047857' },
+    upcoming: { label: 'Upcoming', bg: '#eff6ff', fg: '#1d4ed8' },
+    ended: { label: 'Ended', bg: '#f1f5f9', fg: '#475569' },
+    draft: { label: 'Hidden', bg: '#f1f5f9', fg: '#64748b' }
+};
+const ANN_MAX_PHOTOS = 6;
+const ANN_PHOTO_EDGE = 1600;
+let announcementList = [];
+let editingAnnouncementId = null;
+let annPhotos = [];   // [{ id, url } saved | { data } new], in display order
+
+async function loadAnnouncements() {
+    const tbody = document.getElementById('annTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);">Loading…</td></tr>';
+    try {
+        announcementList = await api.getAnnouncements();
+    } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:26px;text-align:center;color:#dc2626;">${escapeMapHtml(error.message)}</td></tr>`;
+        return;
+    }
+    renderAnnouncements();
+}
+
+function announcementState(a) { return a.published ? a.state : 'draft'; }
+
+function fmtAnnWhen(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? value : d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function renderAnnouncements() {
+    const tbody = document.getElementById('annTableBody');
+    if (!tbody) return;
+    const filter = document.getElementById('annFilter')?.value || 'all';
+    const rows = filter === 'all' ? announcementList : announcementList.filter(a => announcementState(a) === filter);
+    const live = announcementList.filter(a => a.published && a.state !== 'ended').length;
+    document.getElementById('annSummary').textContent = `${announcementList.length} total · ${live} showing on the homepage`;
+
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--gray-400);">${announcementList.length ? 'No announcements with this status.' : 'No announcements yet. Click New Announcement to post a road closure, reroute or warning.'}</td></tr>`;
+        return;
+    }
+    const h = v => escapeMapHtml(v ?? '');
+    tbody.innerHTML = rows.map(a => {
+        const t = ANN_TYPES[a.category] || ANN_TYPES.warning;
+        const st = ANN_STATES[announcementState(a)];
+        const id = Number(a.id);
+        return `
+                <tr class="user-row" title="Edit" onclick="openAnnouncementModal(${id})">
+                    <td><div style="display:flex;gap:10px;align-items:center;">
+                        ${a.photos.length ? `<img src="${h(a.photos[0].url)}" alt="" style="width:54px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">`
+                            : `<span style="width:54px;height:40px;border-radius:6px;background:${t.bg};color:${t.fg};display:grid;place-items:center;flex-shrink:0;"><i class="fas ${t.icon}"></i></span>`}
+                        <div style="min-width:0;"><div style="font-weight:700;font-size:13px;">${h(a.title)}</div>
+                        <div style="font-size:11px;color:var(--gray-500);max-width:320px;white-space:normal;">${h(a.summary)}</div>
+                        <div style="font-size:10px;color:var(--gray-400);">${a.photos.length} photo${a.photos.length === 1 ? '' : 's'} · posted by ${h(a.createdBy || '—')}</div></div></div></td>
+                    <td><span class="status-badge" style="background:${t.bg};color:${t.fg};"><i class="fas ${t.icon}"></i> ${t.label}</span></td>
+                    <td style="font-size:12px;"><div>${h(a.location)}</div><div style="font-size:11px;color:var(--gray-400);">${h(a.barangay || 'Citywide')}</div></td>
+                    <td style="font-size:12px;white-space:nowrap;"><div>${fmtAnnWhen(a.startsAt)}</div><div style="font-size:11px;color:var(--gray-400);">${a.endsAt ? 'to ' + fmtAnnWhen(a.endsAt) : 'until further notice'}</div></td>
+                    <td><span class="status-badge" style="background:${st.bg};color:${st.fg};">${st.label}</span></td>
+                    <td onclick="event.stopPropagation()"><div style="display:flex;gap:5px;">
+                        <a class="btn btn-sm btn-secondary" title="View on the homepage" href="index.html#announcement-${id}" target="_blank" rel="noopener"><i class="fas fa-eye"></i></a>
+                        <button class="btn btn-sm btn-secondary" title="Edit" onclick="openAnnouncementModal(${id})"><i class="fas fa-pen"></i></button>
+                        <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" title="Delete" onclick="deleteAnnouncement(${id})"><i class="fas fa-trash-alt"></i></button>
+                    </div></td>
+                </tr>`;
+    }).join('');
+}
+
+// The barangay list comes from the official boundary file, so names match the server's check.
+let annBarangaysLoaded = false;
+async function fillAnnouncementBarangays() {
+    if (annBarangaysLoaded) return;
+    try {
+        const geo = await (await fetch('/api/barangays')).json();
+        const names = [...new Set(geo.features.map(f => f.properties?.brgy_name || f.properties?.name).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        document.getElementById('annBarangay').insertAdjacentHTML('beforeend',
+            names.map(n => `<option value="${escapeMapHtml(n)}">${escapeMapHtml(n)}</option>`).join(''));
+        annBarangaysLoaded = true;
+    } catch { /* the field still works as "Citywide" */ }
+}
+
+function toLocalInput(date) {
+    const p = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
+async function openAnnouncementModal(id) {
+    const a = id ? announcementList.find(x => Number(x.id) === id) : null;
+    editingAnnouncementId = a ? Number(a.id) : null;
+    await fillAnnouncementBarangays();
+    document.getElementById('annModalTitle').textContent = a ? 'Edit Announcement' : 'New Announcement';
+    document.querySelectorAll('input[name="annCategory"]').forEach(r => { r.checked = r.value === (a?.category || 'closure'); });
+    document.getElementById('annTitle').value = a?.title || '';
+    document.getElementById('annLocation').value = a?.location || '';
+    document.getElementById('annBarangay').value = a?.barangay || '';
+    document.getElementById('annStarts').value = a?.startsAt || toLocalInput(new Date());
+    document.getElementById('annEnds').value = a?.endsAt || '';
+    document.getElementById('annSummaryText').value = a?.summary || '';
+    document.getElementById('annDetails').value = a?.details || '';
+    document.getElementById('annReroute').value = a?.reroute || '';
+    document.getElementById('annPublished').checked = a ? a.published : true;
+    document.getElementById('annError').textContent = '';
+    annPhotos = (a?.photos || []).map(p => ({ id: p.id, url: p.url, caption: p.caption || '' }));
+    renderAnnouncementPhotos();
+    updateAnnouncementForm();
+    document.getElementById('announcementModal').classList.add('open');
+}
+
+function closeAnnouncementModal() {
+    document.getElementById('announcementModal').classList.remove('open');
+}
+
+function updateAnnouncementForm() {
+    const type = document.querySelector('input[name="annCategory"]:checked')?.value || 'closure';
+    document.querySelectorAll('.ann-type').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
+    document.getElementById('annRerouteLabel').textContent = type === 'warning' ? 'Suggested route (optional)' : 'Alternate route';
+    const editing = editingAnnouncementId !== null;
+    document.getElementById('annSaveBtn').innerHTML = `<i class="fas ${editing ? 'fa-save' : 'fa-paper-plane'}"></i> ${editing ? 'Save Changes' : 'Publish'}`;
+}
+
+function renderAnnouncementPhotos() {
+    const wrap = document.getElementById('annPhotos');
+    const h = v => escapeMapHtml(v ?? '');
+    wrap.innerHTML = annPhotos.map((p, i) => `
+        <div class="ann-photo">
+            <img src="${h(p.url || p.data)}" alt="">
+            ${i === 0 ? '<span class="ann-cover">Cover</span>' : ''}
+            <div class="ann-photo-tools">
+                ${i > 0 ? `<button type="button" title="Move earlier" onclick="moveAnnouncementPhoto(${i},-1)"><i class="fas fa-arrow-left"></i></button>` : ''}
+                ${i < annPhotos.length - 1 ? `<button type="button" title="Move later" onclick="moveAnnouncementPhoto(${i},1)"><i class="fas fa-arrow-right"></i></button>` : ''}
+                <button type="button" title="Remove photo" onclick="removeAnnouncementPhoto(${i})"><i class="fas fa-trash-alt"></i></button>
+            </div>
+            <input class="ann-caption" placeholder="Caption (optional)" maxlength="200" value="${h(p.caption)}" oninput="annPhotos[${i}].caption=this.value">
+        </div>`).join('')
+        + (annPhotos.length < ANN_MAX_PHOTOS ? `<button type="button" class="ann-add-photo" onclick="document.getElementById('annPhotoInput').click()">
+            <i class="fas fa-camera"></i><span>Add photos</span><small>JPEG, PNG or WebP</small></button>` : '');
+}
+
+function moveAnnouncementPhoto(i, step) {
+    const [p] = annPhotos.splice(i, 1);
+    annPhotos.splice(i + step, 0, p);
+    renderAnnouncementPhotos();
+}
+
+function removeAnnouncementPhoto(i) {
+    annPhotos.splice(i, 1);
+    renderAnnouncementPhotos();
+}
+
+// Draws the photo onto a canvas no larger than ANN_PHOTO_EDGE and exports it as JPEG.
+function shrinkPhoto(file) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, ANN_PHOTO_EDGE / Math.max(img.width, img.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';   // transparent PNG areas would turn black in a JPEG
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`${file.name} could not be read as an image.`)); };
+        img.src = url;
+    });
+}
+
+async function addAnnouncementPhotos(files) {
+    const error = document.getElementById('annError');
+    error.textContent = '';
+    const room = ANN_MAX_PHOTOS - annPhotos.length;
+    const picked = [...files].filter(f => /^image\/(jpeg|png|webp)$/.test(f.type));
+    if (picked.length < files.length) error.textContent = 'Only JPEG, PNG and WebP photos can be added.';
+    if (picked.length > room) error.textContent = `Only ${ANN_MAX_PHOTOS} photos are allowed; the first ${room} were added.`;
+    for (const file of picked.slice(0, room)) {
+        try { annPhotos.push({ data: await shrinkPhoto(file), caption: '' }); }
+        catch (e) { error.textContent = e.message; }
+    }
+    document.getElementById('annPhotoInput').value = '';
+    renderAnnouncementPhotos();
+}
+
+async function saveAnnouncement() {
+    const val = id => document.getElementById(id).value.trim();
+    const error = document.getElementById('annError');
+    const body = {
+        category: document.querySelector('input[name="annCategory"]:checked')?.value,
+        title: val('annTitle'),
+        location: val('annLocation'),
+        barangay: val('annBarangay'),
+        startsAt: val('annStarts'),
+        endsAt: val('annEnds'),
+        summary: val('annSummaryText'),
+        details: val('annDetails'),
+        reroute: val('annReroute'),
+        published: document.getElementById('annPublished').checked,
+        photos: annPhotos.map(p => p.id ? { id: p.id, caption: p.caption } : { data: p.data, caption: p.caption })
+    };
+    const missing = [['title', 'a title'], ['location', 'the road or area'], ['startsAt', 'a start date and time'], ['summary', 'a short summary'], ['details', 'the full details']]
+        .filter(([k]) => !body[k]).map(([, label]) => label);
+    if (missing.length) { error.textContent = `Please add ${missing.join(', ')}.`; return; }
+    if (body.endsAt && body.endsAt <= body.startsAt) { error.textContent = 'The end must be after the start.'; return; }
+    if (body.category === 'closure' && !body.reroute) { error.textContent = 'Please give an alternate route for the road closure.'; return; }
+
+    const btn = document.getElementById('annSaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+    try {
+        const saved = editingAnnouncementId !== null
+            ? await api.updateAnnouncement(editingAnnouncementId, body)
+            : await api.createAnnouncement(body);
+        const at = announcementList.findIndex(a => Number(a.id) === Number(saved.id));
+        if (at >= 0) announcementList[at] = saved; else announcementList.unshift(saved);
+        closeAnnouncementModal();
+        renderAnnouncements();
+        showToast(editingAnnouncementId !== null ? '✅ Announcement updated' : (saved.published ? '📢 Announcement published' : '✅ Saved as a hidden draft'));
+    } catch (e) {
+        error.textContent = e.message;
+    } finally {
+        btn.disabled = false;
+        updateAnnouncementForm();
+    }
+}
+
+function deleteAnnouncement(id) {
+    const a = announcementList.find(x => Number(x.id) === id);
+    if (!a) return;
+    openConfirmModal({
+        title: 'Delete this announcement?',
+        message: `"${a.title}" and its photos will be removed from the homepage for good. To only take it down for now, edit it and untick Publish instead.`,
+        icon: 'fas fa-trash-alt', danger: true, confirmLabel: 'Delete',
+        onConfirm: async () => {
+            try {
+                await api.deleteAnnouncement(id);
+                announcementList = announcementList.filter(x => Number(x.id) !== id);
+                renderAnnouncements();
+                showToast('🗑️ Announcement deleted');
+            } catch (e) { showToast(e.message); }
+        }
+    });
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('announcementModal')?.classList.contains('open')) closeAnnouncementModal();
+});
 
 // ===== INIT =====
 renderTable();

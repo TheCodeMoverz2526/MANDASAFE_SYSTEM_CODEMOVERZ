@@ -878,4 +878,98 @@ class MandaSafeApiTest extends TestCase
         Setting::touchDataVersion();
         $this->assertNull($alerts->checkForNewHotspots($analytics));
     }
+
+    /** A 1×1 PNG, enough for the server to confirm the bytes really are an image. */
+    private const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    private function announcement(array $overrides = []): array
+    {
+        return array_replace([
+            'category' => 'closure', 'title' => 'Shaw Blvd eastbound closed', 'location' => 'Shaw Blvd, Pioneer St to EDSA',
+            'barangay' => 'Highway Hills', 'summary' => 'Closed for drainage works; use Pioneer St.',
+            'details' => "Drainage works.\n\nExpect delays.", 'reroute' => 'Pioneer St to Boni Ave',
+            'startsAt' => '2026-01-01T08:00', 'endsAt' => '', 'published' => true, 'photos' => [],
+        ], $overrides);
+    }
+
+    public function test_only_administrators_post_announcements_and_everyone_reads_the_published_ones(): void
+    {
+        $this->postJson('/api/announcements', $this->announcement())->assertStatus(401);
+        $resident = ['Authorization' => 'Bearer ' . $this->tokenFor('juan@example.com', 'Test-Resident#2026')];
+        $this->postJson('/api/announcements', $this->announcement(), $resident)->assertStatus(403);
+        $this->getJson('/api/announcements/all', $resident)->assertStatus(403);
+
+        $saved = $this->postJson('/api/announcements', $this->announcement(['photos' => [['data' => self::PIXEL, 'caption' => 'Site']]]), $this->adminHeaders())
+            ->assertStatus(201)->json();
+        $this->assertSame('active', $saved['state']);
+        $this->assertSame('admin@rimas.gov.ph', $saved['createdBy']);
+        $this->assertCount(1, $saved['photos']);
+
+        // The photo is served as an image, and the public list never says who posted.
+        $this->get($saved['photos'][0]['url'])->assertOk()->assertHeader('Content-Type', 'image/png');
+        $public = $this->getJson('/api/announcements')->assertOk()->json();
+        $this->assertCount(1, $public);
+        $this->assertArrayNotHasKey('createdBy', $public[0]);
+
+        // A hidden draft is listed for administrators only.
+        $this->postJson('/api/announcements', $this->announcement(['title' => 'Draft', 'published' => false]), $this->adminHeaders())->assertStatus(201);
+        $this->assertCount(1, $this->getJson('/api/announcements')->json());
+        $this->assertCount(2, $this->getJson('/api/announcements/all', $this->adminHeaders())->json());
+    }
+
+    public function test_announcements_are_validated_and_their_photos_kept_in_order(): void
+    {
+        $admin = $this->adminHeaders();
+        $this->postJson('/api/announcements', $this->announcement(['category' => 'party']), $admin)->assertStatus(400);
+        $this->postJson('/api/announcements', $this->announcement(['endsAt' => '2025-12-31T08:00']), $admin)
+            ->assertStatus(400)->assertJson(['error' => 'The end must be after the start.']);
+        $this->postJson('/api/announcements', $this->announcement(['barangay' => 'Atlantis']), $admin)->assertStatus(400);
+        $this->postJson('/api/announcements', $this->announcement(['photos' => [['data' => 'data:image/png;base64,' . base64_encode('not an image')]]]), $admin)
+            ->assertStatus(400);
+        $this->assertSame(0, \App\Models\Announcement::count());
+
+        $saved = $this->postJson('/api/announcements', $this->announcement(['photos' => [['data' => self::PIXEL], ['data' => self::PIXEL]]]), $admin)->json();
+        [$first, $second] = array_column($saved['photos'], 'id');
+
+        // Swap the two, drop none; then drop the first. Ended once the end has passed.
+        $edited = $this->putJson("/api/announcements/{$saved['id']}", $this->announcement([
+            'endsAt' => '2026-01-02T08:00', 'photos' => [['id' => $second], ['id' => $first]],
+        ]), $admin)->assertOk()->json();
+        $this->assertSame([$second, $first], array_column($edited['photos'], 'id'));
+        $this->assertSame('ended', $edited['state']);
+
+        $edited = $this->putJson("/api/announcements/{$saved['id']}", $this->announcement(['photos' => [['id' => $first]]]), $admin)->json();
+        $this->assertSame([$first], array_column($edited['photos'], 'id'));
+        $this->get("/api/announcements/photos/{$second}")->assertNotFound();
+
+        $this->deleteJson("/api/announcements/{$saved['id']}", [], $admin)->assertOk();
+        $this->assertSame(0, \App\Models\AnnouncementPhoto::count());
+    }
+
+    public function test_insights_cover_the_city_and_every_barangay_from_the_records(): void
+    {
+        $rows = [];
+        foreach (['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06'] as $m => $month) {
+            foreach (range(1, 4 + $m) as $n) {
+                $rows[] = ['barangay' => $n % 3 ? 'Plainview' : 'Hulo', 'road' => 'Unknown', 'sev' => $n === 1 ? 'Injury' : 'Damage',
+                    'type' => 'Vehicular Collision', 'date' => "{$month}-" . str_pad((string) $n, 2, '0', STR_PAD_LEFT), 'time' => '17:15:00'];
+            }
+        }
+        $this->postJson('/api/incidents/bulk', ['records' => $rows], $this->adminHeaders())->assertStatus(201);
+
+        $result = $this->getJson('/api/insights')->assertOk()->json();
+        $this->assertSame(['from' => '2025-01', 'to' => '2025-06', 'records' => count($rows)], $result['generatedFrom']);
+        $byId = array_column($result['insights'], null, 'id');
+
+        // Last month 9 vs 8 before; the busiest hour is 5 PM; one barangay report each.
+        $this->assertSame('9 accidents recorded in Jun 2025', $byId['city-trend']['title']);
+        $this->assertStringContainsString('5 PM–6 PM', $byId['city-hours']['title']);
+        $this->assertArrayHasKey('city-severity', $byId);
+        $this->assertEqualsCanonicalizing(['Plainview', 'Hulo'],
+            array_column(array_filter($result['insights'], fn ($i) => $i['scope'] === 'barangay'), 'barangay'));
+        foreach ($result['insights'] as $insight) {
+            $this->assertNotEmpty($insight['charts']);
+            $this->assertContains($insight['level'], ['alert', 'watch', 'good', 'info']);
+        }
+    }
 }

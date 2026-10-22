@@ -58,6 +58,8 @@
             <a class="sidebar-item admin-only" onclick="showPage('datarequests')" id="sb-datarequests" style="display:none;"><i
                     class="fas fa-file-export"></i> Data Requests <span id="sbDataReqCount"
                     style="margin-left:auto;background:#2563eb;color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;display:none;"></span></a>
+            <a class="sidebar-item admin-only" onclick="showPage('announcements')" id="sb-announcements" style="display:none;"><i
+                    class="fas fa-bullhorn"></i> Announcements</a>
             <a class="sidebar-item admin-only" onclick="showPage('users')" id="sb-users" style="display:none;"><i
                     class="fas fa-users-cog"></i> User Management</a>
             <a class="sidebar-item" onclick="showPage('notifications')" id="sb-notifications"><i
@@ -994,6 +996,51 @@
                 </div>
             </div>
 
+            <!-- ===== ANNOUNCEMENTS (Admin) ===== -->
+            <div class="page" id="page-announcements">
+                <div class="page-header">
+                    <div class="breadcrumb"><span>Dashboard</span><i class="fas fa-chevron-right"></i><span
+                            class="current">Announcements</span></div>
+                    <div class="page-actions">
+                        <select class="filter-select" id="annFilter" onchange="renderAnnouncements()">
+                            <option value="all">All announcements</option>
+                            <option value="active">In effect</option>
+                            <option value="upcoming">Upcoming</option>
+                            <option value="ended">Ended</option>
+                            <option value="draft">Hidden (drafts)</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="loadAnnouncements()"><i
+                                class="fas fa-rotate"></i> Refresh</button>
+                        <button class="btn btn-primary btn-sm" onclick="openAnnouncementModal()"><i
+                                class="fas fa-plus"></i> New Announcement</button>
+                    </div>
+                </div>
+                <div style="padding:20px 24px 0;">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><i class="fas fa-bullhorn"
+                                    style="color:var(--blue);margin-right:6px;"></i>Road Closures, Reroutes &amp; Warnings</span>
+                            <span id="annSummary" style="margin-left:auto;font-size:11px;color:var(--gray-400);"></span></div>
+                        <p style="font-size:12px;color:var(--gray-500);margin:0;padding:10px 18px 0;">Published announcements appear on the
+                            public homepage in the Announcement card. Ended ones drop off the card by themselves but stay listed under "See more".</p>
+                        <div style="overflow-x:auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Announcement</th>
+                                        <th>Type</th>
+                                        <th>Location</th>
+                                        <th>Schedule</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="annTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- ===== NOTIFICATIONS ===== -->
             <div class="page" id="page-notifications">
                 <div class="page-header">
@@ -1283,6 +1330,69 @@
                         class="fas fa-times"></i></button>
             </div>
             <div class="modal-body" id="userDetailsBody"></div>
+        </div>
+    </div>
+
+    <!-- Post or edit an announcement for the public homepage -->
+    <div class="modal-overlay" id="announcementModal">
+        <div class="modal ann-modal">
+            <div class="modal-header">
+                <div class="modal-title" id="annModalTitle">New Announcement</div><button class="modal-close"
+                    onclick="closeAnnouncementModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="section-label" style="margin-top:0;">Type</div>
+                <div class="ann-types" id="annTypes">
+                    <label class="ann-type ann-type-closure"><input type="radio" name="annCategory" value="closure" onchange="updateAnnouncementForm()"><i class="fas fa-ban"></i><span><b>Road Closure</b><small>A road is closed to traffic</small></span></label>
+                    <label class="ann-type ann-type-reroute"><input type="radio" name="annCategory" value="reroute" onchange="updateAnnouncementForm()"><i class="fas fa-route"></i><span><b>Rerouting</b><small>Traffic is diverted</small></span></label>
+                    <label class="ann-type ann-type-warning"><input type="radio" name="annCategory" value="warning" onchange="updateAnnouncementForm()"><i class="fas fa-triangle-exclamation"></i><span><b>Road Warning</b><small>Hazard, roadwork, flooding</small></span></label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="annTitle">Title <span style="color:#dc2626;">*</span></label>
+                    <input class="form-input" id="annTitle" maxlength="150" placeholder="e.g. Shaw Blvd eastbound closed for drainage works">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="annLocation">Road / area <span style="color:#dc2626;">*</span></label>
+                        <input class="form-input" id="annLocation" maxlength="200" placeholder="e.g. Shaw Blvd, Pioneer St to EDSA">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="annBarangay">Barangay</label>
+                        <select class="form-select" id="annBarangay"><option value="">Citywide / several barangays</option></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="annStarts">Starts <span style="color:#dc2626;">*</span></label>
+                        <input type="datetime-local" class="form-input" id="annStarts">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="annEnds">Ends <span style="font-weight:400;color:var(--gray-400);">(blank = until further notice)</span></label>
+                        <input type="datetime-local" class="form-input" id="annEnds">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="annSummaryText">Short summary <span style="color:#dc2626;">*</span> <span style="font-weight:400;color:var(--gray-400);">— shown on the list</span></label>
+                    <input class="form-input" id="annSummaryText" maxlength="300" placeholder="One sentence: what is happening and what drivers should do.">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="annDetails">Full details <span style="color:#dc2626;">*</span></label>
+                    <textarea class="form-textarea" id="annDetails" rows="5" maxlength="5000"
+                        placeholder="Why the road is affected, which lanes, who to contact, and anything else the public should know. Leave a blank line between paragraphs."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="annReroute" id="annRerouteLabel">Alternate route</label>
+                    <textarea class="form-textarea" id="annReroute" rows="3" maxlength="2000"
+                        placeholder="e.g. Eastbound motorists may take Pioneer St, then Boni Ave, to reach EDSA."></textarea>
+                </div>
+                <div class="section-label">Photos <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--gray-400);">— up to 6; the first is the cover</span></div>
+                <div class="ann-photos" id="annPhotos"></div>
+                <input type="file" id="annPhotoInput" accept="image/jpeg,image/png,image/webp" multiple hidden onchange="addAnnouncementPhotos(this.files)">
+                <label class="ann-publish"><input type="checkbox" id="annPublished" checked> <span><b>Publish on the homepage</b><small>Untick to keep it as a hidden draft.</small></span></label>
+                <div id="annError" style="color:#dc2626;font-size:12px;margin-top:10px;"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeAnnouncementModal()">Cancel</button><button
+                    class="btn btn-primary" id="annSaveBtn" onclick="saveAnnouncement()"><i class="fas fa-paper-plane"></i> Publish</button></div>
         </div>
     </div>
 

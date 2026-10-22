@@ -52,6 +52,12 @@ class AnalyticsController extends ApiController
         return response()->json($this->analytics->summary());
     }
 
+    /** GET /api/insights — the homepage Insight card: findings for the city and each barangay. */
+    public function insights()
+    {
+        return response()->json($this->analytics->insights());
+    }
+
     /** GET /api/hotspots/barangays — every barangay ranked by accident density. */
     public function barangayHotspots()
     {

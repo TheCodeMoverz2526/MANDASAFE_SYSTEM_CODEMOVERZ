@@ -164,6 +164,19 @@ class AnalyticsService
         });
     }
 
+    /**
+     * The homepage Insight card: plain-language findings for the city and every barangay,
+     * written from the records (see InsightService). Recomputed as soon as the data changes.
+     */
+    public function insights(): array
+    {
+        return $this->rememberFresh('insights', function () {
+            $incidents = $this->incidents();
+
+            return InsightService::build($incidents, $this->barangayPredictions(), SafetyIndexService::compute($incidents));
+        });
+    }
+
     public function stats(): array
     {
         return $this->rememberFresh('stats', fn () => PredictionService::computeStats(
