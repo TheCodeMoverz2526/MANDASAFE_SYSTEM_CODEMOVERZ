@@ -185,7 +185,13 @@ function watchDataChanges() {
         busy = true;
         try {
             const response = await fetch('/api/data-version', { cache: 'no-store' });
-            const version = response.ok ? (await response.json()).version : null;
+            const body = response.ok ? await response.json() : null;
+            const version = body ? body.version : null;
+            // Announcements and TPMO actions change no figures; the homepage cards (js/updates.js)
+            // listen for this and redraw themselves without reloading the page.
+            if (body && body.content !== undefined) {
+                document.dispatchEvent(new CustomEvent('ms:content-version', { detail: body.content }));
+            }
             if (version === null || version === undefined) return schedule(DATA_POLL_MS);
             if (known === null) { known = version; return schedule(DATA_POLL_MS); }
             if (version === known) { pending = null; return schedule(DATA_POLL_MS); }

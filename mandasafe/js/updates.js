@@ -135,6 +135,10 @@ function carousel(cardId, slides, emptyHtml) {
   const track = card.querySelector('.ux-track'), dots = card.querySelector('.ux-dots');
   const prev = card.querySelector('.ux-prev'), next = card.querySelector('.ux-next');
   let at = 0, timer = null;
+  // Redrawn when the data changes: stop the previous auto-play and stay on the same slide.
+  const current = track.querySelector('.ux-slide.on')?.dataset.id;
+  card._uxStop?.();
+  card._uxStop = () => clearInterval(timer);
 
   track.innerHTML = slides.length ? slides.join('') : `<div class="ux-empty">${emptyHtml}</div>`;
   const items = [...track.querySelectorAll('.ux-slide')];
@@ -178,8 +182,8 @@ function carousel(cardId, slides, emptyHtml) {
     if (!slide || swiped) return;
     openDetail(slide.dataset.open, slide.dataset.id, slide);
   };
-  show(0);
-  play();
+  show(Math.max(0, items.findIndex(el => el.dataset.id === current)));
+  if (!card.matches(':hover, :focus-within')) play();
 }
 
 /* ---------------- modals ---------------- */
@@ -195,6 +199,7 @@ function openModal(id, opener) {
 function closeModals() {
   document.querySelectorAll('.ux-modal').forEach(m => { m.hidden = true; });
   document.body.classList.remove('ux-open');
+  ux.detail = null;
   if (/^#(announcement|insight)-/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
   if (ux.opener && document.contains(ux.opener)) ux.opener.focus();
   ux.opener = null;
@@ -210,22 +215,28 @@ document.addEventListener('keydown', e => {
   else if (document.body.classList.contains('ux-open')) closeModals();
 });
 
-function openDetail(kind, id, opener) {
+function findItem(kind, id) {
+  return kind === 'ann'
+    ? ux.announcements.find(x => String(x.id) === String(id))
+    : ux.insights.find(x => x.id === id);
+}
+
+// Fills the detail sheet; also used to redraw an open one when the data changes.
+function renderDetail(kind, id) {
+  const item = findItem(kind, id);
+  if (!item) return false;
   const body = document.getElementById('uxDetailBody');
-  if (kind === 'ann') {
-    const a = ux.announcements.find(x => String(x.id) === String(id));
-    if (!a) return;
-    body.innerHTML = annDetail(a);
-    setUpGallery(body, a);
-    history.replaceState(null, '', `#announcement-${a.id}`);
-  } else {
-    const s = ux.insights.find(x => x.id === id);
-    if (!s) return;
-    body.innerHTML = insDetail(s);
-    history.replaceState(null, '', `#insight-${s.id}`);
-  }
+  body.innerHTML = kind === 'ann' ? annDetail(item) : insDetail(item);
+  if (kind === 'ann') setUpGallery(body, item);
   body.querySelector('[data-map]')?.addEventListener('click', e => showOnMap(e.currentTarget.dataset.map));
   body.querySelector('[data-copy]')?.addEventListener('click', e => copyLink(e.currentTarget));
+  ux.detail = { kind, id: String(id), json: JSON.stringify(item) };
+  return true;
+}
+
+function openDetail(kind, id, opener) {
+  if (!renderDetail(kind, id)) return;
+  history.replaceState(null, '', kind === 'ann' ? `#announcement-${id}` : `#insight-${id}`);
   openModal('uxDetail', opener);
 }
 
@@ -446,8 +457,19 @@ async function copyLink(btn) {
   setTimeout(() => { label.textContent = 'Copy link'; }, 2200);
 }
 
-/* ---------------- load ---------------- */
-(async () => {
+/* ---------------- load, and keep up to date ----------------
+   - Accident records added or edited: js/api.js reloads the whole page (the map, figures and
+     insights all change), and the open detail comes back through its #link.
+   - An announcement or TPMO action posted: api.js reports a new content version and the
+     two cards redraw in place, staying on the same slide; an open detail is redrawn if
+     what it shows changed.
+   - Announcements also move from Upcoming to In effect to Ended on their own, so they are
+     re-read every few minutes even when nothing was posted. */
+const ANN_REFRESH_MS = 3 * 60 * 1000;
+let contentVersion = null;
+let refreshing = false;
+
+async function loadCards() {
   const [ann, ins] = await Promise.allSettled([apiGet('/api/announcements'), apiGet('/api/insights')]);
 
   if (ann.status === 'fulfilled') {
@@ -472,6 +494,32 @@ async function copyLink(btn) {
     carousel('insCard', [], `${icon('alert')}<b>Insights could not be loaded</b><small>${esc(ins.reason.message)}</small>`);
   }
 
+  // Redraw an open detail only if what it shows changed, so a reader is not interrupted.
+  const open = ux.detail;
+  if (open && !document.getElementById('uxDetail').hidden) {
+    const item = findItem(open.kind, open.id);
+    if (item && JSON.stringify(item) !== open.json) {
+      const sheet = document.querySelector('#uxDetail .ux-sheet'), y = sheet.scrollTop;
+      renderDetail(open.kind, open.id);
+      sheet.scrollTop = y;
+    }
+  }
+}
+
+async function refreshCards() {
+  if (refreshing || document.hidden) return;
+  refreshing = true;
+  try { await loadCards(); } finally { refreshing = false; }
+}
+
+document.addEventListener('ms:content-version', e => {
+  if (contentVersion !== null && e.detail !== contentVersion) refreshCards();
+  contentVersion = e.detail;
+});
+setInterval(refreshCards, ANN_REFRESH_MS);
+
+(async () => {
+  await loadCards();
   const link = location.hash.match(/^#(announcement|insight)-(.+)$/);
   if (link) openDetail(link[1] === 'announcement' ? 'ann' : 'ins', decodeURIComponent(link[2]));
 })();

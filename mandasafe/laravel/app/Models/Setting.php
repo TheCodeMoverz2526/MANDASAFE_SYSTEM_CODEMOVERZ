@@ -63,4 +63,19 @@ class Setting extends Model
     {
         return (int) static::get('dataVersion', 0);
     }
+
+    /**
+     * Bumped when an announcement or a TPMO insight action is posted, edited or removed. Kept
+     * apart from dataVersion: these change no figures, so nothing needs recomputing — the
+     * homepage just redraws its Announcement and Insight cards.
+     */
+    public static function touchContentVersion(): void
+    {
+        static::put('contentVersion', static::contentVersion() + 1);
+    }
+
+    public static function contentVersion(): int
+    {
+        return (int) static::get('contentVersion', 0);
+    }
 }

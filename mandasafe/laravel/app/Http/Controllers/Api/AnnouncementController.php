@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\RimasException;
 use App\Models\Announcement;
 use App\Models\AnnouncementPhoto;
+use App\Models\Setting;
 use App\Services\AccountService;
 use App\Services\GeoService;
 use Illuminate\Http\Request;
@@ -69,6 +70,8 @@ class AnnouncementController extends ApiController
                 ]);
                 $this->syncPhotos($row, $this->body($request)['photos'] ?? []);
 
+                Setting::touchContentVersion();
+
                 return $row->load('photos')->toApi(true);
             });
         }, 400, 201);
@@ -92,6 +95,8 @@ class AnnouncementController extends ApiController
                 ]);
                 $this->syncPhotos($row, $this->body($request)['photos'] ?? []);
 
+                Setting::touchContentVersion();
+
                 return $row->load('photos')->toApi(true);
             });
         });
@@ -108,6 +113,7 @@ class AnnouncementController extends ApiController
             AnnouncementPhoto::where('announcement_id', $row->id)->delete();
             $row->delete();
         });
+        Setting::touchContentVersion();
 
         return response()->json(['ok' => true]);
     }

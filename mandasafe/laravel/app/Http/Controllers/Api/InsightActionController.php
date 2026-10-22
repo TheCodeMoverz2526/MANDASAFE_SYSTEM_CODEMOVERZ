@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\RimasException;
 use App\Models\InsightAction;
+use App\Models\Setting;
 use App\Services\AccountService;
 use Illuminate\Http\Request;
 
@@ -23,10 +24,13 @@ class InsightActionController extends ApiController
     public function store(Request $request)
     {
         return $this->attempt(function () use ($request) {
-            return InsightAction::create($this->validated($this->body($request)) + [
+            $row = InsightAction::create($this->validated($this->body($request)) + [
                 'created_by' => $this->actor($request)->email,
                 'created_at_iso' => AccountService::isoNow(),
-            ])->toApi(true);
+            ]);
+            Setting::touchContentVersion();
+
+            return $row->toApi(true);
         }, 400, 201);
     }
 
@@ -42,6 +46,7 @@ class InsightActionController extends ApiController
                 'updated_by' => $this->actor($request)->email,
                 'updated_at_iso' => AccountService::isoNow(),
             ]);
+            Setting::touchContentVersion();
 
             return $row->toApi(true);
         });
@@ -55,6 +60,7 @@ class InsightActionController extends ApiController
             return response()->json(['error' => 'Action not found.'], 404);
         }
         $row->delete();
+        Setting::touchContentVersion();
 
         return response()->json(['ok' => true]);
     }

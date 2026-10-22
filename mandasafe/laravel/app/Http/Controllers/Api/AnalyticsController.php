@@ -37,7 +37,8 @@ class AnalyticsController extends ApiController
      */
     public function dataVersion()
     {
-        return response()->json(['version' => Setting::dataVersion()]);
+        // content: announcements and TPMO actions, which redraw the homepage cards only.
+        return response()->json(['version' => Setting::dataVersion(), 'content' => Setting::contentVersion()]);
     }
 
     /** GET /api/stats */

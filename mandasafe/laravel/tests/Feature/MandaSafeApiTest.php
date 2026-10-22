@@ -899,8 +899,13 @@ class MandaSafeApiTest extends TestCase
         $this->postJson('/api/announcements', $this->announcement(), $resident)->assertStatus(403);
         $this->getJson('/api/announcements/all', $resident)->assertStatus(403);
 
+        // Posting tells open homepages to redraw their cards, without touching the data version.
+        $before = $this->getJson('/api/data-version')->json();
         $saved = $this->postJson('/api/announcements', $this->announcement(['photos' => [['data' => self::PIXEL, 'caption' => 'Site']]]), $this->adminHeaders())
             ->assertStatus(201)->json();
+        $after = $this->getJson('/api/data-version')->json();
+        $this->assertSame($before['content'] + 1, $after['content']);
+        $this->assertSame($before['version'], $after['version']);
         $this->assertSame('active', $saved['state']);
         $this->assertSame('admin@rimas.gov.ph', $saved['createdBy']);
         $this->assertCount(1, $saved['photos']);
