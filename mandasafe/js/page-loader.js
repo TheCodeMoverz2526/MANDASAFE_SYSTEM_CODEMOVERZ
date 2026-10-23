@@ -1,23 +1,19 @@
-/* The MandaSafe logo screen, shown only while an administrator signs in.
+/* The MandaSafe logo screen, shown while any page opens or reloads.
  *
- * login.html calls PageLoader.signInHandover() once the authenticator code is accepted: the
- * screen ("Signing you in…") covers the login page while the browser moves on, and a one-time
- * flag in sessionStorage tells the admin console to keep it up ("Loading MandaSafe…") until its
- * data has arrived. Opening, reloading or moving between pages never shows it — the flag is
- * consumed on the first console load after signing in.
+ * Included as the FIRST element of <body> on every page, so it covers the page from the first
+ * paint. It lifts once the page's HTML and scripts are in AND the data requests it started
+ * meanwhile (incidents, notifications…) have answered, and never later than MAX_MS: a slow or
+ * failed request leaves the page to show its own loading or error state.
  *
- * Included as the FIRST element of <body> on login.html and Mandasafe.html, so on the console
- * it covers the page from the first paint. It lifts once the page's HTML and scripts are in
- * AND the data requests it started meanwhile (incidents, notifications…) have answered, and
- * never later than MAX_MS: a slow or failed request leaves the console to show its own
- * loading or error state.
+ * login.html also calls PageLoader.signInHandover() once an administrator's authenticator code
+ * is accepted: the screen ("Signing you in…") covers the login page while the browser moves on
+ * to the console, which then shows its own screen while it loads.
  *
  * Self-contained (styles, markup and logic) so each page needs only the one <script> tag.
  */
 (function () {
     const MAX_MS = 3000;     // lift no matter what after this long
     const SETTLE_MS = 150;   // lets a request that follows another (sign-in check, then data) start
-    const FLAG = 'mandasafeAdminSignIn';
 
     let style = null;
     function addStyles() {
@@ -66,23 +62,13 @@
         return el;
     }
 
-    /* On the login page: cover it while the browser moves to the console, and tell the
-       console to keep the screen up until it has loaded. Held: no failsafe fade, since the
-       page is about to be replaced anyway. */
+    /* On the login page: cover it while the browser moves to the console. Held: no failsafe
+       fade, since the page is about to be replaced anyway. */
     function signInHandover() {
-        try { sessionStorage.setItem(FLAG, '1'); } catch { /* the console just won't show it */ }
         if (!document.getElementById('pageLoader')) createLoader('Signing you in…').classList.add('is-held');
     }
 
     window.PageLoader = { signInHandover };
-
-    // Only the first page load straight after an administrator signed in shows the screen.
-    let justSignedIn = false;
-    try {
-        justSignedIn = sessionStorage.getItem(FLAG) === '1';
-        sessionStorage.removeItem(FLAG);
-    } catch { /* storage blocked: no screen */ }
-    if (!justSignedIn) return;
 
     const loader = createLoader('Loading MandaSafe…');
     let pending = 0;
