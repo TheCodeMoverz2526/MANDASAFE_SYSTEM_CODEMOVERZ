@@ -3028,7 +3028,8 @@ function notifTimeAgo(iso) {
 // Highest `seq` this page has seen; the live check asks the server for anything after it.
 let notifLatestSeq = null;
 let notifPollBusy = false;
-const NOTIF_POLL_MS = 4000;
+// Each check is a serverless call on Vercel; returning to the tab checks at once anyway.
+const NOTIF_POLL_MS = 15000;
 
 async function loadNotifications() {
     try {
