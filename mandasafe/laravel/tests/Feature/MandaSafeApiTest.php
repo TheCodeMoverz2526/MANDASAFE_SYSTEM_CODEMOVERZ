@@ -582,6 +582,69 @@ class MandaSafeApiTest extends TestCase
         ]);
     }
 
+    public function test_the_resident_is_emailed_when_a_data_request_is_accepted_or_declined(): void
+    {
+        config(['mandasafe.otp.resend_key' => 're_test', 'mandasafe.otp.from_email' => 'MandaSafe <no-reply@example.com>']);
+        $resendDown = false;
+        Http::fake(['api.resend.com/*' => function () use (&$resendDown) {
+            return $resendDown ? Http::response(['message' => 'down'], 500) : Http::response(['id' => 'email1'], 200);
+        }]);
+
+        $resident = ['Authorization' => 'Bearer ' . $this->tokenFor('juan@example.com', 'Test-Resident#2026')];
+        $ask = fn () => $this->postJson('/api/data-requests', [
+            'name' => 'Juan Dela Cruz', 'role' => 'Student', 'organization' => 'JRU',
+            'dataType' => 'Accident records', 'purpose' => 'Thesis', 'delivery' => 'other', 'email' => 'juan.school@example.com',
+        ], $resident)->assertStatus(201)->json('request.id');
+
+        $accepted = $ask();
+        $this->putJson("/api/data-requests/{$accepted}", ['status' => 'approved'], $this->adminHeaders())
+            ->assertOk()->assertJson(['status' => 'approved', 'emailed' => true]);
+        Http::assertSent(fn ($request) => $request['to'] === ['juan@example.com', 'juan.school@example.com']
+            && str_contains($request['subject'], 'accepted')
+            && str_contains($request['html'], 'Accident records'));
+
+        // Marking it sent emails nothing more; neither does setting the same status again.
+        $this->putJson("/api/data-requests/{$accepted}", ['status' => 'sent'], $this->adminHeaders())
+            ->assertOk()->assertJson(['emailed' => null]);
+        Http::assertSentCount(1);
+
+        $declined = $ask();
+        $this->putJson("/api/data-requests/{$declined}", ['status' => 'declined', 'reason' => 'Personal <data> is not released.'], $this->adminHeaders())
+            ->assertOk()->assertJson(['status' => 'declined', 'emailed' => true]);
+        Http::assertSent(fn ($request) => str_contains($request['subject'], 'declined')
+            && str_contains($request['html'], 'Personal &lt;data&gt; is not released.'));
+
+        // A failed email never undoes the decision; the administrator is told instead.
+        $resendDown = true;
+        $this->putJson('/api/data-requests/' . $ask(), ['status' => 'approved'], $this->adminHeaders())
+            ->assertOk()->assertJson(['status' => 'approved', 'emailed' => false]);
+    }
+
+    public function test_a_summary_built_on_previous_forecasts_is_not_kept_for_the_day(): void
+    {
+        $add = fn (string $date) => $this->postJson('/api/incidents', [
+            'barangay' => 'Plainview', 'road' => 'Boni Ave', 'sev' => 'Minor',
+            'type' => 'Sideswipe', 'date' => $date, 'time' => '09:00:00',
+        ], $this->adminHeaders())->assertStatus(201);
+        $summary = fn () => app(\App\Services\AnalyticsService::class)->summary();
+
+        $add('2026-07-04');
+        config(['mandasafe.background_warm' => true]);
+        $this->assertFalse($summary()['forecastPending']);
+
+        // Just after a write the previous forecasts are served while they are recomputed...
+        config(['mandasafe.background_warm' => false]);
+        $add('2026-07-05');
+        config(['mandasafe.background_warm' => true]);
+        $this->assertTrue($summary()['forecastPending']);
+
+        // ...and once that grace period is over (on Vercel no background warm ever ran), the
+        // summary carries the new forecasts instead of the one cached during the grace period.
+        Setting::put('dataVersionAt', time() - 600);
+        $this->travel(31)->seconds();
+        $this->assertFalse($summary()['forecastPending']);
+    }
+
     public function test_the_summary_is_computed_from_the_records_only(): void
     {
         // Ten months with a gap (none in 2025-03), one busy barangay, all the same severity.

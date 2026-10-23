@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\AccountActivity;
 use App\Models\DataRequest;
 use App\Services\AccountService;
+use App\Services\DataRequestMailer;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
@@ -22,6 +23,7 @@ class DataRequestController extends ApiController
     public function __construct(
         private AccountService $accounts,
         private NotificationService $notifications,
+        private DataRequestMailer $mailer,
     ) {
     }
 
@@ -74,12 +76,13 @@ class DataRequestController extends ApiController
                 return response()->json(['error' => 'Request not found.'], 404);
             }
 
+            $changed = $row->status !== $status;
             $changes = [
                 'status' => $status,
                 'decline_reason' => $status === 'declined' ? $reason : null,
             ];
             // Each step keeps the date it was first reached; pending has none of its own.
-            if ($status !== 'pending' && $row->status !== $status) {
+            if ($status !== 'pending' && $changed) {
                 $changes["{$status}_at_iso"] = AccountService::isoNow();
             }
             $row->update($changes);
@@ -88,7 +91,11 @@ class DataRequestController extends ApiController
                 . " set to {$status} by {$this->actor($request)->email}."
                 . ($status === 'declined' ? " Reason: {$reason}" : ''));
 
-            return $row->toApi();
+            // Accepted or declined: the resident is told by email. emailed is null when this
+            // step sends none, false when it should have but could not.
+            $emailed = $changed && DataRequestMailer::covers($status) ? $this->mailer->sendStatus($row) : null;
+
+            return $row->toApi() + ['emailed' => $emailed];
         });
     }
 

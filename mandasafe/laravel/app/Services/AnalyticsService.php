@@ -59,6 +59,14 @@ class AnalyticsService
     private const STALE_GRACE_SECONDS = 120;
 
     /**
+     * Set when a previous model result was served in place of a fresh one. A figure built on
+     * top of it (the summary's top forecasts) is then kept for 30 seconds only, not for the
+     * day: on Vercel the background warm never runs, so it would otherwise stay out of date
+     * until the next write.
+     */
+    private bool $servedStale = false;
+
+    /**
      * For a computation that can silently degrade (a crashed Python interpreter falling back
      * to "no hotspots" or "untrained model"). A degraded result is real data, not a bug, but
      * it is also likely a passing hiccup, so it is kept for 30 seconds instead of a day.
@@ -109,6 +117,7 @@ class AnalyticsService
             $latest = Cache::get($latestKey);
             if (is_array($latest) && array_key_exists('value', $latest)) {
                 AnalyticsWarmer::kick();
+                $this->servedStale = true;
 
                 return $latest['value'];
             }
@@ -120,7 +129,11 @@ class AnalyticsService
                 return $again;
             }
             $degraded = false;
+            $outer = $this->servedStale;
+            $this->servedStale = false;
             $result = $callback($degraded);
+            $degraded = $degraded || $this->servedStale;
+            $this->servedStale = $outer || $this->servedStale;
             Cache::put($key, $result, $degraded ? 30 : $seconds);
             if (! $degraded) {
                 Cache::forever($latestKey, ['version' => $version, 'value' => $result]);
@@ -512,6 +525,9 @@ class AnalyticsService
                 'statusTracked' => ($stats['resolvedIncidents'] ?? 0) > 0,
                 'safety' => SafetyIndexService::compute($incidents),
                 'topPredictions' => array_slice($predictions, 0, 6),
+                // The forecasts above are the previous ones, still being recomputed after a
+                // change: the homepage asks again shortly for the new ones.
+                'forecastPending' => $this->servedStale,
                 'recent' => array_slice($recent, 0, 20),
             ];
         });

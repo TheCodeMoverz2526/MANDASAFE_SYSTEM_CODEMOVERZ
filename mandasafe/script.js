@@ -2675,7 +2675,10 @@ async function setDataRequestStatus(id, status, reason) {
         const updated = await api.updateDataRequest(id, status, reason);
         const row = dataRequestList.find(r => Number(r.id) === id);
         if (row) Object.assign(row, updated);
-        showToast(`${dataRequestCode(id)}: ${DATA_REQ_STATUS[updated.status].label}`);
+        // emailed: true once the resident was told by email, false when that email failed.
+        const mail = updated.emailed === true ? ` · emailed ${updated.email}`
+            : updated.emailed === false ? ' · the email to the resident could not be sent, please contact them directly' : '';
+        showToast(`${dataRequestCode(id)}: ${DATA_REQ_STATUS[updated.status].label}${mail}`);
     } catch (error) {
         showToast(error.message);
         return false;

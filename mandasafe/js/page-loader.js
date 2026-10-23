@@ -70,6 +70,10 @@
 
     window.PageLoader = { signInHandover };
 
+    // A page reloading itself because the data changed (js/api.js) refreshes in place,
+    // without covering what the visitor is reading.
+    try { if (sessionStorage.getItem('msLiveScroll')) return; } catch { /* storage off */ }
+
     const loader = createLoader('Loading MandaSafe…');
     let pending = 0;
     let loaded = document.readyState !== 'loading';
