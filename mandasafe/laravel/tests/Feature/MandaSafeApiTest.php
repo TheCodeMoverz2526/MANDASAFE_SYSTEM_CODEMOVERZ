@@ -237,6 +237,41 @@ class MandaSafeApiTest extends TestCase
         $this->assertSame(1, Incident::count());
     }
 
+    public function test_large_import_saves_every_row_across_request_chunks(): void
+    {
+        $rows = [];
+        $firstDate = new \DateTimeImmutable('2025-01-01');
+        foreach (range(0, 7999) as $index) {
+            $rows[] = [
+                'barangay' => 'Hulo',
+                'road' => 'Test Road ' . $index,
+                'sev' => 'Minor',
+                'type' => 'Sideswipe',
+                'date' => $firstDate->modify("+{$index} days")->format('Y-m-d'),
+                'time' => '07:00:00',
+            ];
+        }
+
+        $headers = $this->adminHeaders();
+        $createdIds = [];
+        $skipped = 0;
+        foreach (array_chunk($rows, 250) as $index => $chunk) {
+            $last = $index === 31;
+            $extra = $last
+                ? ['priorIds' => $createdIds, 'priorSkipped' => $skipped]
+                : ['notify' => false];
+            $result = $this->postJson('/api/incidents/bulk', ['records' => $chunk] + $extra, $headers)
+                ->assertStatus(201)->json();
+
+            array_push($createdIds, ...array_column($result['created'], 'id'));
+            $skipped += $result['skippedCount'];
+        }
+
+        $this->assertSame(8000, count($createdIds));
+        $this->assertSame(0, $skipped);
+        $this->assertSame(8000, Incident::count());
+    }
+
     public function test_prediction_inputs_are_validated(): void
     {
         $headers = $this->adminHeaders();

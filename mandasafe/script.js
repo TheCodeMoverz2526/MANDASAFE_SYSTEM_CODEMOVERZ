@@ -116,10 +116,20 @@ async function apiRequest(path, options = {}) {
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem(TOKEN_KEY);
         window.location.replace('login.html?as=admin');
-        throw new Error('Your session has expired. Please sign in again.');
+        const error = new Error('Your session has expired. Please sign in again.');
+        error.status = response.status;
+        throw error;
     }
-    if (response.status === 403) throw new Error((data && data.error) || 'Administrator access is required for this action.');
-    if (!response.ok) throw new Error((data && data.error) || `Request failed (${response.status})`);
+    if (response.status === 403) {
+        const error = new Error((data && data.error) || 'Administrator access is required for this action.');
+        error.status = response.status;
+        throw error;
+    }
+    if (!response.ok) {
+        const error = new Error((data && data.error) || `Request failed (${response.status})`);
+        error.status = response.status;
+        throw error;
+    }
     return data;
 }
 const api = {
@@ -3148,7 +3158,8 @@ const COL_HEADERS = {
 };
 
 const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
-const IMPORT_CHUNK = 500;          // rows per request when saving an import
+const IMPORT_CHUNK = 250;          // keep each serverless request small and quick
+const IMPORT_MAX_ATTEMPTS = 4;      // transient network / serverless failures
 const IMPORT_PREVIEW_ROWS = 200;   // rows drawn in the preview table; all of them are imported
 // Ordered so a more specific/less ambiguous field claims a header before a broader one gets
 // a chance at it (e.g. "id" alone is too generic to test first, or it would grab any header
@@ -3295,11 +3306,43 @@ function buildImportRow(cols, colMap, rowIndex) {
 }
 
 function parseDelimitedRows(text) {
-    const lines = text.trim().split('\n').map(l => l.replace(/\r/g, ''));
-    if (lines.length < 2) return null;
-    const headerCells = lines[0].split(',').map(h => h.trim());
-    const dataRows = lines.slice(1).filter(l => l.trim()).map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
-    return { headerCells, dataRows };
+    const rows = [];
+    let row = [], cell = '', quoted = false;
+    text = text.replace(/^\uFEFF/, '');
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (quoted) {
+            if (char === '"' && text[i + 1] === '"') {
+                cell += '"';
+                i++;
+            } else if (char === '"') {
+                quoted = false;
+            } else {
+                cell += char;
+            }
+        } else if (char === '"' && cell === '') {
+            quoted = true;
+        } else if (char === ',') {
+            row.push(cell.trim());
+            cell = '';
+        } else if (char === '\n' || char === '\r') {
+            row.push(cell.trim());
+            if (row.some(value => value !== '')) rows.push(row);
+            row = [];
+            cell = '';
+            if (char === '\r' && text[i + 1] === '\n') i++;
+        } else {
+            cell += char;
+        }
+    }
+
+    if (quoted) throw new Error('CSV contains an unclosed quoted field.');
+    row.push(cell.trim());
+    if (row.some(value => value !== '')) rows.push(row);
+    if (rows.length < 2) return null;
+
+    return { headerCells: rows[0], dataRows: rows.slice(1) };
 }
 
 function parseWorkbookRows(arrayBuffer) {
@@ -3416,9 +3459,7 @@ async function confirmImport() {
     const btn = document.getElementById('importConfirmBtn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importing…'; }
 
-    // A file of thousands of rows is sent IMPORT_CHUNK rows at a time: one huge request runs
-    // into the host's request-size and 60-second limits. Duplicates are still caught across
-    // chunks, since each one is checked against everything the earlier ones saved.
+    // Send bounded chunks so a large file does not exceed serverless request limits.
     const chunks = [];
     for (let i = 0; i < clean.length; i += IMPORT_CHUNK) chunks.push(clean.slice(i, i + IMPORT_CHUNK));
     const createdIds = [];
@@ -3430,12 +3471,16 @@ async function confirmImport() {
             const last = c === chunks.length - 1;
             const extra = last ? { priorIds: createdIds, priorSkipped: skipped } : { notify: false };
             let result;
-            try {
-                result = await api.bulkCreateIncidents(chunks[c], extra);
-            } catch (firstError) {
-                // One retry covers a dropped connection or a cold server start.
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                result = await api.bulkCreateIncidents(chunks[c], extra);
+            for (let attempt = 1; attempt <= IMPORT_MAX_ATTEMPTS; attempt++) {
+                try {
+                    result = await api.bulkCreateIncidents(chunks[c], extra);
+                    break;
+                } catch (error) {
+                    const retryable = !Number.isInteger(error.status) || error.status >= 500;
+                    if (!retryable || attempt === IMPORT_MAX_ATTEMPTS) throw error;
+                    if (btn) btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Retrying batch ${c + 1} of ${chunks.length}…`;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** (attempt - 1))));
+                }
             }
             (result.created || []).forEach(r => createdIds.push(r.id));
             skipped += result.skippedCount || 0;
