@@ -222,35 +222,31 @@ class MandaSafeApiTest extends TestCase
             ->assertJson(['error' => 'Missing required field(s): road, sev, type, date']);
     }
 
-    public function test_bulk_import_skips_duplicates_and_reports_why(): void
+    public function test_bulk_import_keeps_duplicates_and_reports_invalid_rows(): void
     {
         $row = ['barangay' => 'Hulo', 'road' => 'J.P. Rizal', 'sev' => 'Minor', 'type' => 'Sideswipe', 'date' => '2026-08-15', 'time' => '07:00:00'];
 
+        $this->postJson('/api/incidents', $row, $this->adminHeaders())->assertCreated();
         $response = $this->postJson('/api/incidents/bulk', [
             'records' => [$row, $row, ['barangay' => 'Hulo', 'sev' => 'Minor', 'type' => 'Sideswipe', 'date' => '2026-08-16']],
         ], $this->adminHeaders())->assertStatus(201);
 
-        $this->assertSame(1, $response->json('createdCount'));
-        $this->assertSame(2, $response->json('skippedCount'));
-        $this->assertSame('Duplicate of an existing accident', $response->json('skipped.0.reason'));
-        $this->assertSame('Missing required field(s): road', $response->json('skipped.1.reason'));
-        $this->assertSame(1, Incident::count());
+        $this->assertSame(2, $response->json('createdCount'));
+        $this->assertSame(1, $response->json('skippedCount'));
+        $this->assertSame('Missing required field(s): road', $response->json('skipped.0.reason'));
+        $this->assertSame(3, Incident::count());
     }
 
     public function test_large_import_saves_every_row_across_request_chunks(): void
     {
-        $rows = [];
-        $firstDate = new \DateTimeImmutable('2025-01-01');
-        foreach (range(0, 7999) as $index) {
-            $rows[] = [
-                'barangay' => 'Hulo',
-                'road' => 'Test Road ' . $index,
-                'sev' => 'Minor',
-                'type' => 'Sideswipe',
-                'date' => $firstDate->modify("+{$index} days")->format('Y-m-d'),
-                'time' => '07:00:00',
-            ];
-        }
+        $rows = array_fill(0, 8000, [
+            'barangay' => 'Hulo',
+            'road' => 'Repeated Test Road',
+            'sev' => 'Minor',
+            'type' => 'Sideswipe',
+            'date' => '2025-01-01',
+            'time' => '07:00:00',
+        ]);
 
         $headers = $this->adminHeaders();
         $createdIds = [];

@@ -209,16 +209,12 @@ function handleIncidentsBulkApi(request, response, urlPath) {
         const records = Array.isArray(body.records) ? body.records : [];
         if (!records.length) throw new Error('No records to import.');
         const store = loadStore();
-        const existingKeys = new Set(store.incidents.map(item => [item.date, item.time, item.barangay, item.road, item.type].join('||').toLowerCase()));
 
         const created = [];
         const skipped = [];
         records.forEach((body, index) => {
             try {
                 requireFields(body, ['barangay', 'road', 'sev', 'type', 'date']);
-                const key = [body.date, body.time || '', body.barangay, body.road, body.type].join('||').toLowerCase();
-                if (existingKeys.has(key)) { skipped.push({ index, reason: 'Duplicate of an existing incident' }); return; }
-                existingKeys.add(key);
                 const record = {
                     id: nextIncidentId(store),
                     date: body.date,

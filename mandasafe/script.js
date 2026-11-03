@@ -3375,7 +3375,9 @@ async function processImportRows(headerCells, dataRows) {
         const row = buildImportRow(cols, colMap, i + 1);
         const dupKey = `${row.date}||${row.time}||${row.barangay}||${row.road}||${row.type}`.toLowerCase();
         const isDup = seenKeys.has(dupKey) || existingKeys.has(dupKey);
-        if (isDup) row._warn = row._warn ? `${row._warn}; Possible duplicate` : 'Possible duplicate of an existing accident';
+        if (isDup) row._warn = row._warn
+            ? `${row._warn}; Possible duplicate — will still be imported`
+            : 'Possible duplicate of an existing accident — will still be imported';
         seenKeys.add(dupKey);
         if (row._warn) warnings.push(`Row ${i + 1}: ${row._warn}`);
         rows.push(row);
@@ -3488,8 +3490,8 @@ async function confirmImport() {
         }
         closeImportModal();
         await loadIncidentsFromServer();
-        const skippedMsg = skipped ? `, ${skipped.toLocaleString()} skipped (duplicate/invalid)` : '';
-        showToast(`✅ ${createdIds.length.toLocaleString()} accident${createdIds.length !== 1 ? 's' : ''} imported and saved${skippedMsg}`);
+        const skippedMsg = skipped ? `, ${skipped.toLocaleString()} invalid row${skipped !== 1 ? 's' : ''} skipped` : '';
+        showToast(`✅ ${createdIds.length.toLocaleString()} accident record${createdIds.length !== 1 ? 's' : ''} uploaded and saved; duplicates included${skippedMsg}`);
     } catch (error) {
         if (sent) {
             // The earlier chunks are already saved: say so, and drop them from the preview so

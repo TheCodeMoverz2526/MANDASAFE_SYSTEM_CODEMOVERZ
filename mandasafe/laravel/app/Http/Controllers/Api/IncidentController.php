@@ -240,9 +240,8 @@ class IncidentController extends ApiController
     }
 
     /**
-     * POST /api/incidents/bulk — the console's CSV/Excel import. Records that repeat an
-     * existing date/time/barangay/road/type combination are skipped rather than duplicated,
-     * and every skipped row is reported back with its reason and its position in the file.
+     * POST /api/incidents/bulk — the console's CSV/Excel import. Repeated accident records
+     * are preserved as separate rows; only malformed or incomplete rows are skipped.
      */
     public function bulk(Request $request)
     {
@@ -252,18 +251,12 @@ class IncidentController extends ApiController
                 throw new \App\Exceptions\RimasException('No records to import.');
             }
 
-            $existingKeys = [];
-            foreach (Incident::select('date', 'time', 'barangay', 'road', 'type')->cursor() as $row) {
-                $existingKeys[strtolower(implode('||', [$row->date, $row->time, $row->barangay, $row->road, $row->type]))] = true;
-            }
-
             $actorEmail = $this->actor($request)->email;
             $created = [];
             $skipped = [];
 
-            // Validate and de-duplicate in memory first. The database is remote when deployed,
-            // so a query per row (an id, then an insert) ran past the hosting time limit and the
-            // import failed with a 504; the rows are now written in a handful of batched queries.
+            // Validate in memory, then write in batches. Duplicate rows are intentional input
+            // and must be retained just like any other valid record.
             $valid = [];
             foreach ($records as $index => $body) {
                 try {
@@ -272,14 +265,6 @@ class IncidentController extends ApiController
                     }
                     $this->requireFields($body, ['barangay', 'road', 'sev', 'type', 'date']);
                     $body['date'] = $this->normalizeIncidentDate($body['date']);
-
-                    $key = strtolower(implode('||', [$body['date'], $body['time'] ?? '', $body['barangay'], $body['road'], $body['type']]));
-                    if (isset($existingKeys[$key])) {
-                        $skipped[] = ['index' => $index, 'reason' => 'Duplicate of an existing accident'];
-
-                        continue;
-                    }
-                    $existingKeys[$key] = true;
                     $valid[] = $body;
                 } catch (\App\Exceptions\RimasException $exception) {
                     $skipped[] = ['index' => $index, 'reason' => $exception->getMessage()];
