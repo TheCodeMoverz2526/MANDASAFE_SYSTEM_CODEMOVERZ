@@ -1045,20 +1045,28 @@ class MandaSafeApiTest extends TestCase
 
         $this->postJson('/api/incidents', [
             'barangay' => 'Hulo', 'road' => 'Shaw Boulevard', 'sev' => 'Injury',
-            'type' => 'Vehicular Collision', 'date' => '2025-06-30', 'time' => '18:00',
-        ], $this->adminHeaders())->assertCreated();
+            'type' => 'Vehicular Collision', 'date' => '06/30/2025', 'time' => '18:00',
+        ], $this->adminHeaders())->assertCreated()->assertJsonPath('date', '2025-06-30');
         $updated = $this->getJson('/api/insights')->assertOk()->json();
         $updatedById = array_column($updated['insights'], null, 'id');
-        $this->assertSame((string) (9 + 1), $updatedById['city-month-2025-06']['stats'][0]['value']);
+        $this->assertSame('10', $updatedById['city-month-2025-06']['stats'][0]['value']);
 
-        $this->postJson('/api/incidents', [
-            'barangay' => 'Plainview', 'road' => 'Boni Avenue', 'sev' => 'Damage',
-            'type' => 'Vehicular Collision', 'date' => '2025-07-01', 'time' => '08:00',
-        ], $this->adminHeaders())->assertCreated();
+        $julyImport = $this->postJson('/api/incidents/bulk', ['records' => [
+            ['barangay' => 'Plainview', 'road' => 'Boni Avenue', 'sev' => 'Damage',
+                'type' => 'Vehicular Collision', 'date' => '07/01/2025', 'time' => '08:00'],
+            ['barangay' => 'Hulo', 'road' => 'Shaw Boulevard', 'sev' => 'Injury',
+                'type' => 'Vehicular Collision', 'date' => '07/31/2025', 'time' => '18:00'],
+            ['barangay' => 'Hulo', 'road' => 'Shaw Boulevard', 'sev' => 'Injury',
+                'type' => 'Vehicular Collision', 'date' => '07/32/2025', 'time' => '19:00'],
+        ]], $this->adminHeaders())->assertCreated();
+        $this->assertSame(['2025-07-01', '2025-07-31'], array_column($julyImport->json('created'), 'date'));
+        $this->assertSame('Date must be a valid calendar date, such as YYYY-MM-DD or MM/DD/YYYY.',
+            $julyImport->json('skipped.0.reason'));
         $newMonth = $this->getJson('/api/insights')->assertOk()->json();
         $newMonthById = array_column($newMonth['insights'], null, 'id');
         $this->assertSame('2025-07', $newMonth['generatedFrom']['to']);
         $this->assertSame('Month in review: Jul 2025', $newMonthById['city-month-2025-07']['title']);
+        $this->assertSame('2', $newMonthById['city-month-2025-07']['stats'][0]['value']);
 
         // 5 PM falls in the evening rush, so that is what the causes describe.
         $this->assertContains('Peak traffic going home', array_column($byId['city-hours']['causes'], 'title'));

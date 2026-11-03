@@ -48,6 +48,35 @@ class IncidentController extends ApiController
         return ($value === null || $value === '') ? null : (float) $value;
     }
 
+    /** Store every accepted incident date in the ISO format used by analytics. */
+    private function normalizeIncidentDate($value): string
+    {
+        $date = trim((string) $value);
+
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/', $date, $parts)) {
+            [$year, $month, $day] = [(int) $parts[1], (int) $parts[2], (int) $parts[3]];
+        } elseif (preg_match('/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/', $date, $parts)) {
+            $first = (int) $parts[1];
+            $second = (int) $parts[2];
+            $year = (int) $parts[3];
+            // Unambiguous day-first dates are accepted; ambiguous dates default to month-first
+            // to match the application's English (US) date formatting.
+            if ($first > 12) {
+                [$day, $month] = [$first, $second];
+            } else {
+                [$month, $day] = [$first, $second];
+            }
+        } else {
+            throw new \App\Exceptions\RimasException('Date must be a valid calendar date, such as YYYY-MM-DD or MM/DD/YYYY.');
+        }
+
+        if (! checkdate($month, $day, $year)) {
+            throw new \App\Exceptions\RimasException('Date must be a valid calendar date, such as YYYY-MM-DD or MM/DD/YYYY.');
+        }
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
     /** GET /api/incidents — newest first, the order the console and the maps expect. */
     /** GET /api/incidents — open to everyone; who entered each record is for admins only. */
     public function index(Request $request)
@@ -92,6 +121,7 @@ class IncidentController extends ApiController
         return $this->attempt(function () use ($request) {
             $body = $this->body($request);
             $this->requireFields($body, ['barangay', 'road', 'sev', 'type', 'date']);
+            $body['date'] = $this->normalizeIncidentDate($body['date']);
 
             $incident = Incident::create([
                 'id' => $this->nextIncidentId(),
@@ -132,7 +162,7 @@ class IncidentController extends ApiController
 
             $body = $this->body($request);
             $incident->fill([
-                'date' => $body['date'] ?? $incident->date,
+                'date' => array_key_exists('date', $body) ? $this->normalizeIncidentDate($body['date']) : $incident->date,
                 'time' => $body['time'] ?? $incident->time,
                 'barangay' => $body['barangay'] ?? $incident->barangay,
                 'road' => $body['road'] ?? $incident->road,
@@ -241,6 +271,7 @@ class IncidentController extends ApiController
                         throw new \App\Exceptions\RimasException('Row is not a record.');
                     }
                     $this->requireFields($body, ['barangay', 'road', 'sev', 'type', 'date']);
+                    $body['date'] = $this->normalizeIncidentDate($body['date']);
 
                     $key = strtolower(implode('||', [$body['date'], $body['time'] ?? '', $body['barangay'], $body['road'], $body['type']]));
                     if (isset($existingKeys[$key])) {
