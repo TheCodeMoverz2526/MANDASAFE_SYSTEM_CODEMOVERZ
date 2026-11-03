@@ -4,9 +4,9 @@ namespace App\Services;
 
 /**
  * The homepage Insight card: plain-language findings written from the accident records —
- * a handful about Mandaluyong as a whole, then one for every barangay. Nothing here is
- * typed by hand; each insight is recomputed whenever the records change, so the wording
- * always matches the figures.
+ * a handful about Mandaluyong as a whole, one monthly report for every month with records,
+ * then one for every barangay. Nothing here is typed by hand; each insight is recomputed
+ * whenever the records change, so the wording always matches the figures.
  *
  * Periods are counted back from the latest month on record, not from today: the records
  * arrive in batches, and "the last three months" of an empty stretch would say nothing.
@@ -43,8 +43,11 @@ class InsightService
             $forecasts[$p['barangay']] = $p;
         }
 
+        $monthlyInsights = self::monthlyInsights($city, $months);
+        $latestMonthlyInsight = array_shift($monthlyInsights);
         $insights = array_values(array_filter([
             self::cityTrend($city, $months),
+            $latestMonthlyInsight,
             self::cityForecast($city, $months, $predictions),
             self::cityHours($city),
             self::cityDays($city),
@@ -53,6 +56,7 @@ class InsightService
             self::citySafety($safety),
             self::cityRising($safety),
         ]));
+        $insights = array_merge($insights, $monthlyInsights);
 
         // Barangays: the riskiest first, the same order the forecast ranks them in.
         $ranking = array_keys($profiles);
@@ -364,6 +368,67 @@ class InsightService
                 ? ['Accidents are rising citywide — leave earlier and avoid rushing through intersections.', 'Check the barangay insights to see which areas drive the increase.']
                 : ['Keep it up: follow speed limits and traffic signs even on familiar routes.', 'Check the barangay insights for areas that still need extra care.'],
         ];
+    }
+
+    /**
+     * Keep a stable, data-backed insight for each month that has accident records. New records
+     * update their month's figures; the first record in a new month creates its insight.
+     */
+    private static function monthlyInsights(array $city, array $months): array
+    {
+        $indexes = array_flip($months);
+        $insights = [];
+
+        foreach (array_reverse($months) as $month) {
+            $count = $city['byMonth'][$month] ?? 0;
+            if ($count === 0) {
+                continue;
+            }
+
+            $index = $indexes[$month];
+            $previousMonth = $index > 0 ? $months[$index - 1] : null;
+            $previousCount = $previousMonth === null ? null : ($city['byMonth'][$previousMonth] ?? 0);
+            $change = $previousCount ? self::pct($count, $previousCount) : null;
+            $comparison = $previousMonth === null
+                ? 'First month on record'
+                : ($previousCount === 0
+                    ? 'No accidents recorded in ' . self::monthLabel($previousMonth)
+                    : sprintf('%s from %s', self::change($change), self::monthLabel($previousMonth)));
+            $level = $change === null ? 'info' : ($change >= 10 ? 'alert' : ($change <= -10 ? 'good' : 'watch'));
+            $throughMonth = array_slice($city['byMonth'], 0, $index + 1, true);
+
+            $insights[] = [
+                'id' => 'city-month-' . $month,
+                'scope' => 'city',
+                'barangay' => null,
+                'topic' => 'Monthly report',
+                'level' => $level,
+                'title' => 'Month in review: ' . self::monthLabel($month),
+                'headline' => number_format($count) . ' accidents recorded · ' . $comparison,
+                'body' => sprintf(
+                    'Mandaluyong recorded %s road accidents in %s. %s These figures reflect the records currently on file and can change as new reports are added.',
+                    number_format($count),
+                    self::monthLabel($month),
+                    $previousMonth === null
+                        ? 'This is the first month currently on record.'
+                        : ($previousCount === 0
+                            ? 'There were no recorded accidents in ' . self::monthLabel($previousMonth) . '.'
+                            : sprintf('That is %s compared with %s (%s).', strtolower(self::change($change)), self::monthLabel($previousMonth), number_format($previousCount)))
+                ),
+                'stats' => [
+                    ['label' => self::monthLabel($month), 'value' => number_format($count)],
+                    ['label' => 'Month before', 'value' => $previousCount === null ? '—' : number_format($previousCount)],
+                    ['label' => 'Change', 'value' => $change === null ? '—' : (($change > 0 ? '+' : '') . $change . '%')],
+                    ['label' => 'All recorded', 'value' => number_format($city['total'])],
+                ],
+                'charts' => [self::monthChart($throughMonth, 'Accidents per month through ' . self::monthLabel($month))],
+                'causes' => [],
+                'solutions' => ['Compare this monthly total with the barangay insights before prioritising enforcement.'],
+                'tips' => ['The total shows when reports were recorded, not what caused the accidents.'],
+            ];
+        }
+
+        return $insights;
     }
 
     private static function cityForecast(array $city, array $months, array $predictions): ?array

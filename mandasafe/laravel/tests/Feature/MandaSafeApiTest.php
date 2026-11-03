@@ -1031,6 +1031,8 @@ class MandaSafeApiTest extends TestCase
 
         // Last month 9 vs 8 before; the busiest hour is 5 PM; one barangay report each.
         $this->assertSame('9 accidents recorded in Jun 2025', $byId['city-trend']['title']);
+        $this->assertSame('Month in review: Jun 2025', $byId['city-month-2025-06']['title']);
+        $this->assertSame('9', $byId['city-month-2025-06']['stats'][0]['value']);
         $this->assertStringContainsString('5 PM–6 PM', $byId['city-hours']['title']);
         $this->assertArrayHasKey('city-severity', $byId);
         $this->assertEqualsCanonicalizing(['Plainview', 'Hulo'],
@@ -1040,6 +1042,24 @@ class MandaSafeApiTest extends TestCase
             $this->assertContains($insight['level'], ['alert', 'watch', 'good', 'info']);
             $this->assertSame([], $insight['actions']);
         }
+
+        $this->postJson('/api/incidents', [
+            'barangay' => 'Hulo', 'road' => 'Shaw Boulevard', 'sev' => 'Injury',
+            'type' => 'Vehicular Collision', 'date' => '2025-06-30', 'time' => '18:00',
+        ], $this->adminHeaders())->assertCreated();
+        $updated = $this->getJson('/api/insights')->assertOk()->json();
+        $updatedById = array_column($updated['insights'], null, 'id');
+        $this->assertSame((string) (9 + 1), $updatedById['city-month-2025-06']['stats'][0]['value']);
+
+        $this->postJson('/api/incidents', [
+            'barangay' => 'Plainview', 'road' => 'Boni Avenue', 'sev' => 'Damage',
+            'type' => 'Vehicular Collision', 'date' => '2025-07-01', 'time' => '08:00',
+        ], $this->adminHeaders())->assertCreated();
+        $newMonth = $this->getJson('/api/insights')->assertOk()->json();
+        $newMonthById = array_column($newMonth['insights'], null, 'id');
+        $this->assertSame('2025-07', $newMonth['generatedFrom']['to']);
+        $this->assertSame('Month in review: Jul 2025', $newMonthById['city-month-2025-07']['title']);
+
         // 5 PM falls in the evening rush, so that is what the causes describe.
         $this->assertContains('Peak traffic going home', array_column($byId['city-hours']['causes'], 'title'));
         $this->assertNotEmpty($byId['city-hours']['solutions']);
